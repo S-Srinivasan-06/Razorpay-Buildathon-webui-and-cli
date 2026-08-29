@@ -339,4 +339,5 @@ Run the complete test suite:
 pytest -v
 ```
 
-All 14 test suites covering state machine transitions, cryptographic ledger verification, fee calculations, file deletion context isolation, and ground-truth benchmarks execute in under 1 second in offline mode.
+All 14 test suites covering state machine transitions, cryptographic ledger verification, fee calculations, file deletion context isolation, and ground-truth benchmarks execute in under 1 second in offline mode.#   R a z o r p a y - B u i l d a t h o n - w e b u i - a n d - c l i  
+ 
