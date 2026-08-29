@@ -120,7 +120,7 @@ class Pipeline:
         return self.sm.transition(State.PROFILING, f"{len(self.tables)} tables")
 
     def profile(self):
-        print(f"[*] Step 1/7: Profiling table schemas and column statistics...", flush=True)
+        print(f"- **Step 1/7**: Profiling table schemas and column statistics...", flush=True)
         from app.core.contracts import ColumnProfile
         from app.core.masking import pii_score
         for name, rows in self.tables.items():
@@ -150,7 +150,7 @@ class Pipeline:
         return None
 
     def propose_mapping(self):
-        print(f"[*] Step 2/7: Linking schema keys and amounts via mapping tool...", flush=True)
+        print(f"- **Step 2/7**: Linking schema keys and amounts via mapping tool...", flush=True)
         names = list(self.tables)
         cands = []
         for lt in names:
@@ -218,7 +218,7 @@ class Pipeline:
         return self.sm.transition(State.POLICY_GENERATED)
 
     def policy(self):
-        print(f"[*] Step 3/7: Synthesizing policy components & tolerance windows...", flush=True)
+        print(f"- **Step 3/7**: Synthesizing policy components & tolerance windows...", flush=True)
         comps = [PolicyComponent(component=c, params={}, precedence=i)
                  for i, c in enumerate(MatchComponent, 1)]
         comps[3].params = {"tolerance": 0.01, "window_days": 3}
@@ -290,7 +290,7 @@ class Pipeline:
                                duplicates=dups, splits=[], variance=var)
 
     def dry_run(self):
-        print(f"[*] Step 4/7: Performing dry-run calibration on sample rows...", flush=True)
+        print(f"- **Step 4/7**: Performing dry-run calibration on sample rows...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]][:100]
         rows_r = self.tables[self.cfg["right_table"]]
         t0 = time.time()
@@ -305,7 +305,7 @@ class Pipeline:
         return self.sm.transition(State.EXECUTING)
 
     def execute(self):
-        print(f"[*] Step 5/7: Executing multi-attribute matching engine...", flush=True)
+        print(f"- **Step 5/7**: Executing multi-attribute matching engine...", flush=True)
         t0 = time.time()
         self.exec_res = self._score_all(self.tables[self.cfg["left_table"]],
                                         self.tables[self.cfg["right_table"]])
@@ -399,7 +399,7 @@ class Pipeline:
         return ctx
 
     def qa_state(self):
-        print(f"[*] Step 6/7: Classifying exceptions & verifying invariant proofs...", flush=True)
+        print(f"- **Step 6/7**: Classifying exceptions & verifying invariant proofs...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]]
         rows_r = self.tables[self.cfg["right_table"]]
         self.queue = []
@@ -433,7 +433,7 @@ class Pipeline:
         return self.sm.transition(State.AGGREGATING)
 
     def aggregate(self, elapsed: float):
-        print(f"[*] Step 7/7: Aggregating financial balances & signing cryptographic audit ledger...", flush=True)
+        print(f"- **Step 7/7**: Aggregating financial balances & signing cryptographic audit ledger...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]]
         rows_r = self.tables[self.cfg["right_table"]]
         g = sum(float(x.get(self.cfg["left_amount"], 0)) for x in rows_l)

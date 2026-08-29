@@ -238,25 +238,28 @@ REFUND,-250.00,2026-03-05
 
 ## 📊 Sample CLI Output
 
-```text
-========================================================
-  [>] Razorpay Recon Agent - CLI Runner [Session: 86f3fa97]
-========================================================
-[*] Ingesting: sample_data/payments.csv, sample_data/bank.csv
-[*] Ground Truth Benchmark: sample_data/ground_truth.jsonl
-[*] Step 1/7: Profiling table schemas and column statistics...
-[*] Step 2/7: Linking schema keys and amounts via mapping tool...
-[*] Step 3/7: Synthesizing policy components & tolerance windows...
-[*] Step 4/7: Performing dry-run calibration on sample rows...
-[*] Step 5/7: Executing multi-attribute matching engine...
-[*] Step 6/7: Classifying exceptions & verifying invariant proofs...
-[*] Step 7/7: Aggregating financial balances & signing cryptographic audit ledger...
+```markdown
+# ⚡ Razorpay Reconciliation Agent
+**Session ID**: `86f3fa97`
 
-========================================================
-                INGESTED INPUT DATASETS                 
-========================================================
+## Execution Steps
+- **Mode**: Deterministic Engine (Offline / Zero-LLM)
+- **Ingesting**: `sample_data/payments.csv, sample_data/bank.csv`
+- **Ground Truth Benchmark**: `sample_data/ground_truth.jsonl`
+- **Step 1/7**: Profiling table schemas and column statistics...
+- **Step 2/7**: Linking schema keys and amounts via mapping tool...
+- **Step 3/7**: Synthesizing policy components & tolerance windows...
+- **Step 4/7**: Performing dry-run calibration on sample rows...
+- **Step 5/7**: Executing multi-attribute matching engine...
+- **Step 6/7**: Classifying exceptions & verifying invariant proofs...
+- **Step 7/7**: Aggregating financial balances & signing cryptographic audit ledger...
+
+---
+
+## Ingested Input Datasets
 
 ### Table: `payments` (8 records)
+
 | # | order_id | amount | date       |
 | - | -------- | ------ | ---------- |
 | 1 | ORD_1    | 1000.0 | 2026-03-01 |
@@ -269,6 +272,7 @@ REFUND,-250.00,2026-03-05
 | 8 | MIS_800  | 900.0  | 2026-03-03 |
 
 ### Table: `bank` (7 records)
+
 | # | utr    | credit  | date       |
 | - | ------ | ------- | ---------- |
 | 1 | ORD_1  | 1000.0  | 2026-03-02 |
@@ -279,11 +283,12 @@ REFUND,-250.00,2026-03-05
 | 6 | ORD_9  | 850.0   | 2026-03-05 |
 | 7 | REFUND | -250.0  | 2026-03-05 |
 
-========================================================
-                RECONCILIATION REPORT                   
-========================================================
+---
+
+## Reconciliation Report
 
 ### Performance & Metrics
+
 | Metric             | Value        |
 | ------------------ | ------------ |
 | Match Rate         | 27.3%        |
@@ -294,6 +299,7 @@ REFUND,-250.00,2026-03-05
 | LLM Metered Cost   | $0.000168    |
 
 ### Financial Balances
+
 | Financial Balance Component | Amount (INR) |
 | --------------------------- | ------------ |
 | Gross Ledger Volume         | ₹9,000.00    |
@@ -303,6 +309,7 @@ REFUND,-250.00,2026-03-05
 | Exception Value             | ₹5,500.00    |
 
 ### Exception Queue Summary (8 Total)
+
 | Queue Metric             | Count | Status                    |
 | ------------------------ | ----- | ------------------------- |
 | Auto-Resolved (Approved) | 2     | APPROVED [NO ERROR]       |
@@ -311,26 +318,29 @@ REFUND,-250.00,2026-03-05
 | Total Honest Exceptions  | 8     | Sum Invariant: VALID [OK] |
 
 ### Classified Discrepancies & Diagnostics
-| # | Side | Reference | Discrepancy Class | Action Status   | Delta (INR) | Diagnostic & Root Cause                                                                                              |
-| - | ---- | --------- | ----------------- | --------------- | ----------- | -------------------------------------------------------------------------------------------------------------------- |
-| 1 | L    | ORD_3     | temporal_drift    | APPROVED        | ₹0.00       | Approved [No Error]: Exact amount & reference 'ORD_3' matched; settlement deferred by bank holiday/clearing window.  |
-| 2 | L    | ORD_4     | duplicate         | REQUIRES ACTION | —           | Error in Source A (Ledger): Duplicate order reference 'ORD_4' recorded multiple times in payments ledger.            |
-| 3 | L    | ORD_6     | unclassified      | REQUIRES ACTION | —           | Error in Source B (Bank): Order 'ORD_6' exists in payments ledger but has no corresponding bank settlement credit.   |
-| 4 | L    | ORD_7     | unclassified      | REQUIRES ACTION | —           | Error in Source B (Bank): Order 'ORD_7' exists in payments ledger but has no corresponding bank settlement credit.   |
-| 5 | L    | MIS_800   | unclassified      | REQUIRES ACTION | —           | Error in Source B (Bank): Order 'MIS_800' exists in payments ledger but has no corresponding bank settlement credit. |
-| 6 | R    | BATCH     | split             | APPROVED        | —           | Approved [No Error]: Batch settlement combines multiple order legs (RIDs [6, 7]) net of payment gateway fees.        |
-| 7 | R    | ORD_9     | unclassified      | REQUIRES ACTION | —           | Error in Source A (Ledger): Unmatched bank credit for UTR 'ORD_9' without corresponding order in payments ledger.    |
-| 8 | R    | REFUND    | refund_offset     | REQUIRES ACTION | —           | Anomaly in Source B (Bank): Negative credit entry (-₹250.00) representing customer refund or chargeback.             |
 
-========================================================
-             CRYPTOGRAPHIC AUDIT LEDGER                 
-========================================================
-| Audit Attribute         | Value                           |
-| ----------------------- | ------------------------------- |
-| Audit Entries Logged    | 9                               |
-| SHA-256 Chain Integrity | VERIFIED [OK]                   |
-| Session Audit Path      | data/audit/86f3fa97.audit.jsonl |
-========================================================
+| # | Side | Reference | Discrepancy Class | Action Status           | Delta (INR) | Diagnostic & Root Cause                                                                                              |
+| - | ---- | --------- | ----------------- | ----------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1 | L    | ORD_3     | temporal_drift    | APPROVED [NO ERROR]     | ₹0.00       | Approved [No Error]: Exact amount & reference 'ORD_3' matched; settlement deferred by bank holiday/clearing window.  |
+| 2 | L    | ORD_4     | duplicate         | REQUIRES ACTION [ERROR] | —           | Error in Source A (Ledger): Duplicate order reference 'ORD_4' recorded multiple times in payments ledger.            |
+| 3 | L    | ORD_6     | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source B (Bank): Order 'ORD_6' exists in payments ledger but has no corresponding bank settlement credit.   |
+| 4 | L    | ORD_7     | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source B (Bank): Order 'ORD_7' exists in payments ledger but has no corresponding bank settlement credit.   |
+| 5 | L    | MIS_800   | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source B (Bank): Order 'MIS_800' exists in payments ledger but has no corresponding bank settlement credit. |
+| 6 | R    | BATCH     | split             | APPROVED [NO ERROR]     | —           | Approved [No Error]: Batch settlement combines multiple order legs (RIDs [6, 7]) net of payment gateway fees.        |
+| 7 | R    | ORD_9     | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source A (Ledger): Unmatched bank credit for UTR 'ORD_9' without corresponding order in payments ledger.    |
+| 8 | R    | REFUND    | refund_offset     | REQUIRES ACTION [ERROR] | —           | Anomaly in Source B (Bank): Negative credit entry (-₹250.00) representing customer refund or chargeback.             |
+
+---
+
+## Cryptographic Audit Ledger
+
+| Audit Attribute         | Value                             |
+| ----------------------- | --------------------------------- |
+| Audit Entries Logged    | 9                                 |
+| SHA-256 Chain Integrity | VERIFIED [OK]                     |
+| Session Audit Path      | `data/audit/86f3fa97.audit.jsonl` |
+
+---
 ```
 
 ---
@@ -483,7 +493,7 @@ pytest>=8.0
 
 Usage:
   # Run CLI reconciliation:
-  python run.py payments.csv bank.csv
+  python run.py sample_data/payments.csv sample_data/bank.csv
   python run.py sample_data/payments.csv sample_data/bank.csv --truth sample_data/ground_truth.jsonl
   python run.py sample_data/payments.csv sample_data/bank.csv --chat
   python run.py sample_data/payments.csv sample_data/bank.csv --deterministic
@@ -495,6 +505,7 @@ Usage:
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
 import uuid
@@ -535,12 +546,11 @@ def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
 
 
 def start_chat_repl(pipe: Pipeline, sid: str):
-    print(f"\n========================================================", flush=True)
-    print(f"             RECONCILIATION ASSISTANT CHAT             ", flush=True)
-    print(f"========================================================", flush=True)
-    print(f"[*] Connected to Gemma 4 31B grounded strictly in active session [{sid}].", flush=True)
-    print(f"[*] Ask questions about matched records, fees, duplicates, or diagnostics.", flush=True)
-    print(f"[*] Type 'exit' or 'quit' to end the conversation.\n", flush=True)
+    print("\n---\n", flush=True)
+    print(f"## 💬 Interactive Reconciliation Assistant (Session: `{sid}`)\n", flush=True)
+    print(f"- Connected to **Gemma 4 31B** (`gemma-4-31b-it`) strictly grounded in active session datasets.", flush=True)
+    print(f"- Ask questions about matched records, fee schedules, duplicates, or root causes.", flush=True)
+    print(f"- Type `exit` or `quit` to end the conversation.\n", flush=True)
 
     chat_session = ReconChatSession(sid, pipe)
 
@@ -555,17 +565,17 @@ def start_chat_repl(pipe: Pipeline, sid: str):
             if not query:
                 continue
             if query.lower() in ("exit", "quit", "q"):
-                print("[*] Ending conversation. Session completed.", flush=True)
+                print("\n- **Status**: Chat session closed.", flush=True)
                 break
 
             result = chat_session.chat(query)
             if result.get("ok"):
-                cost_str = f" [Cost: ${result['cost_usd']:.6f}]" if result.get("cost_usd") else ""
+                cost_str = f" *(LLM Cost: ${result['cost_usd']:.6f})*" if result.get("cost_usd") else ""
                 print(f"\n{result['response']}{cost_str}\n", flush=True)
             else:
-                print(f"\n[!] Error: {result.get('error', result.get('response'))}\n", flush=True)
+                print(f"\n> ⚠️ **Error**: {result.get('error', result.get('response'))}\n", flush=True)
         except (KeyboardInterrupt, EOFError):
-            print("\n[*] Exiting chat.", flush=True)
+            print("\n- **Status**: Exiting chat.", flush=True)
             break
 
 
@@ -577,28 +587,28 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
     session_file.write_text("", encoding="utf-8")
     latest_session_log.write_text("", encoding="utf-8")
 
-    print(f"\n========================================================", flush=True)
-    print(f"  [>] Razorpay Recon Agent - CLI Runner [Session: {sid}]", flush=True)
-    print(f"========================================================", flush=True)
+    print(f"# ⚡ Razorpay Reconciliation Agent", flush=True)
+    print(f"**Session ID**: `{sid}`\n", flush=True)
+    print("## Execution Steps", flush=True)
     
     if deterministic:
-        print(f"[*] Mode: Deterministic Engine (Offline / Zero-LLM)", flush=True)
+        print(f"- **Mode**: Deterministic Engine (Offline / Zero-LLM)", flush=True)
         def boom(*a, **k):
             raise ConnectionError("Deterministic mode enabled")
         llm_client.json_chat = boom
 
     for f in files:
         if not f.exists():
-            print(f"[!] Error: File not found: {f}", file=sys.stderr, flush=True)
+            print(f"> ❌ **Error**: File not found: `{f}`", file=sys.stderr, flush=True)
             sys.exit(1)
             
     if truth and not truth.exists():
-        print(f"[!] Error: Truth file not found: {truth}", file=sys.stderr, flush=True)
+        print(f"> ❌ **Error**: Truth file not found: `{truth}`", file=sys.stderr, flush=True)
         sys.exit(1)
 
-    print(f"[*] Ingesting: {', '.join(str(f) for f in files)}", flush=True)
+    print(f"- **Ingesting**: `{', '.join(str(f) for f in files)}`", flush=True)
     if truth:
-        print(f"[*] Ground Truth Benchmark: {truth}", flush=True)
+        print(f"- **Ground Truth Benchmark**: `{truth}`", flush=True)
     
     t0 = time.time()
     pipe = Pipeline(sid=sid, auto_ack=auto_ack)
@@ -635,22 +645,20 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         return
 
     # 1. Ingested Input Data Section (Markdown Tables)
-    print(f"\n========================================================", flush=True)
-    print(f"                INGESTED INPUT DATASETS                 ", flush=True)
-    print(f"========================================================", flush=True)
+    print("\n---\n", flush=True)
+    print("## Ingested Input Datasets", flush=True)
     for tbl_name, rows in pipe.tables.items():
         if not rows:
             continue
         cols = [k for k in rows[0].keys() if not k.startswith("_")]
         headers = ["#"] + cols
         data_rows = [[i] + [r.get(c, "") for c in cols] for i, r in enumerate(rows, 1)]
-        print(f"\n### Table: `{tbl_name}` ({len(rows)} records)", flush=True)
+        print(f"\n### Table: `{tbl_name}` ({len(rows)} records)\n", flush=True)
         print(format_markdown_table(headers, data_rows), flush=True)
 
-    # 2. Formatted Console Summary
-    print(f"\n========================================================", flush=True)
-    print(f"                RECONCILIATION REPORT                   ", flush=True)
-    print(f"========================================================", flush=True)
+    # 2. Formatted Markdown Summary
+    print("\n---\n", flush=True)
+    print("## Reconciliation Report", flush=True)
     
     perf_headers = ["Metric", "Value"]
     perf_rows = [
@@ -661,7 +669,7 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         ["Execution Time", f"{elapsed:.2f}s"],
         ["LLM Metered Cost", f"${report.cost_usd:.6f}"]
     ]
-    print("\n### Performance & Metrics", flush=True)
+    print("\n### Performance & Metrics\n", flush=True)
     print(format_markdown_table(perf_headers, perf_rows), flush=True)
 
     fin_headers = ["Financial Balance Component", "Amount (INR)"]
@@ -672,7 +680,7 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         ["Matched Value", f"₹{report.matched_value:,.2f}"],
         ["Exception Value", f"₹{report.exception_value:,.2f}"]
     ]
-    print("\n### Financial Balances", flush=True)
+    print("\n### Financial Balances\n", flush=True)
     print(format_markdown_table(fin_headers, fin_rows), flush=True)
     
     inv_ok = (report.auto_resolved_count + report.escalated_count + report.unresolved_count == report.honest_exception_count)
@@ -683,17 +691,17 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         ["Unresolved Pending", str(report.unresolved_count), "PENDING"],
         ["Total Honest Exceptions", str(report.honest_exception_count), f"Sum Invariant: {'VALID [OK]' if inv_ok else 'INVALID'}"]
     ]
-    print(f"\n### Exception Queue Summary ({report.honest_exception_count} Total)", flush=True)
+    print(f"\n### Exception Queue Summary ({report.honest_exception_count} Total)\n", flush=True)
     print(format_markdown_table(q_headers, q_rows), flush=True)
     
     if pipe.queue:
-        print(f"\n### Classified Discrepancies & Diagnostics", flush=True)
+        print("\n### Classified Discrepancies & Diagnostics\n", flush=True)
         exc_headers = ["#", "Side", "Reference", "Discrepancy Class", "Action Status", "Delta (INR)", "Diagnostic & Root Cause"]
         exc_rows = []
         for i, item in enumerate(pipe.queue, 1):
             rec = item["rec"]
             action = item.get("action", "pending")
-            action_badge = "APPROVED" if action == "auto_resolve" else "REQUIRES ACTION"
+            action_badge = "APPROVED [NO ERROR]" if action == "auto_resolve" else "REQUIRES ACTION [ERROR]"
             delta_str = f"₹{rec.delta:,.2f}" if rec.delta is not None else "—"
             reason_str = rec.reason.value if hasattr(rec.reason, "value") else str(rec.reason)
             explanation = item.get("explanation") or getattr(rec, "explanation", "") or "No diagnostic available."
@@ -702,17 +710,16 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
 
     # 3. Cryptographic Audit Ledger Section
     audit_log = audit_for(sid)
-    print(f"\n========================================================", flush=True)
-    print(f"             CRYPTOGRAPHIC AUDIT LEDGER                 ", flush=True)
-    print(f"========================================================", flush=True)
+    print("\n---\n", flush=True)
+    print("## Cryptographic Audit Ledger\n", flush=True)
     audit_headers = ["Audit Attribute", "Value"]
     audit_rows = [
         ["Audit Entries Logged", str(len(audit_log.records))],
         ["SHA-256 Chain Integrity", "VERIFIED [OK]" if audit_log.verify() else "TAMPERED [FAIL]"],
-        ["Session Audit Path", f"data/audit/{sid}.audit.jsonl"]
+        ["Session Audit Path", f"`data/audit/{sid}.audit.jsonl`"]
     ]
     print(format_markdown_table(audit_headers, audit_rows), flush=True)
-    print(f"========================================================\n", flush=True)
+    print("\n---\n", flush=True)
 
     if chat:
         start_chat_repl(pipe, sid)
@@ -721,7 +728,7 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
 def run_server(host: str = "127.0.0.1", port: int = 8000):
     import uvicorn
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[*] Starting Reconciliation API Server on http://{host}:{port} ...", flush=True)
+    print(f"- **Server**: Starting API Server on `http://{host}:{port}` ...", flush=True)
     uvicorn.run(
         "app.server.main:app",
         host=host,
@@ -760,7 +767,7 @@ def main():
         description="Razorpay Autonomous Financial Reconciliation Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("files", nargs="*", type=Path, help="CSV/Excel statement files to reconcile (e.g. payments.csv bank.csv)")
+    parser.add_argument("files", nargs="*", type=Path, help="CSV/Excel statement files to reconcile (e.g. sample_data/payments.csv sample_data/bank.csv)")
     parser.add_argument("--truth", type=Path, default=None, help="Optional ground truth jsonl file for precision/recall evaluation")
     parser.add_argument("--deterministic", "--no-llm", action="store_true", help="Run in pure deterministic mode without external LLM calls")
     parser.add_argument("--json", action="store_true", help="Output final report as formatted JSON")
@@ -773,7 +780,6 @@ def main():
     args = parser.parse_args()
 
     if args.clear_logs:
-        import shutil
         for d in [LOGS_DIR, LOGS_DIR.parent / "audit", LOGS_DIR.parent / "uploads"]:
             if d.exists():
                 for f in d.glob("*"):
@@ -784,7 +790,7 @@ def main():
                             shutil.rmtree(f)
                     except Exception:
                         pass
-        print("[*] All session logs, audit files, and uploaded datasets have been cleared.")
+        print("- **Status**: All session logs, audit files, and uploaded datasets have been cleared.")
         if not args.server and not args.files:
             return
 
@@ -1011,7 +1017,7 @@ class Pipeline:
         return self.sm.transition(State.PROFILING, f"{len(self.tables)} tables")
 
     def profile(self):
-        print(f"[*] Step 1/7: Profiling table schemas and column statistics...", flush=True)
+        print(f"- **Step 1/7**: Profiling table schemas and column statistics...", flush=True)
         from app.core.contracts import ColumnProfile
         from app.core.masking import pii_score
         for name, rows in self.tables.items():
@@ -1041,7 +1047,7 @@ class Pipeline:
         return None
 
     def propose_mapping(self):
-        print(f"[*] Step 2/7: Linking schema keys and amounts via mapping tool...", flush=True)
+        print(f"- **Step 2/7**: Linking schema keys and amounts via mapping tool...", flush=True)
         names = list(self.tables)
         cands = []
         for lt in names:
@@ -1109,7 +1115,7 @@ class Pipeline:
         return self.sm.transition(State.POLICY_GENERATED)
 
     def policy(self):
-        print(f"[*] Step 3/7: Synthesizing policy components & tolerance windows...", flush=True)
+        print(f"- **Step 3/7**: Synthesizing policy components & tolerance windows...", flush=True)
         comps = [PolicyComponent(component=c, params={}, precedence=i)
                  for i, c in enumerate(MatchComponent, 1)]
         comps[3].params = {"tolerance": 0.01, "window_days": 3}
@@ -1181,7 +1187,7 @@ class Pipeline:
                                duplicates=dups, splits=[], variance=var)
 
     def dry_run(self):
-        print(f"[*] Step 4/7: Performing dry-run calibration on sample rows...", flush=True)
+        print(f"- **Step 4/7**: Performing dry-run calibration on sample rows...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]][:100]
         rows_r = self.tables[self.cfg["right_table"]]
         t0 = time.time()
@@ -1196,7 +1202,7 @@ class Pipeline:
         return self.sm.transition(State.EXECUTING)
 
     def execute(self):
-        print(f"[*] Step 5/7: Executing multi-attribute matching engine...", flush=True)
+        print(f"- **Step 5/7**: Executing multi-attribute matching engine...", flush=True)
         t0 = time.time()
         self.exec_res = self._score_all(self.tables[self.cfg["left_table"]],
                                         self.tables[self.cfg["right_table"]])
@@ -1290,7 +1296,7 @@ class Pipeline:
         return ctx
 
     def qa_state(self):
-        print(f"[*] Step 6/7: Classifying exceptions & verifying invariant proofs...", flush=True)
+        print(f"- **Step 6/7**: Classifying exceptions & verifying invariant proofs...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]]
         rows_r = self.tables[self.cfg["right_table"]]
         self.queue = []
@@ -1324,7 +1330,7 @@ class Pipeline:
         return self.sm.transition(State.AGGREGATING)
 
     def aggregate(self, elapsed: float):
-        print(f"[*] Step 7/7: Aggregating financial balances & signing cryptographic audit ledger...", flush=True)
+        print(f"- **Step 7/7**: Aggregating financial balances & signing cryptographic audit ledger...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]]
         rows_r = self.tables[self.cfg["right_table"]]
         g = sum(float(x.get(self.cfg["left_amount"], 0)) for x in rows_l)

@@ -174,25 +174,28 @@ REFUND,-250.00,2026-03-05
 
 ## 📊 Sample CLI Output
 
-```text
-========================================================
-  [>] Razorpay Recon Agent - CLI Runner [Session: 86f3fa97]
-========================================================
-[*] Ingesting: sample_data/payments.csv, sample_data/bank.csv
-[*] Ground Truth Benchmark: sample_data/ground_truth.jsonl
-[*] Step 1/7: Profiling table schemas and column statistics...
-[*] Step 2/7: Linking schema keys and amounts via mapping tool...
-[*] Step 3/7: Synthesizing policy components & tolerance windows...
-[*] Step 4/7: Performing dry-run calibration on sample rows...
-[*] Step 5/7: Executing multi-attribute matching engine...
-[*] Step 6/7: Classifying exceptions & verifying invariant proofs...
-[*] Step 7/7: Aggregating financial balances & signing cryptographic audit ledger...
+```markdown
+# ⚡ Razorpay Reconciliation Agent
+**Session ID**: `86f3fa97`
 
-========================================================
-                INGESTED INPUT DATASETS                 
-========================================================
+## Execution Steps
+- **Mode**: Deterministic Engine (Offline / Zero-LLM)
+- **Ingesting**: `sample_data/payments.csv, sample_data/bank.csv`
+- **Ground Truth Benchmark**: `sample_data/ground_truth.jsonl`
+- **Step 1/7**: Profiling table schemas and column statistics...
+- **Step 2/7**: Linking schema keys and amounts via mapping tool...
+- **Step 3/7**: Synthesizing policy components & tolerance windows...
+- **Step 4/7**: Performing dry-run calibration on sample rows...
+- **Step 5/7**: Executing multi-attribute matching engine...
+- **Step 6/7**: Classifying exceptions & verifying invariant proofs...
+- **Step 7/7**: Aggregating financial balances & signing cryptographic audit ledger...
+
+---
+
+## Ingested Input Datasets
 
 ### Table: `payments` (8 records)
+
 | # | order_id | amount | date       |
 | - | -------- | ------ | ---------- |
 | 1 | ORD_1    | 1000.0 | 2026-03-01 |
@@ -205,6 +208,7 @@ REFUND,-250.00,2026-03-05
 | 8 | MIS_800  | 900.0  | 2026-03-03 |
 
 ### Table: `bank` (7 records)
+
 | # | utr    | credit  | date       |
 | - | ------ | ------- | ---------- |
 | 1 | ORD_1  | 1000.0  | 2026-03-02 |
@@ -215,11 +219,12 @@ REFUND,-250.00,2026-03-05
 | 6 | ORD_9  | 850.0   | 2026-03-05 |
 | 7 | REFUND | -250.0  | 2026-03-05 |
 
-========================================================
-                RECONCILIATION REPORT                   
-========================================================
+---
+
+## Reconciliation Report
 
 ### Performance & Metrics
+
 | Metric             | Value        |
 | ------------------ | ------------ |
 | Match Rate         | 27.3%        |
@@ -230,6 +235,7 @@ REFUND,-250.00,2026-03-05
 | LLM Metered Cost   | $0.000168    |
 
 ### Financial Balances
+
 | Financial Balance Component | Amount (INR) |
 | --------------------------- | ------------ |
 | Gross Ledger Volume         | ₹9,000.00    |
@@ -239,6 +245,7 @@ REFUND,-250.00,2026-03-05
 | Exception Value             | ₹5,500.00    |
 
 ### Exception Queue Summary (8 Total)
+
 | Queue Metric             | Count | Status                    |
 | ------------------------ | ----- | ------------------------- |
 | Auto-Resolved (Approved) | 2     | APPROVED [NO ERROR]       |
@@ -247,26 +254,29 @@ REFUND,-250.00,2026-03-05
 | Total Honest Exceptions  | 8     | Sum Invariant: VALID [OK] |
 
 ### Classified Discrepancies & Diagnostics
-| # | Side | Reference | Discrepancy Class | Action Status   | Delta (INR) | Diagnostic & Root Cause                                                                                              |
-| - | ---- | --------- | ----------------- | --------------- | ----------- | -------------------------------------------------------------------------------------------------------------------- |
-| 1 | L    | ORD_3     | temporal_drift    | APPROVED        | ₹0.00       | Approved [No Error]: Exact amount & reference 'ORD_3' matched; settlement deferred by bank holiday/clearing window.  |
-| 2 | L    | ORD_4     | duplicate         | REQUIRES ACTION | —           | Error in Source A (Ledger): Duplicate order reference 'ORD_4' recorded multiple times in payments ledger.            |
-| 3 | L    | ORD_6     | unclassified      | REQUIRES ACTION | —           | Error in Source B (Bank): Order 'ORD_6' exists in payments ledger but has no corresponding bank settlement credit.   |
-| 4 | L    | ORD_7     | unclassified      | REQUIRES ACTION | —           | Error in Source B (Bank): Order 'ORD_7' exists in payments ledger but has no corresponding bank settlement credit.   |
-| 5 | L    | MIS_800   | unclassified      | REQUIRES ACTION | —           | Error in Source B (Bank): Order 'MIS_800' exists in payments ledger but has no corresponding bank settlement credit. |
-| 6 | R    | BATCH     | split             | APPROVED        | —           | Approved [No Error]: Batch settlement combines multiple order legs (RIDs [6, 7]) net of payment gateway fees.        |
-| 7 | R    | ORD_9     | unclassified      | REQUIRES ACTION | —           | Error in Source A (Ledger): Unmatched bank credit for UTR 'ORD_9' without corresponding order in payments ledger.    |
-| 8 | R    | REFUND    | refund_offset     | REQUIRES ACTION | —           | Anomaly in Source B (Bank): Negative credit entry (-₹250.00) representing customer refund or chargeback.             |
 
-========================================================
-             CRYPTOGRAPHIC AUDIT LEDGER                 
-========================================================
-| Audit Attribute         | Value                           |
-| ----------------------- | ------------------------------- |
-| Audit Entries Logged    | 9                               |
-| SHA-256 Chain Integrity | VERIFIED [OK]                   |
-| Session Audit Path      | data/audit/86f3fa97.audit.jsonl |
-========================================================
+| # | Side | Reference | Discrepancy Class | Action Status           | Delta (INR) | Diagnostic & Root Cause                                                                                              |
+| - | ---- | --------- | ----------------- | ----------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1 | L    | ORD_3     | temporal_drift    | APPROVED [NO ERROR]     | ₹0.00       | Approved [No Error]: Exact amount & reference 'ORD_3' matched; settlement deferred by bank holiday/clearing window.  |
+| 2 | L    | ORD_4     | duplicate         | REQUIRES ACTION [ERROR] | —           | Error in Source A (Ledger): Duplicate order reference 'ORD_4' recorded multiple times in payments ledger.            |
+| 3 | L    | ORD_6     | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source B (Bank): Order 'ORD_6' exists in payments ledger but has no corresponding bank settlement credit.   |
+| 4 | L    | ORD_7     | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source B (Bank): Order 'ORD_7' exists in payments ledger but has no corresponding bank settlement credit.   |
+| 5 | L    | MIS_800   | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source B (Bank): Order 'MIS_800' exists in payments ledger but has no corresponding bank settlement credit. |
+| 6 | R    | BATCH     | split             | APPROVED [NO ERROR]     | —           | Approved [No Error]: Batch settlement combines multiple order legs (RIDs [6, 7]) net of payment gateway fees.        |
+| 7 | R    | ORD_9     | unclassified      | REQUIRES ACTION [ERROR] | —           | Error in Source A (Ledger): Unmatched bank credit for UTR 'ORD_9' without corresponding order in payments ledger.    |
+| 8 | R    | REFUND    | refund_offset     | REQUIRES ACTION [ERROR] | —           | Anomaly in Source B (Bank): Negative credit entry (-₹250.00) representing customer refund or chargeback.             |
+
+---
+
+## Cryptographic Audit Ledger
+
+| Audit Attribute         | Value                             |
+| ----------------------- | --------------------------------- |
+| Audit Entries Logged    | 9                                 |
+| SHA-256 Chain Integrity | VERIFIED [OK]                     |
+| Session Audit Path      | `data/audit/86f3fa97.audit.jsonl` |
+
+---
 ```
 
 ---

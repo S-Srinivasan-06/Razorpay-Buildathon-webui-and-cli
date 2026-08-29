@@ -3,7 +3,7 @@
 
 Usage:
   # Run CLI reconciliation:
-  python run.py payments.csv bank.csv
+  python run.py sample_data/payments.csv sample_data/bank.csv
   python run.py sample_data/payments.csv sample_data/bank.csv --truth sample_data/ground_truth.jsonl
   python run.py sample_data/payments.csv sample_data/bank.csv --chat
   python run.py sample_data/payments.csv sample_data/bank.csv --deterministic
@@ -15,6 +15,7 @@ Usage:
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
 import uuid
@@ -55,12 +56,11 @@ def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
 
 
 def start_chat_repl(pipe: Pipeline, sid: str):
-    print(f"\n========================================================", flush=True)
-    print(f"             RECONCILIATION ASSISTANT CHAT             ", flush=True)
-    print(f"========================================================", flush=True)
-    print(f"[*] Connected to Gemma 4 31B grounded strictly in active session [{sid}].", flush=True)
-    print(f"[*] Ask questions about matched records, fees, duplicates, or diagnostics.", flush=True)
-    print(f"[*] Type 'exit' or 'quit' to end the conversation.\n", flush=True)
+    print("\n---\n", flush=True)
+    print(f"## 💬 Interactive Reconciliation Assistant (Session: `{sid}`)\n", flush=True)
+    print(f"- Connected to **Gemma 4 31B** (`gemma-4-31b-it`) strictly grounded in active session datasets.", flush=True)
+    print(f"- Ask questions about matched records, fee schedules, duplicates, or root causes.", flush=True)
+    print(f"- Type `exit` or `quit` to end the conversation.\n", flush=True)
 
     chat_session = ReconChatSession(sid, pipe)
 
@@ -75,17 +75,17 @@ def start_chat_repl(pipe: Pipeline, sid: str):
             if not query:
                 continue
             if query.lower() in ("exit", "quit", "q"):
-                print("[*] Ending conversation. Session completed.", flush=True)
+                print("\n- **Status**: Chat session closed.", flush=True)
                 break
 
             result = chat_session.chat(query)
             if result.get("ok"):
-                cost_str = f" [Cost: ${result['cost_usd']:.6f}]" if result.get("cost_usd") else ""
+                cost_str = f" *(LLM Cost: ${result['cost_usd']:.6f})*" if result.get("cost_usd") else ""
                 print(f"\n{result['response']}{cost_str}\n", flush=True)
             else:
-                print(f"\n[!] Error: {result.get('error', result.get('response'))}\n", flush=True)
+                print(f"\n> ⚠️ **Error**: {result.get('error', result.get('response'))}\n", flush=True)
         except (KeyboardInterrupt, EOFError):
-            print("\n[*] Exiting chat.", flush=True)
+            print("\n- **Status**: Exiting chat.", flush=True)
             break
 
 
@@ -97,28 +97,28 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
     session_file.write_text("", encoding="utf-8")
     latest_session_log.write_text("", encoding="utf-8")
 
-    print(f"\n========================================================", flush=True)
-    print(f"  [>] Razorpay Recon Agent - CLI Runner [Session: {sid}]", flush=True)
-    print(f"========================================================", flush=True)
+    print(f"# ⚡ Razorpay Reconciliation Agent", flush=True)
+    print(f"**Session ID**: `{sid}`\n", flush=True)
+    print("## Execution Steps", flush=True)
     
     if deterministic:
-        print(f"[*] Mode: Deterministic Engine (Offline / Zero-LLM)", flush=True)
+        print(f"- **Mode**: Deterministic Engine (Offline / Zero-LLM)", flush=True)
         def boom(*a, **k):
             raise ConnectionError("Deterministic mode enabled")
         llm_client.json_chat = boom
 
     for f in files:
         if not f.exists():
-            print(f"[!] Error: File not found: {f}", file=sys.stderr, flush=True)
+            print(f"> ❌ **Error**: File not found: `{f}`", file=sys.stderr, flush=True)
             sys.exit(1)
             
     if truth and not truth.exists():
-        print(f"[!] Error: Truth file not found: {truth}", file=sys.stderr, flush=True)
+        print(f"> ❌ **Error**: Truth file not found: `{truth}`", file=sys.stderr, flush=True)
         sys.exit(1)
 
-    print(f"[*] Ingesting: {', '.join(str(f) for f in files)}", flush=True)
+    print(f"- **Ingesting**: `{', '.join(str(f) for f in files)}`", flush=True)
     if truth:
-        print(f"[*] Ground Truth Benchmark: {truth}", flush=True)
+        print(f"- **Ground Truth Benchmark**: `{truth}`", flush=True)
     
     t0 = time.time()
     pipe = Pipeline(sid=sid, auto_ack=auto_ack)
@@ -155,22 +155,20 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         return
 
     # 1. Ingested Input Data Section (Markdown Tables)
-    print(f"\n========================================================", flush=True)
-    print(f"                INGESTED INPUT DATASETS                 ", flush=True)
-    print(f"========================================================", flush=True)
+    print("\n---\n", flush=True)
+    print("## Ingested Input Datasets", flush=True)
     for tbl_name, rows in pipe.tables.items():
         if not rows:
             continue
         cols = [k for k in rows[0].keys() if not k.startswith("_")]
         headers = ["#"] + cols
         data_rows = [[i] + [r.get(c, "") for c in cols] for i, r in enumerate(rows, 1)]
-        print(f"\n### Table: `{tbl_name}` ({len(rows)} records)", flush=True)
+        print(f"\n### Table: `{tbl_name}` ({len(rows)} records)\n", flush=True)
         print(format_markdown_table(headers, data_rows), flush=True)
 
-    # 2. Formatted Console Summary
-    print(f"\n========================================================", flush=True)
-    print(f"                RECONCILIATION REPORT                   ", flush=True)
-    print(f"========================================================", flush=True)
+    # 2. Formatted Markdown Summary
+    print("\n---\n", flush=True)
+    print("## Reconciliation Report", flush=True)
     
     perf_headers = ["Metric", "Value"]
     perf_rows = [
@@ -181,7 +179,7 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         ["Execution Time", f"{elapsed:.2f}s"],
         ["LLM Metered Cost", f"${report.cost_usd:.6f}"]
     ]
-    print("\n### Performance & Metrics", flush=True)
+    print("\n### Performance & Metrics\n", flush=True)
     print(format_markdown_table(perf_headers, perf_rows), flush=True)
 
     fin_headers = ["Financial Balance Component", "Amount (INR)"]
@@ -192,7 +190,7 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         ["Matched Value", f"₹{report.matched_value:,.2f}"],
         ["Exception Value", f"₹{report.exception_value:,.2f}"]
     ]
-    print("\n### Financial Balances", flush=True)
+    print("\n### Financial Balances\n", flush=True)
     print(format_markdown_table(fin_headers, fin_rows), flush=True)
     
     inv_ok = (report.auto_resolved_count + report.escalated_count + report.unresolved_count == report.honest_exception_count)
@@ -203,17 +201,17 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         ["Unresolved Pending", str(report.unresolved_count), "PENDING"],
         ["Total Honest Exceptions", str(report.honest_exception_count), f"Sum Invariant: {'VALID [OK]' if inv_ok else 'INVALID'}"]
     ]
-    print(f"\n### Exception Queue Summary ({report.honest_exception_count} Total)", flush=True)
+    print(f"\n### Exception Queue Summary ({report.honest_exception_count} Total)\n", flush=True)
     print(format_markdown_table(q_headers, q_rows), flush=True)
     
     if pipe.queue:
-        print(f"\n### Classified Discrepancies & Diagnostics", flush=True)
+        print("\n### Classified Discrepancies & Diagnostics\n", flush=True)
         exc_headers = ["#", "Side", "Reference", "Discrepancy Class", "Action Status", "Delta (INR)", "Diagnostic & Root Cause"]
         exc_rows = []
         for i, item in enumerate(pipe.queue, 1):
             rec = item["rec"]
             action = item.get("action", "pending")
-            action_badge = "APPROVED" if action == "auto_resolve" else "REQUIRES ACTION"
+            action_badge = "APPROVED [NO ERROR]" if action == "auto_resolve" else "REQUIRES ACTION [ERROR]"
             delta_str = f"₹{rec.delta:,.2f}" if rec.delta is not None else "—"
             reason_str = rec.reason.value if hasattr(rec.reason, "value") else str(rec.reason)
             explanation = item.get("explanation") or getattr(rec, "explanation", "") or "No diagnostic available."
@@ -222,17 +220,16 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
 
     # 3. Cryptographic Audit Ledger Section
     audit_log = audit_for(sid)
-    print(f"\n========================================================", flush=True)
-    print(f"             CRYPTOGRAPHIC AUDIT LEDGER                 ", flush=True)
-    print(f"========================================================", flush=True)
+    print("\n---\n", flush=True)
+    print("## Cryptographic Audit Ledger\n", flush=True)
     audit_headers = ["Audit Attribute", "Value"]
     audit_rows = [
         ["Audit Entries Logged", str(len(audit_log.records))],
         ["SHA-256 Chain Integrity", "VERIFIED [OK]" if audit_log.verify() else "TAMPERED [FAIL]"],
-        ["Session Audit Path", f"data/audit/{sid}.audit.jsonl"]
+        ["Session Audit Path", f"`data/audit/{sid}.audit.jsonl`"]
     ]
     print(format_markdown_table(audit_headers, audit_rows), flush=True)
-    print(f"========================================================\n", flush=True)
+    print("\n---\n", flush=True)
 
     if chat:
         start_chat_repl(pipe, sid)
@@ -241,7 +238,7 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
 def run_server(host: str = "127.0.0.1", port: int = 8000):
     import uvicorn
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[*] Starting Reconciliation API Server on http://{host}:{port} ...", flush=True)
+    print(f"- **Server**: Starting API Server on `http://{host}:{port}` ...", flush=True)
     uvicorn.run(
         "app.server.main:app",
         host=host,
@@ -280,7 +277,7 @@ def main():
         description="Razorpay Autonomous Financial Reconciliation Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("files", nargs="*", type=Path, help="CSV/Excel statement files to reconcile (e.g. payments.csv bank.csv)")
+    parser.add_argument("files", nargs="*", type=Path, help="CSV/Excel statement files to reconcile (e.g. sample_data/payments.csv sample_data/bank.csv)")
     parser.add_argument("--truth", type=Path, default=None, help="Optional ground truth jsonl file for precision/recall evaluation")
     parser.add_argument("--deterministic", "--no-llm", action="store_true", help="Run in pure deterministic mode without external LLM calls")
     parser.add_argument("--json", action="store_true", help="Output final report as formatted JSON")
@@ -293,7 +290,6 @@ def main():
     args = parser.parse_args()
 
     if args.clear_logs:
-        import shutil
         for d in [LOGS_DIR, LOGS_DIR.parent / "audit", LOGS_DIR.parent / "uploads"]:
             if d.exists():
                 for f in d.glob("*"):
@@ -304,7 +300,7 @@ def main():
                             shutil.rmtree(f)
                     except Exception:
                         pass
-        print("[*] All session logs, audit files, and uploaded datasets have been cleared.")
+        print("- **Status**: All session logs, audit files, and uploaded datasets have been cleared.")
         if not args.server and not args.files:
             return
 
