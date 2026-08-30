@@ -33,6 +33,11 @@ logging.basicConfig(
 logger = logging.getLogger("recon_agent")
 
 app = FastAPI(title="Recon Agent")
+
+# Mount v2 API (console + new endpoints) — drop-in, no changes to v1
+from app.server.api_v2 import mount_v2
+mount_v2(app)
+
 SESSIONS: dict[str, dict] = {}
 CHAT_SESSIONS: dict[str, ReconChatSession] = {}
 

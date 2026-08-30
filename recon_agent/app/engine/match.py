@@ -40,6 +40,8 @@ SEM_TOOL = ToolCall(name="semantic_similarity", args_schema=SemArgs,
                     retries=2, fallback=lambda a: None, cost_budget_usd=0.005)
 
 
+import re
+
 def _lev(a, b):
     if a == b:
         return 0
@@ -52,9 +54,42 @@ def _lev(a, b):
     return prev[-1]
 
 
+def _normalize_token(s: str) -> str:
+    # Strip non-alphanumeric chars and convert to lower
+    return re.sub(r"[^a-zA-Z0-9]", "", str(s)).lower()
+
+
 def _sim(a, b):
-    a, b = str(a).lower(), str(b).lower()
-    return 1 - _lev(a, b) / max(len(a), len(b), 1)
+    a_str, b_str = str(a).lower(), str(b).lower()
+    if a_str == b_str:
+        return 1.0
+
+    # 1. Alphanumeric normalized match (e.g. INV/2026/1039 == INV20261039)
+    norm_a, norm_b = _normalize_token(a_str), _normalize_token(b_str)
+    if norm_a and norm_a == norm_b:
+        return 1.0
+
+    # 2. Token containment / numeric key match (e.g. TXN-ORD-1036 vs ORD-1036, BILL_1040 vs BILL-1040-SETTL, RZP_1037 vs 1037_RZP)
+    if norm_a and norm_b:
+        if norm_a in norm_b or norm_b in norm_a:
+            shorter, longer = (norm_a, norm_b) if len(norm_a) < len(norm_b) else (norm_b, norm_a)
+            # If the shared subpart is substantial (at least 4 chars or 60% of longer)
+            if len(shorter) >= 4 or len(shorter) / max(len(longer), 1) >= 0.5:
+                return round(max(0.88, len(shorter) / max(len(longer), 1)), 3)
+
+        # Extract digit sequences (e.g. 1036, 1037, 1038)
+        digits_a = re.findall(r"\d{3,}", norm_a)
+        digits_b = re.findall(r"\d{3,}", norm_b)
+        if digits_a and digits_b and any(d in digits_b for d in digits_a):
+            return 0.90
+
+    # 3. Normalized Levenshtein distance
+    if norm_a and norm_b:
+        norm_score = 1 - _lev(norm_a, norm_b) / max(len(norm_a), len(norm_b), 1)
+        if norm_score >= 0.70:
+            return round(norm_score, 3)
+
+    return round(1 - _lev(a_str, b_str) / max(len(a_str), len(b_str), 1), 3)
 
 
 def _busdays(d1, d2):

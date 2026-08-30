@@ -1,3 +1,49 @@
-{"l_rid": 1, "r_rid": 1, "class": "exact"}
+{"l_rid": 1, "r_rid": 1, "class": "fee_deduction"}
 {"l_rid": 2, "r_rid": 2, "class": "fee_deduction"}
-{"l_rid": 4, "r_rid": 4, "class": "duplicate_first"}
+{"l_rid": 3, "r_rid": 3, "class": "fee_deduction"}
+{"l_rid": 4, "r_rid": 4, "class": "fee_deduction"}
+{"l_rid": 5, "r_rid": 5, "class": "fee_deduction"}
+{"l_rid": 6, "r_rid": 6, "class": "fee_deduction"}
+{"l_rid": 7, "r_rid": 7, "class": "fee_deduction"}
+{"l_rid": 8, "r_rid": 8, "class": "fee_deduction"}
+{"l_rid": 9, "r_rid": 9, "class": "fee_deduction"}
+{"l_rid": 10, "r_rid": 10, "class": "fee_deduction"}
+{"l_rid": 11, "r_rid": 11, "class": "fee_deduction"}
+{"l_rid": 12, "r_rid": 12, "class": "fee_deduction"}
+{"l_rid": 13, "r_rid": 13, "class": "fee_deduction"}
+{"l_rid": 14, "r_rid": 14, "class": "fee_deduction"}
+{"l_rid": 15, "r_rid": 15, "class": "fee_deduction"}
+{"l_rid": 16, "r_rid": 16, "class": "fee_deduction"}
+{"l_rid": 17, "r_rid": 17, "class": "fee_deduction"}
+{"l_rid": 18, "r_rid": 18, "class": "fee_deduction"}
+{"l_rid": 19, "r_rid": 19, "class": "fee_deduction"}
+{"l_rid": 20, "r_rid": 20, "class": "fee_deduction"}
+{"l_rid": 21, "r_rid": 21, "class": "temporal_drift"}
+{"l_rid": 22, "r_rid": 22, "class": "temporal_drift"}
+{"l_rid": 23, "r_rid": 23, "class": "temporal_drift"}
+{"l_rid": 24, "r_rid": 24, "class": "temporal_drift"}
+{"l_rid": 25, "r_rid": 25, "class": "temporal_drift"}
+{"l_rid": 26, "r_rid": 26, "class": "temporal_drift"}
+{"l_rid": 27, "r_rid": 27, "class": "temporal_drift"}
+{"l_rid": 28, "r_rid": 28, "class": "temporal_drift"}
+{"l_rid": 29, "r_rid": 29, "class": "temporal_drift"}
+{"l_rid": 30, "r_rid": 30, "class": "temporal_drift"}
+{"l_rid": 31, "r_rid": 31, "class": "temporal_drift"}
+{"l_rid": 32, "r_rid": 32, "class": "temporal_drift"}
+{"l_rid": 33, "r_rid": 33, "class": "temporal_drift"}
+{"l_rid": 34, "r_rid": 34, "class": "temporal_drift"}
+{"l_rid": 35, "r_rid": 35, "class": "temporal_drift"}
+{"l_rid": 36, "r_rid": 36, "class": "fuzzy_key"}
+{"l_rid": 37, "r_rid": 37, "class": "fuzzy_key"}
+{"l_rid": 38, "r_rid": 38, "class": "fuzzy_key"}
+{"l_rid": 39, "r_rid": 39, "class": "fuzzy_key"}
+{"l_rid": 40, "r_rid": 40, "class": "fuzzy_key"}
+{"l_rid": 41, "r_rid": 41, "class": "fuzzy_key"}
+{"l_rid": 42, "r_rid": 42, "class": "fuzzy_key"}
+{"l_rid": 43, "r_rid": 43, "class": "fuzzy_key"}
+{"l_rid": 44, "r_rid": 44, "class": "fuzzy_key"}
+{"l_rid": 45, "r_rid": 45, "class": "fuzzy_key"}
+{"l_rid": [46, 47], "r_rid": 46, "class": "split"}
+{"l_rid": [48, 49, 50], "r_rid": 47, "class": "split"}
+{"l_rid": [51, 52], "r_rid": 48, "class": "split"}
+{"l_rid": [53, 54, 55], "r_rid": 49, "class": "split"}

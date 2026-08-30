@@ -12,7 +12,7 @@ def category_confidence(category: HypothesisCategory) -> float:
 
 def exception_confidence(evidence_count: int, category: HypothesisCategory, sem: Optional[float] = None) -> float:
     # High confidence for verified business patterns with evidence
-    if category in (HypothesisCategory.TEMPORAL_DRIFT, HypothesisCategory.SPLIT, HypothesisCategory.FEE_DEDUCTION):
+    if category in (HypothesisCategory.TEMPORAL_DRIFT, HypothesisCategory.SPLIT, HypothesisCategory.FEE_DEDUCTION, HypothesisCategory.COUNTERPARTY_MISMATCH):
         base = 0.88 + 0.04 * min(evidence_count, 2)
         return min(round(base, 3), 0.98)
     
@@ -28,11 +28,11 @@ def exception_confidence(evidence_count: int, category: HypothesisCategory, sem:
 
 def decide_action(conf: float, evidence_count: int, category: Optional[HypothesisCategory] = None) -> str:
     # Non-error business variations that should be automatically approved
-    if category in (HypothesisCategory.TEMPORAL_DRIFT, HypothesisCategory.SPLIT, HypothesisCategory.FEE_DEDUCTION):
+    if category in (HypothesisCategory.TEMPORAL_DRIFT, HypothesisCategory.SPLIT, HypothesisCategory.FEE_DEDUCTION, HypothesisCategory.COUNTERPARTY_MISMATCH):
         return "auto_resolve"
 
     # Strict errors / anomalies that require human escalation
-    if category in (HypothesisCategory.DUPLICATE, HypothesisCategory.REFUND_OFFSET, HypothesisCategory.UNCLASSIFIED, HypothesisCategory.COUNTERPARTY_MISMATCH):
+    if category in (HypothesisCategory.DUPLICATE, HypothesisCategory.REFUND_OFFSET, HypothesisCategory.UNCLASSIFIED):
         return "request_confirmation"
 
     if (conf >= REG["exception_auto_resolve_confidence"]
@@ -51,6 +51,9 @@ def generate_explanation(rec, ctx: dict, row_data: Optional[dict] = None) -> str
     if cat == HypothesisCategory.TEMPORAL_DRIFT:
         return f"Approved [No Error]: Exact amount & reference '{ref}' matched; settlement deferred by bank holiday/clearing window."
     elif cat == HypothesisCategory.SPLIT:
+        if side == "L":
+            batch_ref = ctx.get("split_batch_ref", "bank batch settlement")
+            return f"Approved [No Error]: Constituent transaction leg resolved as part of batch deposit '{batch_ref}' net of gateway fees."
         targets = ctx.get("split_targets", [])
         return f"Approved [No Error]: Batch settlement combines multiple order legs (RIDs {targets}) net of payment gateway fees."
     elif cat == HypothesisCategory.FEE_DEDUCTION:
@@ -60,7 +63,7 @@ def generate_explanation(rec, ctx: dict, row_data: Optional[dict] = None) -> str
     elif cat == HypothesisCategory.REFUND_OFFSET:
         return f"Anomaly in Source B (Bank): Negative credit entry (-₹{abs(rec.delta or 0):.2f}) representing customer refund or chargeback."
     elif cat == HypothesisCategory.COUNTERPARTY_MISMATCH:
-        return f"Error: Counterparty identifier mismatch between payment order reference '{ref}' and bank settlement UTR."
+        return f"Approved [No Error]: Normalized token/semantic match verified between order '{ref}' and counterpart UTR."
     elif side == "L":
         return f"Error in Source B (Bank): Order '{ref}' exists in payments ledger but has no corresponding bank settlement credit."
     elif side == "R":

@@ -27,9 +27,6 @@ recon_agent/
 │   │   ├── llm_client.py
 │   │   ├── masking.py
 │   │   └── states.py
-│   ├── data/
-│   │   ├── __init__.py
-│   │   └── generator.py
 │   ├── engine/
 │   │   ├── __init__.py
 │   │   ├── chatbot.py
@@ -38,12 +35,16 @@ recon_agent/
 │   │   ├── qa.py
 │   │   ├── report.py
 │   │   └── resolving.py
-│   └── server/
-│       ├── __init__.py
-│       └── main.py
+│   ├── server/
+│   │   ├── __init__.py
+│   │   ├── api_v2.py
+│   │   └── main.py
+│   └── static/
+│       └── index.html
 └── tests/
     ├── __init__.py
     ├── conftest.py
+    ├── test_api_v2_e2e.py
     ├── test_constants.py
     ├── test_durability.py
     ├── test_file_lifecycle_and_chat.py
@@ -727,8 +728,13 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
 
 def run_server(host: str = "127.0.0.1", port: int = 8000):
     import uvicorn
+    import webbrowser
+    import threading
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"- **Server**: Starting API Server on `http://{host}:{port}` ...", flush=True)
+    print(f"- **Console**: Opening `http://{host}:{port}/console` in browser ...", flush=True)
+    # Open browser after a short delay
+    threading.Timer(1.5, lambda: webbrowser.open(f"http://{host}:{port}/console")).start()
     uvicorn.run(
         "app.server.main:app",
         host=host,
@@ -773,7 +779,8 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output final report as formatted JSON")
     parser.add_argument("--chat", "-i", action="store_true", help="Start continuous interactive chatbot REPL after reconciliation")
     parser.add_argument("--clear-logs", action="store_true", help="Delete all session logs, audit trails, and uploads")
-    parser.add_argument("--server", action="store_true", help="Launch FastAPI REST/WebSocket server")
+    parser.add_argument("--server", action="store_true", help="Launch FastAPI REST/WebSocket server with web console")
+    parser.add_argument("--cli", action="store_true", help="Force CLI mode (skip auto-server)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Server host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="Server port (default: 8000)")
     
@@ -798,12 +805,18 @@ def main():
         run_server(host=args.host, port=args.port)
     elif args.files:
         run_cli(files=args.files, truth=args.truth, auto_ack=True, as_json=args.json, deterministic=args.deterministic, chat=args.chat)
-    else:
+    elif args.cli:
         parser.print_help()
+    else:
+        # Default: launch web console when no files are provided
+        print("# ⚡ Razorpay Reconciliation Agent", flush=True)
+        print("No files specified — launching web console...\n", flush=True)
+        run_server(host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
     main()
+
 
 ```
 
@@ -1009,7 +1022,13 @@ class Pipeline:
             try:
                 df = pd.read_csv(f) if f.suffix == ".csv" else pd.read_excel(f)
                 df.insert(0, "_rid", range(1, len(df) + 1))
-                self.tables[f.stem] = df.to_dict("records")
+                tbl_name = f.stem
+                # Strip session ID prefix (e.g., 'd11231d8_payments' -> 'payments')
+                if "_" in tbl_name:
+                    prefix, rest = tbl_name.split("_", 1)
+                    if len(prefix) == 8 and all(c in "0123456789abcdefABCDEF" for c in prefix):
+                        tbl_name = rest
+                self.tables[tbl_name] = df.to_dict("records")
             except Exception as e:
                 self._trace("UNPARSED", file=str(f), err=str(e)[:120])
         if truth:
@@ -1140,6 +1159,12 @@ class Pipeline:
         used_r = set()
         soft_paired_r = set()          # T1: r's already represented via an l-pairing
 
+        # Index rows_r by key for O(1) candidate lookup on exact matches
+        r_by_key = {}
+        rk = self.cfg["right_key"]
+        for r in rows_r:
+            r_by_key.setdefault(str(r.get(rk)), []).append(r)
+
         def mk_unmatched(l, r, v, ev, sd):
             side = "L" if l is not None else "R"
             ref_key = self.cfg["left_key"] if l is not None else self.cfg["right_key"]
@@ -1147,14 +1172,38 @@ class Pipeline:
                                   ref=str((l or r).get(ref_key)), delta=sd, match_confidence=v)
             return rec, ev
 
+        is_large = len(rows_r) > 300
         for l in rows_l:
             key = str(l[self.cfg["left_key"]])
             if key in dup_keys and key not in seen_dup:
                 dups.append({"side": "L", "key": key, "rids": [x["_rid"] for x in lkeys[key]]})
                 seen_dup.add(key)
-            cands = [(r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
-                     for r in rows_r if r["_rid"] not in used_r]
-            cands = [(r, v, c, e, d) for (r, v, c, e, d) in cands if v >= REG["match_review_floor"]]
+
+            # Check direct exact key matches first for blazing fast execution on large data
+            direct_cands = [r for r in r_by_key.get(key, []) if r["_rid"] not in used_r]
+            if direct_cands:
+                cands = [(r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
+                         for r in direct_cands]
+                cands = [(r, v, c, e, d) for (r, v, c, e, d) in cands if v >= REG["match_review_floor"]]
+            else:
+                cands = []
+
+            # If no direct match meets threshold, check other candidates
+            if not cands:
+                search_pool = [r for r in rows_r if r["_rid"] not in used_r]
+                if is_large and len(search_pool) > 200:
+                    # On large datasets, filter candidates by amount / date proximity
+                    la = float(l.get(self.cfg.get("left_amount", ""), 0) or 0)
+                    ra_key = self.cfg.get("right_amount", "")
+                    search_pool = sorted(
+                        search_pool,
+                        key=lambda r: abs(la - float(r.get(ra_key, 0) or 0)) if ra_key else 0
+                    )[:150]
+
+                cands = [(r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
+                         for r in search_pool]
+                cands = [(r, v, c, e, d) for (r, v, c, e, d) in cands if v >= REG["match_review_floor"]]
+
             self._last_cand_scores.extend(v for _, v, _, _, _ in cands)
             if not cands:
                 rec, ev = mk_unmatched(l, None, None, [], None)
@@ -1272,16 +1321,19 @@ class Pipeline:
             if not cands:
                 # T6: Corroborate fuzzy key with amount/fee consistency
                 a = float(l[self.cfg["left_amount"]]) if self.cfg.get("left_amount") else None
+                search_r = rows_r if len(rows_r) <= 500 else [
+                    x for x in rows_r if abs(a - float(x.get(self.cfg.get("right_amount", ""), 0) or 0)) <= 1000
+                ][:100]
                 if a is not None and self.cfg.get("right_amount"):
                     ctx["fuzzy_key"] = any(
                         _sim(key, str(x[rk])) >= 0.8 and (
                             abs(a - float(x[self.cfg["right_amount"]])) <= tol
                             or fee_explains(a, float(x[self.cfg["right_amount"]]), self.schedule, tol)
                         )
-                        for x in rows_r
+                        for x in search_r
                     )
                 else:
-                    ctx["fuzzy_key"] = max((_sim(key, str(x[rk])) for x in rows_r), default=0) >= 0.85
+                    ctx["fuzzy_key"] = max((_sim(key, str(x[rk])) for x in search_r), default=0) >= 0.85
         if side == "R" and r is not None:
             rv = float(r[self.cfg["right_amount"]]) if self.cfg.get("right_amount") else 0.0
             ctx["negative_credit"] = rv < 0
@@ -1289,10 +1341,16 @@ class Pipeline:
             for x in rows_l:
                 a = float(x.get(self.cfg["left_amount"], 0))
                 nets.append((x["_rid"], a - (match.compute_fee(a, self.schedule) if self.schedule else 0)))
+            # Bounded pool search for split combinations to prevent exponential explosion on large files
+            valid_nets = [x for x in nets if 0 < x[1] <= rv + tol]
+            pool = valid_nets[:40]
             for k in (2, 3):
-                for combo in itertools.combinations(nets, k):
+                for combo in itertools.combinations(pool, k):
                     if abs(sum(v for _, v in combo) - rv) <= tol:
                         ctx["split_targets"] = [i for i, _ in combo]
+                        break
+                if ctx["split_targets"]:
+                    break
         return ctx
 
     def qa_state(self):
@@ -2159,58 +2217,6 @@ class StateMachine:
 
 ```
 
-### recon_agent/app/data/__init__.py
-
-```python
-
-
-```
-
-### recon_agent/app/data/generator.py
-
-```python
-import json
-import sys
-from pathlib import Path
-
-
-def generate(out: Path):
-    out.mkdir(parents=True, exist_ok=True)
-    P = [  # order_id, amount, date  (l_rid = row order)
-        ("ORD_1", 1000.00, "2026-03-01"),   # 1 exact
-        ("ORD_2", 2000.00, "2026-03-01"),   # 2 fee deduction (net 1952.80)
-        ("ORD_3", 3000.00, "2026-03-06"),   # 3 temporal drift (5 business days)
-        ("ORD_4", 500.00,  "2026-03-02"),   # 4 duplicate key pair
-        ("ORD_4", 500.00,  "2026-03-02"),   # 5
-        ("ORD_6", 400.00,  "2026-03-02"),   # 6 split pair
-        ("ORD_7", 700.00,  "2026-03-02"),   # 7
-        ("MIS_800", 900.00, "2026-03-03"),  # 8 missing counterparty
-    ]
-    B = [  # utr, credit, date  (r_rid = row order)
-        ("ORD_1", 1000.00, "2026-03-02"),   # 1
-        ("ORD_2", 1952.80, "2026-03-02"),   # 2
-        ("ORD_3", 3000.00, "2026-03-13"),   # 3
-        ("ORD_4", 500.00,  "2026-03-03"),   # 4
-        ("BATCH", 1074.04, "2026-03-03"),   # 5 = net(400)+net(700)
-        ("ORD_9", 850.00,  "2026-03-05"),   # 6 unmatched inflow
-        ("REFUND", -250.00, "2026-03-05"),  # 7 refund offset
-    ]
-    (out / "payments.csv").write_text(
-        "order_id,amount,date\n" + "".join(f"{o},{a},{d}\n" for o, a, d in P))
-    (out / "bank.csv").write_text(
-        "utr,credit,date\n" + "".join(f"{u},{c},{d}\n" for u, c, d in B))
-    # truth = pairs the ideal 1:1 matcher should land (dup first instance included);
-    # drift/split/refund/inflow/missing are exception-honesty fixtures, NOT in truth.
-    (out / "ground_truth.jsonl").write_text("".join(
-        json.dumps({"l_rid": l, "r_rid": r, "class": c}) + "\n"
-        for l, r, c in [(1, 1, "exact"), (2, 2, "fee_deduction"), (4, 4, "duplicate_first")]))
-
-
-if __name__ == "__main__":
-    generate(Path(sys.argv[1] if len(sys.argv) > 1 else "sample_data"))
-
-```
-
 ### recon_agent/app/engine/__init__.py
 
 ```python
@@ -2649,6 +2655,575 @@ def build_final_report(sid, *, match_rate, precision_vs_truth, recall_vs_truth,
 
 ```
 
+### recon_agent/app/server/api_v2.py
+
+```python
+# =============================================================================
+# app/server/api_v2.py
+#
+# API v2 backend — docks the web console to the recon_agent pipeline.
+# Drop-in, self-contained, no changes to existing code.
+#
+# INTEGRATION:
+#   from app.server.api_v2 import mount_v2
+#   mount_v2(app)          # after `app = FastAPI(...)`
+#
+#   Console:   http://127.0.0.1:8000/console
+#   API:       http://127.0.0.1:8000/api/v2/...   (OpenAPI at /docs)
+#   WebSocket: ws://127.0.0.1:8000/ws/v2/{sid}
+# =============================================================================
+
+import asyncio
+import json
+import re
+import threading
+import uuid
+from collections import deque
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from fastapi import APIRouter, FastAPI, File, HTTPException, Query, UploadFile, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from app.config import BASE_DIR, UPLOAD_DIR
+from app.core.audit import audit_for
+from app.core.channels import subscribe
+from app.core.constants import REG
+from app.core.contracts import MessageKind
+from app.core.cost import tracker_for
+from app.core.dispatcher import _breakers
+from app.core.masking import pii_score
+from app.engine.chatbot import ReconChatSession
+from app.pipeline import Pipeline
+
+STATIC_DIR = BASE_DIR / "app" / "static"
+
+# -----------------------------------------------------------------------------
+# Per-session registries + priority-tagged event ring buffers
+# -----------------------------------------------------------------------------
+V2_SESSIONS: dict[str, dict] = {}
+CHAT_SESSIONS: dict[str, ReconChatSession] = {}
+BUFFERS: dict[str, dict] = {}          # sid -> {"trace": deque, "logs": deque}
+_WS: dict[str, dict] = {}              # sid -> {"queues": set, "loop": loop|None}
+
+_P3_PATTERN = re.compile(r"^(tool_ok|cost_overrun|args_rejected|AUDIT_COMMIT)")
+_P1_CONTROL = {"STATE_ENTERED", "STATE_EXITED", "HALT", "RESUMED",
+               "ABORT_CONFIRMED", "FILE_REQUESTED", "CONFIRMATION_REQUESTED"}
+
+
+def _buffers(sid: str) -> dict:
+    if sid not in BUFFERS:
+        BUFFERS[sid] = {"trace": deque(maxlen=2000), "logs": deque(maxlen=5000)}
+    return BUFFERS[sid]
+
+
+def _classify(kind: MessageKind, payload: dict) -> int:
+    """Priority tiers: 1=chat/narration, 2=trace, 3=silent logs."""
+    if kind in (MessageKind.CHAT, MessageKind.ARTIFACT):
+        return 1
+    if kind == MessageKind.CONTROL:
+        return 1 if payload.get("event") in _P1_CONTROL else 2
+    return 3 if _P3_PATTERN.match(payload.get("event", "")) else 2
+
+
+def _push_ws(sid: str, frame: str):
+    s = _WS.get(sid)
+    if not s or not s["loop"]:
+        return
+    for q in list(s["queues"]):
+        try:
+            s["loop"].call_soon_threadsafe(q.put_nowait, frame)
+        except Exception:
+            pass
+
+
+def _bus_bridge(kind: MessageKind):
+    def handler(sid: str, model, source: str):
+        payload = model.model_dump()
+        prio = _classify(kind, payload)
+        frame = {"kind": kind.value, "priority": prio, "source": source,
+                 "payload": payload, "ts": datetime.now(timezone.utc).isoformat()}
+        buf = _buffers(sid)
+        (buf["logs"] if prio == 3 else buf["trace"]).append(frame)
+        _push_ws(sid, json.dumps(frame, default=str))
+    return handler
+
+
+_bridge_installed = False
+
+
+def _install_bus_bridge():
+    global _bridge_installed
+    if _bridge_installed:
+        return
+    for k in MessageKind:
+        subscribe(k, _bus_bridge(k))
+    _bridge_installed = True
+
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def _sess(sid: str) -> dict:
+    if sid not in V2_SESSIONS:
+        raise HTTPException(status_code=404, detail="session not found")
+    return V2_SESSIONS[sid]
+
+
+def _pipe(sid: str):
+    return _sess(sid).get("pipe")
+
+
+def _totals(pipe) -> dict | None:
+    """Port of Pipeline.aggregate() balance math, safe before AGGREGATING."""
+    if not pipe or not getattr(pipe, "cfg", None) or not pipe.cfg:
+        return None
+    cfg = pipe.cfg
+    rows_l = pipe.tables.get(cfg.get("left_table", ""), [])
+    rows_r = pipe.tables.get(cfg.get("right_table", ""), [])
+    la, ra = cfg.get("left_amount"), cfg.get("right_amount")
+    if not la or not ra:
+        return None
+    g = sum(float(x.get(la, 0) or 0) for x in rows_l)
+    n = sum(float(x.get(ra, 0) or 0) for x in rows_r)
+    matched_rids = {m.l_rid for m in pipe.exec_res.matched} if getattr(pipe, "exec_res", None) else set()
+    mv = sum(float(x.get(la, 0) or 0) for x in rows_l if x["_rid"] in matched_rids)
+    return {"gross": round(g, 2), "net": round(n, 2), "fees": round(g - n, 2),
+            "matched_value": round(mv, 2), "exception_value": round(g - mv, 2)}
+
+
+def _exception_rows(pipe) -> list[dict]:
+    rows = []
+    for item in getattr(pipe, "queue", None) or []:
+        rec = item["rec"]
+        rows.append({
+            "rid": rec.rid, "side": rec.side, "ref": rec.ref,
+            "reason": rec.reason.value if hasattr(rec.reason, "value") else str(rec.reason),
+            "delta": rec.delta, "confidence": round(item.get("conf", 0.0), 3),
+            "action": item.get("action", "mark_pending"),
+            "explanation": item.get("explanation") or getattr(rec, "explanation", None),
+            "pieces": [p.value if hasattr(p, "value") else str(p) for p in item.get("pieces", [])],
+        })
+    return rows
+
+
+def _paginate(items: list, page: int, page_size: int) -> dict:
+    """Paginate a list and return metadata."""
+    total = len(items)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {
+        "items": items[start:end],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_prev": page > 1,
+    }
+
+
+# -----------------------------------------------------------------------------
+# API v2 router — one endpoint per console panel
+# -----------------------------------------------------------------------------
+router = APIRouter(prefix="/api/v2", tags=["v2"])
+
+
+@router.post("/sessions")
+def create_session():
+    sid = uuid.uuid4().hex[:8]
+    V2_SESSIONS[sid] = {"pipe": None, "files": {}}
+    CHAT_SESSIONS[sid] = ReconChatSession(sid)
+    _buffers(sid)
+    audit_for(sid).append({"event": "SESSION_INITIALIZED", "session_id": sid})
+    return {"session_id": sid}
+
+
+@router.get("/sessions/{sid}/overview")
+def overview(sid: str):
+    _sess(sid)
+    pipe = _pipe(sid)
+    brk = {t: c for (s, t), c in _breakers.items() if s == sid}
+    files_map = V2_SESSIONS[sid].get("files", {})
+    return {
+        "session_id": sid,
+        "state": pipe.sm.state.value if pipe and pipe.sm.state else "IDLE",
+        "abort_token": pipe.sm._token if pipe else None,
+        "halted": bool(pipe and pipe.sm.state and pipe.sm.state.value == "HALT"),
+        "circuit_breaker": {
+            "threshold": REG["circuit_breaker_failure_count"],
+            "tools": brk,
+            "open": any(c >= REG["circuit_breaker_failure_count"] for c in brk.values()),
+        },
+        "cost_usd": round(tracker_for(sid).total, 6),
+        "constants_version": REG.version,
+        "audit_count": len(audit_for(sid).records),
+        "files": list(files_map.keys()),
+        "table_counts": {k: len(v) for k, v in (pipe.tables if pipe and getattr(pipe, "tables", None) else {}).items()},
+    }
+
+
+@router.get("/sessions/{sid}/ingestion")
+def ingestion(sid: str,
+              table: Optional[str] = None,
+              page: int = Query(1, ge=1),
+              page_size: int = Query(100, ge=1, le=1000)):
+    """Return ingested tables with pagination for large datasets."""
+    pipe = _pipe(sid)
+    if not pipe or not getattr(pipe, "tables", None):
+        return {"tables": {}, "profiles": {}, "table_meta": {}}
+
+    profiles = {}
+    mask_at, review_at = REG["pii_mask_threshold"], REG["pii_review_threshold"]
+    for name, profs in getattr(pipe, "profiles", {}).items():
+        out = []
+        for p in profs:
+            d = p.model_dump()
+            if d["pii_likelihood"] >= mask_at:
+                d["sample_values"] = ["[MASKED:pii]"]
+            elif d["pii_likelihood"] >= review_at:
+                d["pii_review"] = True
+            out.append(d)
+        profiles[name] = out
+
+    # Build table metadata (always return counts for all tables)
+    table_meta = {}
+    for name, rows in pipe.tables.items():
+        cols = [k for k in (rows[0].keys() if rows else []) if not k.startswith("_")]
+        table_meta[name] = {"total_rows": len(rows), "columns": cols}
+
+    # If a specific table is requested, paginate its rows
+    tables = {}
+    if table and table in pipe.tables:
+        pg = _paginate(pipe.tables[table], page, page_size)
+        tables[table] = pg
+    elif table:
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
+    else:
+        # Return all tables but paginated (first page only for each)
+        for name, rows in pipe.tables.items():
+            pg = _paginate(rows, page, page_size)
+            tables[name] = pg
+
+    return {
+        "session_id": sid,
+        "tables": tables,
+        "profiles": profiles,
+        "table_meta": table_meta,
+    }
+
+
+@router.get("/sessions/{sid}/mapping")
+def mapping(sid: str):
+    pipe = _pipe(sid)
+    if not pipe:
+        return {"candidates": [], "committed": None, "confidence": 0.0}
+    cands = []
+    w = (REG["w_mapping_structural"], REG["w_mapping_sample"],
+         REG["w_mapping_type"], REG["w_mapping_semantic"])
+    for ov, lt, lc, rt, rc in getattr(pipe, "_map_cands", [])[:6]:
+        lp = next((p for p in pipe.profiles.get(lt, []) if p.name == lc), None)
+        rp = next((p for p in pipe.profiles.get(rt, []) if p.name == rc), None)
+        tc = 1.0 if (lp and rp and lp.dtype == rp.dtype) else 0.4
+        sem = 0.5
+        composite = w[0] * ov + w[1] * ov + w[2] * tc + w[3] * sem
+        cands.append({
+            "left": f"{lt}.{lc}", "right": f"{rt}.{rc}",
+            "signals": {"structural_overlap": round(ov, 3), "sample_match_rate": round(ov, 3),
+                        "type_compatibility": tc, "semantic_plausibility": sem},
+            "composite": round(composite, 3),
+            "band": "auto" if composite >= REG["mapping_auto_accept"] else
+                    ("confirm" if composite >= REG["mapping_review_floor"] else "escalate"),
+        })
+    return {
+        "candidates": cands,
+        "committed": {k: pipe.cfg.get(k) for k in
+                      ("left_table", "right_table", "left_key", "right_key",
+                       "left_amount", "right_amount", "left_date", "right_date",
+                       "tolerance", "window_days")} if pipe.cfg else None,
+        "confidence": round(getattr(pipe, "_map_conf", 0.0), 3),
+        "ambiguous": getattr(pipe, "_ambiguous", False),
+        "ambiguity_delta": REG["mapping_ambiguity_delta"],
+    }
+
+
+@router.get("/sessions/{sid}/policy")
+def policy(sid: str):
+    pipe = _pipe(sid)
+    if not pipe or not getattr(pipe, "policy_doc", None):
+        return {"components": [], "baseline_match_rate": None, "revision_history": []}
+    doc = pipe.policy_doc
+    return {
+        "components": [c.model_dump() for c in doc.components],
+        "generated_from": doc.generated_from,
+        "baseline_match_rate": doc.baseline_match_rate,
+        "baseline_source": doc.baseline_source,
+        "baseline_constants_version": doc.baseline_constants_version,
+        "revision_history": doc.revision_history,
+        "current_match_rate": getattr(pipe, "match_rate", None),
+        "revision_caps": {"iterations": REG["revision_iteration_cap"],
+                          "seconds": REG["revision_time_cap_s"],
+                          "usd": REG["revision_cost_cap_usd"]},
+        "fee_schedules": [fs.model_dump(mode="json") for fs in REG.fee_schedules.values()],
+    }
+
+
+@router.get("/sessions/{sid}/results")
+def results(sid: str):
+    pipe = _pipe(sid)
+    if not pipe or not getattr(pipe, "exec_res", None):
+        return {"executed": False}
+    r = pipe.exec_res
+    return {
+        "executed": True,
+        "match_rate": getattr(pipe, "match_rate", None),
+        "precision_vs_truth": getattr(pipe, "precision", None),
+        "recall_vs_truth": getattr(pipe, "recall", None),
+        "throughput_rows_per_sec": getattr(pipe, "throughput", None),
+        "matched": [m.model_dump() for m in r.matched],
+        "unmatched_count": len(r.unmatched),
+        "duplicates": r.duplicates,
+        "splits": r.splits,
+        "variance": r.variance.model_dump(),
+        "totals": _totals(pipe),
+        "final_report": pipe.final.model_dump(mode="json") if getattr(pipe, "final", None) else None,
+    }
+
+
+@router.get("/sessions/{sid}/exceptions")
+def exceptions(sid: str,
+               page: int = Query(1, ge=1),
+               page_size: int = Query(50, ge=1, le=500)):
+    """Paginated exception queue for large reconciliation runs."""
+    pipe = _pipe(sid)
+    if not pipe:
+        return {"queue": [], "pagination": None}
+    all_rows = _exception_rows(pipe)
+    pg = _paginate(all_rows, page, page_size)
+    return {
+        "queue": pg["items"],
+        "pagination": {k: v for k, v in pg.items() if k != "items"},
+        "auto_resolve_gate": {"confidence": REG["exception_auto_resolve_confidence"],
+                              "evidence_min": REG["exception_auto_resolve_evidence_min"]},
+        "summary": {
+            "total": len(all_rows),
+            "auto_resolved": sum(1 for r in all_rows if r["action"] in ("auto_resolve", "mark_resolved")),
+            "needs_review": sum(1 for r in all_rows if r["action"] in ("request_confirmation", "escalate")),
+            "pending": sum(1 for r in all_rows if r["action"] == "mark_pending"),
+        },
+    }
+
+
+class ActionBody(BaseModel):
+    action: str          # "approve" | "escalate"
+    note: str = ""
+
+
+@router.post("/sessions/{sid}/exceptions/{rid}/action")
+def exception_action(sid: str, rid: int, body: ActionBody):
+    pipe = _pipe(sid)
+    if not pipe or not getattr(pipe, "queue", None):
+        raise HTTPException(status_code=404, detail="no exception queue")
+    item = next((i for i in pipe.queue if i["rec"].rid == rid), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="exception not found")
+
+    prior_action = item.get("action", "mark_pending")
+    prior = {"action": prior_action, "confidence": item.get("conf", 0.0),
+             "reason": item["rec"].reason.value if hasattr(item["rec"].reason, "value") else str(item["rec"].reason),
+             "pieces": [p.value if hasattr(p, "value") else str(p) for p in item.get("pieces", [])]}
+    item["action"] = "mark_resolved" if body.action == "approve" else "escalate"
+
+    audit_for(sid).append({"event": "USER_OVERRIDE", "rid": rid,
+                           "action": item["action"], "note": body.note, "prior": prior})
+
+    counts = None
+    if getattr(pipe, "final", None) is not None:
+        pipe.final.auto_resolved_count = sum(
+            1 for e in pipe.queue if e.get("action") in ("auto_resolve", "mark_resolved"))
+        pipe.final.escalated_count = sum(
+            1 for e in pipe.queue if e.get("action") in ("request_confirmation", "escalate"))
+        pipe.final.unresolved_count = sum(
+            1 for e in pipe.queue if e.get("action") == "mark_pending")
+        if prior_action != item["action"]:
+            pipe.final.llm_user_disagreements.append({
+                "rid": rid, "system_proposal": prior,
+                "user_decision": {"action": item["action"], "note": body.note},
+                "disagreement_kind": "exception_override"})
+        counts = {"auto_resolved": pipe.final.auto_resolved_count,
+                  "escalated": pipe.final.escalated_count,
+                  "unresolved": pipe.final.unresolved_count,
+                  "honest_total": pipe.final.honest_exception_count}
+    return {"ok": True, "rid": rid, "action": item["action"], "counts": counts}
+
+
+@router.get("/sessions/{sid}/audit")
+def audit(sid: str):
+    log = audit_for(sid)
+    return {"records": log.records, "verified": log.verify(), "count": len(log.records)}
+
+
+@router.get("/sessions/{sid}/trace")
+def trace(sid: str):
+    _sess(sid)
+    return {"events": list(_buffers(sid)["trace"])}
+
+
+@router.get("/sessions/{sid}/logs")
+def logs(sid: str):
+    _sess(sid)
+    return {"events": list(_buffers(sid)["logs"])}
+
+
+# ------------------------------- mutations ----------------------------------
+@router.post("/sessions/{sid}/run")
+async def run(sid: str, files: list[UploadFile] = File(...)):
+    sess = _sess(sid)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for f in files:
+        p = UPLOAD_DIR / f"{sid}_{f.filename}"
+        p.write_bytes(await f.read())
+        sess["files"][f.filename] = p
+        paths.append(p)
+    if len(paths) < 2:
+        raise HTTPException(status_code=400, detail="need at least two tables (ledger + statement)")
+
+    pipe = Pipeline(sid, auto_ack=True)
+    sess["pipe"] = pipe
+    if sid in CHAT_SESSIONS:
+        CHAT_SESSIONS[sid].set_pipe(pipe)
+    audit_for(sid).append({"event": "RUN_STARTED",
+                           "files": [p.name for p in paths],
+                           "ts": datetime.now(timezone.utc).isoformat()})
+
+    def work():
+        try:
+            pipe.run(paths)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"ok": True, "files": [p.name for p in paths]}
+
+
+@router.post("/sessions/{sid}/resume")
+def resume(sid: str):
+    pipe = _pipe(sid)
+    if not pipe:
+        raise HTTPException(status_code=400, detail="no pipeline to resume")
+    pipe.sm.resume()
+
+    def cont():
+        pipe.continue_run()
+
+    threading.Thread(target=cont, daemon=True).start()
+    return {"ok": True, "state": pipe.sm.state.value}
+
+
+class AbortBody(BaseModel):
+    token: str
+
+
+@router.post("/sessions/{sid}/abort")
+def abort(sid: str, body: AbortBody):
+    pipe = _pipe(sid)
+    if not pipe:
+        raise HTTPException(status_code=400, detail="no pipeline to abort")
+    pipe.sm.request_abort(body.token)
+    return {"ok": True}
+
+
+class ChatBody(BaseModel):
+    message: str
+
+
+@router.post("/sessions/{sid}/chat")
+def chat(sid: str, body: ChatBody):
+    _sess(sid)
+    if sid not in CHAT_SESSIONS:
+        CHAT_SESSIONS[sid] = ReconChatSession(sid, _pipe(sid))
+    else:
+        CHAT_SESSIONS[sid].set_pipe(_pipe(sid))
+    return CHAT_SESSIONS[sid].chat(body.message)
+
+
+# ------------------------------- websocket ----------------------------------
+async def ws_v2(websocket: WebSocket, sid: str):
+    await websocket.accept()
+    s = _WS.setdefault(sid, {"queues": set(), "loop": None})
+    q: asyncio.Queue = asyncio.Queue()
+    s["queues"].add(q)
+    s["loop"] = asyncio.get_running_loop()
+    try:
+        await websocket.send_text(json.dumps(
+            {"kind": "control", "priority": 1, "source": "system",
+             "payload": {"event": "WS_CONNECTED", "session": sid},
+             "ts": datetime.now(timezone.utc).isoformat()}))
+        while True:
+            await websocket.send_text(await q.get())
+    except Exception:
+        pass
+    finally:
+        s["queues"].discard(q)
+
+
+# -----------------------------------------------------------------------------
+# Mount
+# -----------------------------------------------------------------------------
+def mount_v2(app: FastAPI):
+    _install_bus_bridge()
+    STATIC_DIR.mkdir(parents=True, exist_ok=True)
+
+    # CORS for development
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(router)
+
+    # WebSocket route on root app
+    app.add_api_websocket_route("/ws/v2/{sid}", ws_v2)
+
+    @app.get("/console", include_in_schema=False)
+    def console():
+        index = STATIC_DIR / "index.html"
+        if index.exists():
+            return FileResponse(index)
+        return HTMLResponse(
+            "<code>app/static/index.html not found — save the console build there, "
+            "then reload /console</code>", status_code=404)
+
+    # Serve all static files
+    if STATIC_DIR.exists():
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    return app
+
+
+# -----------------------------------------------------------------------------
+# Standalone entry: python -m app.server.api_v2
+# -----------------------------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+
+    app = FastAPI(title="Recon Agent API v2")
+    mount_v2(app)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+
+```
+
 ### recon_agent/app/server/main.py
 
 ```python
@@ -2687,6 +3262,11 @@ logging.basicConfig(
 logger = logging.getLogger("recon_agent")
 
 app = FastAPI(title="Recon Agent")
+
+# Mount v2 API (console + new endpoints) — drop-in, no changes to v1
+from app.server.api_v2 import mount_v2
+mount_v2(app)
+
 SESSIONS: dict[str, dict] = {}
 CHAT_SESSIONS: dict[str, ReconChatSession] = {}
 
@@ -2984,6 +3564,992 @@ def abort(sid: str, body: dict):
 
 ```
 
+### recon_agent/app/static/index.html
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recon Agent · Console</title>
+<meta name="description" content="Razorpay Autonomous Financial Reconciliation Agent — Dockable Console">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f19;--surface:#111827;--card:rgba(255,255,255,0.04);
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);
+  --text:#f1f5f9;--muted:#64748b;--dim:#475569;
+  --accent:#3b82f6;--accent2:#06b6d4;--accent-g:linear-gradient(135deg,#3b82f6,#06b6d4);
+  --green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#a855f7;
+  --radius:10px;--radius-sm:6px;
+  --font:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;
+  --glass:rgba(17,24,39,0.7);--blur:blur(16px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);font-size:13px;color:var(--text);background:var(--bg);display:flex;flex-direction:column}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2)}
+button{font-family:var(--font);cursor:pointer;border:none;outline:none;font-size:12px;font-weight:500}
+input,textarea,select{font-family:var(--font);font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 12px;outline:none;transition:border .2s}
+input:focus,textarea:focus{border-color:var(--accent)}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;font-weight:600;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border2);text-transform:uppercase;letter-spacing:.04em}
+td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px}
+tr:hover td{background:rgba(255,255,255,0.02)}
+
+/* ---- Buttons ---- */
+.btn{padding:7px 16px;border-radius:var(--radius-sm);font-weight:600;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent-g);color:#fff;box-shadow:0 2px 12px rgba(59,130,246,0.3)}
+.btn-primary:hover{box-shadow:0 4px 20px rgba(59,130,246,0.45);transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border2)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-danger{background:var(--red);color:#fff}
+.btn:disabled{opacity:.35;cursor:default;transform:none!important;box-shadow:none!important}
+
+/* ---- Badges ---- */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;white-space:nowrap}
+.badge-auto{background:rgba(16,185,129,0.15);color:var(--green)}
+.badge-review{background:rgba(245,158,11,0.15);color:var(--amber)}
+.badge-pending{background:rgba(100,116,139,0.15);color:var(--muted)}
+.badge-error{background:rgba(239,68,68,0.15);color:var(--red)}
+.badge-info{background:rgba(59,130,246,0.15);color:var(--accent)}
+
+/* ---- Top Bar ---- */
+#topbar{flex:none;height:54px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 16px;z-index:50}
+#brand{font-size:16px;font-weight:800;background:var(--accent-g);-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+#brand small{font-size:10px;font-weight:500;-webkit-text-fill-color:var(--muted);margin-left:6px}
+.chip{font-size:11px;padding:3px 10px;border-radius:99px;font-weight:600;white-space:nowrap}
+.chip-state{background:rgba(59,130,246,0.15);color:var(--accent)}
+.chip-cost{background:rgba(16,185,129,0.1);color:var(--green);font-family:var(--mono)}
+.spacer{flex:1}
+#topbar .controls{display:flex;gap:8px;align-items:center}
+#fileInput{display:none}
+
+/* ---- Main Layout ---- */
+#main{flex:1;display:grid;min-height:0;
+  grid-template-columns:340px 1fr 380px;
+  grid-template-rows:1fr;gap:0}
+#main>section{min-height:0;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--border)}
+#col-left{overflow:hidden}
+#col-center{overflow:hidden;border-right:1px solid var(--border)}
+#col-right{border-right:none;overflow:hidden}
+
+/* ---- Panels (scrollable areas inside columns) ---- */
+.col-scroll{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;backdrop-filter:var(--blur)}
+.panel-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.panel-head:hover{background:rgba(255,255,255,0.02)}
+.panel-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dim);transition:background .3s}
+.panel-dot.active{background:var(--green)}
+.panel-dot.pulse{background:var(--accent);animation:pulse 1.5s ease infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0.4)}50%{box-shadow:0 0 0 6px rgba(59,130,246,0)}}
+.panel-dot.warn{background:var(--amber)}
+.panel-title{font-size:13px;font-weight:700;flex:1}
+.panel-chip{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.panel-toggle{color:var(--muted);background:none;font-size:14px;padding:2px 6px;transition:color .2s}
+.panel-toggle:hover{color:var(--text)}
+.panel-body{padding:14px;overflow:auto}
+.panel.collapsed .panel-body{display:none}
+.panel.collapsed .panel-head{border-bottom:none}
+
+/* ---- Activity Feed ---- */
+.activity-feed{display:flex;flex-direction:column;gap:2px}
+.act-step{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;transition:border-color .2s}
+.act-step.current{border-color:var(--accent)}
+.act-step-head{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;transition:background .15s}
+.act-step-head:hover{background:rgba(255,255,255,0.03)}
+.act-icon{font-size:14px;flex:none;width:20px;text-align:center}
+.act-label{flex:1;font-weight:500}
+.act-time{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.act-status{width:6px;height:6px;border-radius:50%;flex:none}
+.act-status.done{background:var(--green)}
+.act-status.running{background:var(--accent);animation:pulse 1.2s ease infinite}
+.act-status.pending{background:var(--dim)}
+.act-status.error{background:var(--red)}
+.act-detail{display:none;padding:4px 12px 10px 40px;font-size:11px;color:var(--muted)}
+.act-step.open .act-detail{display:block}
+.act-sub{padding:3px 0;border-left:2px solid var(--border);padding-left:10px;margin:2px 0}
+.act-sub.fail{border-left-color:var(--red);color:var(--red)}
+.act-sub.ok{border-left-color:var(--green)}
+
+/* ---- Chat ---- */
+.chat-area{display:flex;flex-direction:column;flex:1;min-height:0}
+#chatLog{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:92%;animation:fadeUp .2s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.msg .who{font-size:10px;color:var(--muted);margin-bottom:3px;font-weight:600}
+.msg .bub{border-radius:var(--radius-sm);padding:8px 12px;line-height:1.5;font-size:12px;display:inline-block;max-width:100%}
+.msg.engine .bub{background:var(--card);border:1px solid var(--border)}
+.msg.user{align-self:flex-end;text-align:right}
+.msg.user .bub{background:var(--accent-g);color:#fff;border:none}
+.msg.sys{align-self:center;text-align:center}
+.msg.sys .bub{background:none;color:var(--muted);font-size:10px;padding:4px}
+.caret{display:inline-block;width:2px;height:13px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(1) infinite;margin-left:1px}
+@keyframes blink{50%{opacity:0}}
+#chatForm{flex:none;display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border)}
+#chatInput{flex:1;min-width:0;background:rgba(255,255,255,0.04);border-color:var(--border)}
+
+/* ---- Stat Grid ---- */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.stat{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;background:var(--card)}
+.stat .v{font-size:20px;font-weight:800;font-family:var(--mono)}
+.stat .k{font-size:10px;color:var(--muted);margin-top:2px;font-weight:500}
+.stat.accent .v{background:var(--accent-g);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* ---- KV rows ---- */
+.kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.kv:last-child{border-bottom:none}
+.kv .kl{color:var(--muted)}
+.kv .kv-val{font-weight:600;font-family:var(--mono);text-align:right}
+
+/* ---- Ribbon ---- */
+.ribbon{display:flex;height:24px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border)}
+.ribbon div{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;white-space:nowrap;padding:0 6px;transition:width .5s ease}
+
+/* ---- Signal bars ---- */
+.sig{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);margin:2px 0}
+.sig .bar{flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;min-width:40px;overflow:hidden}
+.sig .bar i{display:block;height:100%;background:var(--accent-g);border-radius:2px;transition:width .4s ease}
+.sig .val{width:32px;text-align:right;color:var(--text);font-family:var(--mono)}
+
+/* ---- Exception cards ---- */
+.exc-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;background:var(--card);transition:border-color .2s}
+.exc-card:hover{border-color:var(--border2)}
+.exc-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.exc-actions{display:flex;gap:6px;margin-top:8px}
+
+/* ---- Confidence bar ---- */
+.conf-bar{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono)}
+.conf-track{width:44px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden}
+.conf-fill{height:100%;border-radius:3px;transition:width .4s ease}
+
+/* ---- Pagination ---- */
+.pagination{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 0;font-size:11px;color:var(--muted)}
+.pagination button{padding:4px 10px;border-radius:var(--radius-sm);background:var(--card);border:1px solid var(--border);color:var(--text);font-size:11px}
+.pagination button:hover:not(:disabled){border-color:var(--accent)}
+.pagination button:disabled{opacity:.3}
+
+/* ---- Trace rows ---- */
+.tev{padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px}
+.tev .t{color:var(--dim);font-size:10px;margin-right:6px;font-family:var(--mono)}
+.tev .n{font-weight:600}
+.tev .d{color:var(--muted);margin-top:2px;font-size:10px}
+
+/* ---- Modal ---- */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:100;display:none;align-items:flex-start;justify-content:center;padding-top:10vh}
+#overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);width:500px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column}
+.modal-head{padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px}
+.modal-body{padding:16px 18px;overflow:auto;flex:1}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+
+/* ---- Toast ---- */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--accent-g);color:#fff;padding:10px 20px;font-size:12px;font-weight:600;border-radius:var(--radius-sm);z-index:120;opacity:0;transition:all .3s ease}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ---- Responsive ---- */
+@media(max-width:1100px){#main{grid-template-columns:300px 1fr}#col-right{display:none}}
+@media(max-width:700px){#main{grid-template-columns:1fr;grid-template-rows:auto}#col-left{max-height:45vh}#col-center{min-height:50vh}}
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <div id="brand">Recon Agent<small>financial reconciliation</small></div>
+  <span class="chip chip-state" id="chipState">IDLE</span>
+  <span class="chip chip-cost" id="chipCost">$0.0000</span>
+  <div class="spacer"></div>
+  <div class="controls">
+    <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls">
+    <button class="btn btn-ghost btn-sm" id="btnUpload">Upload Files</button>
+    <button class="btn btn-ghost btn-sm" id="btnSample">Sample Data</button>
+    <button class="btn btn-primary btn-sm" id="btnStart">▶ Start Run</button>
+    <button class="btn btn-danger btn-sm" id="btnAbort" disabled>Abort</button>
+  </div>
+</header>
+
+<main id="main">
+  <!-- LEFT: Activity Feed + Chat -->
+  <section id="col-left">
+    <div class="col-scroll">
+      <!-- Activity Feed -->
+      <div class="panel" id="p-activity">
+        <div class="panel-head" onclick="togglePanel('activity')">
+          <span class="panel-dot" id="dotActivity"></span>
+          <span class="panel-title">Pipeline Activity</span>
+          <span class="panel-chip" id="chipActivity">idle</span>
+          <button class="panel-toggle" id="togActivity">▾</button>
+        </div>
+        <div class="panel-body" id="activityBody" style="padding:8px;max-height:280px;overflow-y:auto">
+          <div class="activity-feed" id="actFeed">
+            <div style="color:var(--muted);font-size:11px;padding:8px">Upload files and start a run to see pipeline activity.</div>
+          </div>
+        </div>
+      </div>
+      <!-- Chat -->
+      <div class="panel" style="flex:1;display:flex;flex-direction:column;min-height:240px">
+        <div class="panel-head">
+          <span class="panel-dot active"></span>
+          <span class="panel-title">Chat</span>
+          <span class="panel-chip">grounded Q&A</span>
+        </div>
+        <div class="chat-area">
+          <div id="chatLog"></div>
+          <form id="chatForm">
+            <input type="text" id="chatInput" placeholder="Ask about orders, fees, exceptions…" autocomplete="off">
+            <button type="submit" class="btn btn-primary btn-sm">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CENTER: Main Panels -->
+  <section id="col-center">
+    <div class="col-scroll" id="centerScroll">
+      <!-- Panels will be rendered here dynamically -->
+    </div>
+  </section>
+
+  <!-- RIGHT: Exceptions + Audit -->
+  <section id="col-right">
+    <div class="col-scroll" id="rightScroll">
+      <!-- Exception queue + audit rendered here -->
+    </div>
+  </section>
+</main>
+
+<div id="overlay"></div>
+<div id="toast"></div>
+
+<script>
+/* ===================== HELPERS ===================== */
+const $=s=>document.querySelector(s);
+const $$=s=>document.querySelectorAll(s);
+const el=(tag,cls,html)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(html!==undefined)n.innerHTML=html;return n;};
+const money=v=>'₹'+Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct=v=>v!=null?(v*100).toFixed(1)+'%':'—';
+const nowT=()=>new Date().toLocaleTimeString('en-GB');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ===================== SESSION STATE ===================== */
+const API={sid:null,ws:null};
+let S={
+  state:'IDLE',running:false,abortToken:null,cost:0,
+  tables:{},tableMeta:{},profiles:{},
+  activity:[],traceEvents:[],logEvents:[],
+  cfg:null,mapConf:0,candidates:[],
+  exec:null,matchRate:null,precision:null,recall:null,throughput:null,
+  queue:[],excSummary:{},final:null,
+  audit:[],
+  chatHistory:[]
+};
+
+/* ===================== HUMAN-FRIENDLY LABELS ===================== */
+const STATE_LABELS={
+  INGESTING:['📥','Ingesting uploaded files','Reading and parsing your CSV/Excel data files'],
+  PROFILING:['📊','Profiling column statistics','Analyzing data types, cardinality, null rates, and PII patterns'],
+  MAPPING_PROPOSED:['🔗','Discovering schema mappings','AI is analyzing column relationships to find key alignments'],
+  MAPPING_VALIDATED:['✅','Validating schema alignment','Confirming the best column mapping with confidence scoring'],
+  POLICY_GENERATED:['📋','Assembling reconciliation policy','Building matching rules: key, amount, date, fee model, tolerance'],
+  DRY_RUN:['🧪','Running calibration dry-run','Testing matching engine on a sample subset to establish baseline'],
+  EXECUTING:['⚡','Executing matching engine','Running full multi-attribute matching across all records'],
+  INSPECTING:['🔍','Inspecting match quality','Checking match rate against revision threshold'],
+  REVISION:['🔄','Revising tolerance parameters','Auto-tuning tolerance to improve match rate'],
+  QA:['🏷️','Classifying exceptions','Categorizing unmatched records by root cause'],
+  RESOLVING:['⚖️','Resolving exception actions','Auto-approving safe exceptions, flagging others for review'],
+  AGGREGATING:['📊','Aggregating financial balances','Computing gross, net, fees, matched value, and signing audit chain'],
+  ARCHIVED:['✨','Reconciliation complete','All records processed, report finalized, audit chain verified'],
+  HALT:['⏸️','Pipeline halted','Waiting for user acknowledgment to continue'],
+  ABORT_CONFIRMED:['🛑','Run aborted','Pipeline stopped by user request']
+};
+const TRACE_LABELS={
+  'LLM_CALL_STARTED':'AI is analyzing data patterns',
+  'LLM_CALL_FAILED':'AI analysis attempt failed, retrying',
+  'LLM_CALL_COMPLETED':'AI analysis completed successfully',
+  'LLM_FALLBACK':'Falling back to deterministic analysis',
+  'CIRCUIT_BREAKER_OPEN':'Circuit breaker opened — too many failures',
+  'CIRCUIT_BREAKER_CLOSED':'Circuit breaker reset — resuming normally',
+  'SANDBOX_CREATED':'Secure sandbox environment created',
+  'SANDBOX_DESTROYED':'Sandbox environment cleaned up',
+  'CALIBRATION_DRIFT_WARNING':'Calibration drift detected — scores below expected',
+  'INGEST_DONE':'All files parsed and normalized',
+  'MAPPING_PROPOSED':'Schema mapping candidates discovered',
+  'MAPPING_VALIDATED':'Schema mapping committed',
+  'DRY_RUN_COMPLETED':'Dry-run calibration finished',
+  'EXECUTION_COMPLETED':'Matching engine finished',
+  'POLICY_REVISED':'Tolerance parameters adjusted',
+  'RUN_COMPLETE':'Pipeline run completed successfully'
+};
+function friendlyTrace(name,detail){
+  if(name.startsWith('tool_ok:'))return '✅ '+name.replace('tool_ok:','').replace(/_/g,' ')+' tool completed';
+  if(name.startsWith('llm_fallback:'))return '🔀 Fell back to deterministic path for '+name.split(':')[1];
+  if(name.startsWith('cost_overrun:'))return '💰 Cost overrun on '+name.split(':')[1];
+  if(name==='AUDIT_COMMIT')return '🔒 Audit record committed';
+  return TRACE_LABELS[name]||(name.replace(/_/g,' '));
+}
+
+/* ===================== API CLIENT ===================== */
+async function apiJSON(path,opts){
+  const r=await fetch(path,opts);
+  if(!r.ok)throw new Error(r.status+' '+r.statusText);
+  return r.json();
+}
+const apiPost=(path,body)=>apiJSON(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+
+async function createSession(){
+  const d=await apiJSON('/api/v2/sessions',{method:'POST'});
+  API.sid=d.session_id;
+  return API.sid;
+}
+function uploadAndRun(files){
+  const fd=new FormData();
+  Array.from(files).forEach(f=>fd.append('files',f));
+  return apiJSON('/api/v2/sessions/'+API.sid+'/run',{method:'POST',body:fd});
+}
+function fetchPanel(name,params){
+  let qs=params?'?'+new URLSearchParams(params):'';
+  return apiJSON('/api/v2/sessions/'+API.sid+'/'+name+qs);
+}
+function overrideException(rid,action,note){
+  return apiPost('/api/v2/sessions/'+API.sid+'/exceptions/'+rid+'/action',{action,note:note||''});
+}
+function sendChat(message){return apiPost('/api/v2/sessions/'+API.sid+'/chat',{message});}
+function resumeRun(){return apiJSON('/api/v2/sessions/'+API.sid+'/resume',{method:'POST'});}
+function abortRun(token){return apiPost('/api/v2/sessions/'+API.sid+'/abort',{token});}
+
+/* ===================== WEBSOCKET ===================== */
+function connectWS(){
+  if(!API.sid)return;
+  const proto=location.protocol==='https:'?'wss':'ws';
+  API.ws=new WebSocket(proto+'://'+location.host+'/ws/v2/'+API.sid);
+  API.ws.onmessage=function(e){
+    let ev;try{ev=JSON.parse(e.data);}catch(_){return;}
+    handleWSEvent(ev);
+  };
+  API.ws.onclose=function(){setTimeout(()=>{if(API.sid)connectWS();},2000);};
+}
+function handleWSEvent(ev){
+  const p=ev.payload||{};
+  // Priority 1: Chat/narration/control
+  if(ev.kind==='chat'&&p.text){
+    addEngineMsg(p.text);
+  }
+  if(ev.kind==='control'){
+    if(p.event==='STATE_ENTERED'){
+      S.state=p.state||S.state;
+      S.abortToken=p.abort_token||S.abortToken;
+      addActivityStep(p.state,p.abort_token);
+      updateChips();
+    }
+    if(p.event==='STATE_EXITED'){
+      completeActivityStep(p.state);
+    }
+    if(p.event==='HALT'){
+      S.state='HALT';updateChips();
+      addEngineMsg('⏸️ Pipeline halted: '+(p.detail?.reason||'unknown reason')+'. Click Resume to continue.');
+    }
+    if(p.event==='RESUMED'){
+      addEngineMsg('▶️ Pipeline resumed.');
+    }
+    if(p.event==='ABORT_CONFIRMED'){
+      S.state='ABORT_CONFIRMED';S.running=false;updateChips();
+      addEngineMsg('🛑 Run aborted.');
+    }
+  }
+  // Priority 2: Trace
+  if(ev.priority===2){
+    S.traceEvents.push(ev);
+    appendTraceToActivity(p.event||ev.kind,JSON.stringify(p.detail||{}).slice(0,120));
+  }
+  // Priority 3: Logs
+  if(ev.priority===3){
+    S.logEvents.push(ev);
+  }
+  // Artifact: refresh panels
+  if(ev.kind==='artifact'){
+    if(p.kind==='report')refreshResults();
+    if(p.kind==='exceptions')refreshExceptions();
+  }
+}
+
+/* ===================== ACTIVITY FEED ===================== */
+let actSteps=[];
+function resetActivity(){
+  actSteps=[];S.traceEvents=[];S.logEvents=[];
+  $('#actFeed').innerHTML='';
+}
+function addActivityStep(state){
+  const info=STATE_LABELS[state]||['⏳',state.replace(/_/g,' '),'Processing...'];
+  // Mark previous step as done
+  if(actSteps.length){
+    const prev=actSteps[actSteps.length-1];
+    prev.status='done';
+    const el=document.getElementById('act-'+prev.state);
+    if(el){el.classList.remove('current');el.querySelector('.act-status').className='act-status done';}
+  }
+  const step={state,icon:info[0],label:info[1],desc:info[2],status:'running',subs:[],time:nowT()};
+  actSteps.push(step);
+  const feed=$('#actFeed');
+  const div=document.createElement('div');div.className='act-step current';div.id='act-'+state;
+  div.innerHTML=`<div class="act-step-head" onclick="toggleActStep('${state}')">
+    <span class="act-icon">${step.icon}</span>
+    <span class="act-label">${step.label}</span>
+    <span class="act-time">${step.time}</span>
+    <span class="act-status running"></span>
+  </div>
+  <div class="act-detail" id="actd-${state}"><div style="color:var(--dim);font-size:10px">${step.desc}</div></div>`;
+  feed.appendChild(div);
+  div.scrollIntoView({behavior:'smooth',block:'nearest'});
+  $('#chipActivity').textContent=step.label;
+  $('#dotActivity').className='panel-dot pulse';
+}
+function completeActivityStep(state){
+  const step=actSteps.find(s=>s.state===state);
+  if(step)step.status='done';
+  const el=document.getElementById('act-'+state);
+  if(el){el.classList.remove('current');el.querySelector('.act-status').className='act-status done';}
+}
+function appendTraceToActivity(evName,detail){
+  if(!actSteps.length)return;
+  const step=actSteps[actSteps.length-1];
+  const friendly=friendlyTrace(evName,detail);
+  step.subs.push({name:friendly,detail,fail:evName.includes('FAIL')||evName.includes('failed')});
+  const detEl=document.getElementById('actd-'+step.state);
+  if(detEl){
+    const sub=document.createElement('div');
+    sub.className='act-sub'+(evName.includes('FAIL')||evName.includes('failed')?' fail':' ok');
+    sub.textContent=friendly;
+    detEl.appendChild(sub);
+  }
+}
+function toggleActStep(state){
+  const el=document.getElementById('act-'+state);
+  if(el)el.classList.toggle('open');
+}
+
+/* ===================== CHAT ===================== */
+function addEngineMsg(text){
+  const log=$('#chatLog');if(!log)return;
+  const m=el('div','msg engine','<div class="who">engine</div>');
+  const b=el('span','bub');b.textContent=text;m.appendChild(b);log.appendChild(m);
+  log.scrollTop=log.scrollHeight;
+}
+function addUserMsg(text){
+  const log=$('#chatLog');if(!log)return;
+  const m=el('div','msg user','<div class="who">you</div>');
+  const b=el('span','bub');b.textContent=text;m.appendChild(b);log.appendChild(m);
+  log.scrollTop=log.scrollHeight;
+}
+function addSysMsg(text){
+  const log=$('#chatLog');if(!log)return;
+  const m=el('div','msg sys');const b=el('span','bub');b.textContent=text;m.appendChild(b);log.appendChild(m);
+  log.scrollTop=log.scrollHeight;
+}
+
+$('#chatForm').onsubmit=async e=>{
+  e.preventDefault();
+  const v=$('#chatInput').value.trim();if(!v)return;
+  $('#chatInput').value='';
+  addUserMsg(v);
+  // Handle local commands
+  if(v.toLowerCase()==='status'){
+    addEngineMsg('State: '+S.state+' · Cost: $'+S.cost.toFixed(4)+(S.matchRate!=null?' · Match rate: '+pct(S.matchRate):''));return;}
+  if(v.toLowerCase()==='help'){
+    addEngineMsg('Commands: status, help. After a run, ask about specific orders (e.g. "ORD_2"), fees, balances, or exceptions.');return;}
+  // Send to backend
+  try{
+    const r=await sendChat(v);
+    if(r.ok)addEngineMsg(r.response);
+    else addEngineMsg('⚠️ '+(r.error||r.response||'Failed to get response'));
+  }catch(e){addEngineMsg('⚠️ Chat error: '+e.message);}
+};
+
+/* ===================== PANEL RENDERING ===================== */
+function togglePanel(id){
+  const p=$('#p-'+id);if(p)p.classList.toggle('collapsed');
+}
+function updateChips(){
+  $('#chipState').textContent=S.state;
+  $('#chipCost').textContent='$'+(S.cost||0).toFixed(4);
+  $('#btnAbort').disabled=!S.running;
+  if(S.state==='ARCHIVED'||S.state==='ABORT_CONFIRMED'||S.state==='IDLE'){
+    $('#dotActivity').className='panel-dot'+(S.state==='ARCHIVED'?' active':'');
+    if(S.state==='ARCHIVED')$('#chipActivity').textContent='complete';
+  }
+}
+
+/* ---- Ingestion Panel ---- */
+function renderIngestion(data){
+  let h='';
+  if(!data.table_meta||!Object.keys(data.table_meta).length){
+    return '<div style="color:var(--muted);padding:16px;text-align:center">No files ingested yet. Upload CSV/Excel files or load sample data.</div>';
+  }
+  for(const [name,meta] of Object.entries(data.table_meta)){
+    const pg=data.tables[name];
+    const rows=pg?pg.items:[];
+    const prof=(data.profiles||{})[name]||[];
+    h+=`<div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-weight:700">${name}</span>
+        <span class="badge badge-info">${meta.total_rows.toLocaleString()} records · ${meta.columns.length} cols</span>
+      </div>`;
+    // Profile table
+    if(prof.length){
+      h+='<table><thead><tr><th>Column</th><th>Type</th><th>Numeric</th><th>Date</th><th>Cardinality</th><th>Nulls</th><th>Samples</th></tr></thead><tbody>';
+      prof.forEach(p=>{
+        h+=`<tr><td style="font-weight:600">${p.name}</td><td>${p.dtype}</td>
+          <td>${p.numeric_ratio.toFixed(2)}</td><td>${p.date_ratio.toFixed(2)}</td>
+          <td>${p.cardinality.toFixed(2)}</td><td>${p.null_rate.toFixed(2)}</td>
+          <td style="color:var(--muted);font-size:10px">${(p.sample_values||[]).join(', ')}</td></tr>`;
+      });
+      h+='</tbody></table>';
+    }
+    // Data preview
+    if(rows.length){
+      const cols=meta.columns;
+      h+=`<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--muted);font-size:11px">Data preview (page ${pg.page}/${pg.total_pages}, showing ${rows.length} of ${pg.total})</summary>
+        <div style="max-height:200px;overflow:auto;margin-top:4px">
+        <table><thead><tr><th>#</th>${cols.map(c=>'<th>'+c+'</th>').join('')}</tr></thead><tbody>
+        ${rows.map(r=>'<tr><td>'+r._rid+'</td>'+cols.map(c=>'<td>'+(r[c]??'')+'</td>').join('')+'</tr>').join('')}
+        </tbody></table></div>`;
+      if(pg.total_pages>1){
+        h+=`<div class="pagination">
+          <button onclick="loadIngestionPage('${name}',${pg.page-1})" ${pg.has_prev?'':'disabled'}>← Prev</button>
+          <span>Page ${pg.page} of ${pg.total_pages}</span>
+          <button onclick="loadIngestionPage('${name}',${pg.page+1})" ${pg.has_next?'':'disabled'}>Next →</button>
+        </div>`;
+      }
+      h+='</details>';
+    }
+    h+='</div>';
+  }
+  return h;
+}
+async function loadIngestionPage(table,page){
+  try{
+    const data=await fetchPanel('ingestion',{table,page,page_size:100});
+    // Re-render just the ingestion panel body
+    const body=$('#ingestionBody');
+    if(body)body.innerHTML=renderIngestion(data);
+  }catch(e){toast('Failed to load page: '+e.message);}
+}
+
+/* ---- Mapping Panel ---- */
+function renderMapping(data){
+  if(!data.candidates||!data.candidates.length){
+    return '<div style="color:var(--muted);text-align:center;padding:16px">Mapping candidates appear after profiling.</div>';
+  }
+  let h='<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Confidence = 0.35·structural + 0.30·sample + 0.20·type + 0.15·semantic</div>';
+  h+='<table><thead><tr><th>Candidate</th><th>Signals</th><th>Score</th><th>Band</th></tr></thead><tbody>';
+  data.candidates.forEach(c=>{
+    const sig=c.signals;
+    const bandCls=c.band==='auto'?'badge-auto':(c.band==='confirm'?'badge-review':'badge-error');
+    h+=`<tr><td style="font-weight:600">${c.left} ↔ ${c.right}</td>
+      <td style="min-width:160px">
+        ${['structural_overlap','sample_match_rate','type_compatibility','semantic_plausibility'].map(k=>
+          `<div class="sig"><span style="width:52px;font-size:10px">${k.split('_')[0]}</span><div class="bar"><i style="width:${(sig[k]*100)}%"></i></div><span class="val">${sig[k].toFixed(2)}</span></div>`
+        ).join('')}
+      </td>
+      <td><span style="font-weight:700;font-family:var(--mono)">${c.composite.toFixed(3)}</span></td>
+      <td><span class="badge ${bandCls}">${c.band}</span></td></tr>`;
+  });
+  h+='</tbody></table>';
+  if(data.committed){
+    h+=`<div style="margin-top:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px">
+      <div style="font-weight:700;margin-bottom:6px">Committed Mapping <span class="badge badge-auto">conf ${data.confidence.toFixed(3)}</span></div>
+      ${['left_key','right_key','left_amount','right_amount','left_date','right_date','tolerance','window_days'].map(k=>
+        `<div class="kv"><span class="kl">${k}</span><span class="kv-val">${data.committed[k]??'—'}</span></div>`
+      ).join('')}
+    </div>`;
+  }
+  return h;
+}
+
+/* ---- Results Panel ---- */
+function renderResults(data){
+  if(!data.executed)return '<div style="color:var(--muted);text-align:center;padding:16px">Results appear after the matching engine runs.</div>';
+  let h='';
+  // Stat grid
+  h+=`<div class="stat-grid">
+    <div class="stat accent"><div class="v">${pct(data.match_rate)}</div><div class="k">match rate</div></div>
+    <div class="stat"><div class="v">${data.matched?.length||0}</div><div class="k">matched</div></div>
+    <div class="stat"><div class="v">${data.unmatched_count||0}</div><div class="k">unmatched</div></div>
+    <div class="stat"><div class="v">${pct(data.precision_vs_truth)}</div><div class="k">precision</div></div>
+    <div class="stat"><div class="v">${pct(data.recall_vs_truth)}</div><div class="k">recall</div></div>
+    <div class="stat"><div class="v">${(data.throughput_rows_per_sec||0).toFixed(0)} r/s</div><div class="k">throughput</div></div>
+  </div>`;
+  // Financial balances
+  if(data.totals){
+    h+=`<div style="margin-top:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px">
+      <div style="font-weight:700;margin-bottom:6px">Financial Balances</div>
+      ${[['Gross ledger',data.totals.gross],['Net bank inflow',data.totals.net],['Fees variance',data.totals.fees],
+        ['Matched value',data.totals.matched_value],['Exception value',data.totals.exception_value]]
+        .map(([k,v])=>`<div class="kv"><span class="kl">${k}</span><span class="kv-val">${money(v)}</span></div>`).join('')}
+    </div>`;
+  }
+  // Match table
+  if(data.matched&&data.matched.length){
+    h+=`<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:12px">Matched Pairs (${data.matched.length})</summary>
+      <table style="margin-top:6px"><thead><tr><th>L</th><th>R</th><th>Score</th><th>Key</th><th>Amount</th><th>Date</th></tr></thead><tbody>
+      ${data.matched.slice(0,200).map(m=>`<tr><td>${m.l_rid}</td><td>${m.r_rid}</td>
+        <td style="font-weight:700;font-family:var(--mono)">${m.composite_score.toFixed(3)}</td>
+        <td>${(m.components.key||0).toFixed(2)}</td><td>${(m.components.amount||0).toFixed(2)}</td>
+        <td>${(m.components.date||0).toFixed(2)}</td></tr>`).join('')}
+      </tbody></table>
+      ${data.matched.length>200?'<div style="color:var(--muted);font-size:11px;padding:8px">Showing first 200 of '+data.matched.length+' matches</div>':''}
+    </details>`;
+  }
+  // Final report
+  if(data.final_report){
+    const f=data.final_report;
+    h+=`<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">FINAL REPORT</div>
+      <div class="stat-grid">
+        <div class="stat accent"><div class="v">${pct(f.match_rate)}</div><div class="k">match rate</div></div>
+        <div class="stat"><div class="v">${f.honest_exception_count}</div><div class="k">exceptions</div></div>
+        <div class="stat"><div class="v">${f.auto_resolved_count}</div><div class="k">auto-resolved</div></div>
+        <div class="stat"><div class="v">${f.escalated_count}</div><div class="k">needs review</div></div>
+        <div class="stat"><div class="v">${money(f.matched_value)}</div><div class="k">matched value</div></div>
+        <div class="stat"><div class="v">$${f.cost_usd.toFixed(4)}</div><div class="k">LLM cost</div></div>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btn btn-ghost btn-sm" onclick="downloadJSON('report.json',${JSON.stringify(JSON.stringify(f))})">Download Report</button>
+      </div>
+    </div>`;
+  }
+  return h;
+}
+
+/* ---- Exceptions Panel ---- */
+function renderExceptions(data){
+  if(!data.queue||!data.queue.length){
+    return '<div style="color:var(--muted);text-align:center;padding:16px">Exception queue populates after QA classification.</div>';
+  }
+  const sm=data.summary||{};
+  let h=`<div class="ribbon" style="margin-bottom:10px">
+    <div style="width:${(sm.auto_resolved||0)/(sm.total||1)*100}%;background:var(--green)">${sm.auto_resolved||0} auto</div>
+    <div style="width:${(sm.needs_review||0)/(sm.total||1)*100}%;background:var(--amber)">${sm.needs_review||0} review</div>
+    <div style="width:${(sm.pending||0)/(sm.total||1)*100}%;background:var(--dim)">${sm.pending||0} pending</div>
+  </div>
+  <div style="color:var(--muted);font-size:11px;margin-bottom:8px">Auto-approve gate: confidence ≥ 0.85 ∧ evidence ≥ 2</div>`;
+  data.queue.forEach(q=>{
+    const confPct=Math.round((q.confidence||0)*100);
+    const confColor=q.confidence>=0.85?'var(--green)':(q.confidence>=0.4?'var(--amber)':'var(--red)');
+    const actionBadge=q.action==='auto_resolve'||q.action==='mark_resolved'?'<span class="badge badge-auto">AUTO · NO ERROR</span>':
+      q.action==='request_confirmation'?'<span class="badge badge-review">NEEDS REVIEW</span>':
+      q.action==='escalate'?'<span class="badge badge-error">ESCALATED</span>':'<span class="badge badge-pending">PENDING</span>';
+    h+=`<div class="exc-card">
+      <div class="exc-header">
+        <span style="font-weight:700">#${q.rid}</span>
+        <span class="badge badge-info">${q.side}</span>
+        <span class="badge" style="background:rgba(168,85,247,0.15);color:var(--purple)">${q.reason}</span>
+        <span style="color:var(--muted);font-size:11px">ref: ${q.ref||'—'}</span>
+        <div class="spacer"></div>
+        ${actionBadge}
+      </div>
+      <div class="conf-bar" style="margin-top:6px">
+        <span style="color:var(--muted)">confidence</span>
+        <div class="conf-track"><div class="conf-fill" style="width:${confPct}%;background:${confColor}"></div></div>
+        <span style="color:${confColor}">${q.confidence.toFixed(2)}</span>
+        <span style="color:var(--muted);margin-left:8px">evidence: ${(q.pieces||[]).length}</span>
+      </div>
+      <div style="font-size:12px;margin-top:6px;line-height:1.5">${q.explanation||'No diagnostic available.'}</div>
+      ${q.delta!=null?'<div style="font-size:11px;color:var(--muted);margin-top:4px">Delta: '+money(q.delta)+'</div>':''}
+      ${q.action==='request_confirmation'?`<div class="exc-actions">
+        <button class="btn btn-primary btn-sm" onclick="doOverride(${q.rid},'approve')">Approve</button>
+        <button class="btn btn-ghost btn-sm" onclick="doOverride(${q.rid},'escalate')">Escalate</button>
+      </div>`:''}
+    </div>`;
+  });
+  // Pagination
+  if(data.pagination&&data.pagination.total_pages>1){
+    const pg=data.pagination;
+    h+=`<div class="pagination">
+      <button onclick="loadExceptionsPage(${pg.page-1})" ${pg.has_prev?'':'disabled'}>← Prev</button>
+      <span>Page ${pg.page} of ${pg.total_pages} (${pg.total} total)</span>
+      <button onclick="loadExceptionsPage(${pg.page+1})" ${pg.has_next?'':'disabled'}>Next →</button>
+    </div>`;
+  }
+  return h;
+}
+async function loadExceptionsPage(page){
+  try{
+    const data=await fetchPanel('exceptions',{page,page_size:50});
+    const body=$('#exceptionsBody');if(body)body.innerHTML=renderExceptions(data);
+  }catch(e){toast('Failed: '+e.message);}
+}
+async function doOverride(rid,action){
+  const note=prompt((action==='approve'?'Approve':'Escalate')+' exception #'+rid+'?\nOptional note (recorded in audit):');
+  if(note===null)return;
+  try{
+    await overrideException(rid,action,note);
+    toast('Exception #'+rid+' '+action+'d');
+    refreshExceptions();
+  }catch(e){toast('Error: '+e.message);}
+}
+
+/* ---- Audit Panel ---- */
+function renderAudit(data){
+  const verified=data.verified;
+  let h=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <span class="badge ${verified?'badge-auto':'badge-error'}">${verified?'CHAIN VERIFIED':'CHAIN TAMPERED'}</span>
+    <span style="color:var(--muted);font-size:11px">${data.count||0} records</span>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" onclick="downloadJSON('audit.jsonl',${JSON.stringify(JSON.stringify(data.records||[]))})">Export</button>
+  </div>`;
+  const recs=(data.records||[]).slice().reverse().slice(0,50);
+  if(!recs.length)return h+'<div style="color:var(--muted);text-align:center;padding:16px">No audit records yet.</div>';
+  h+='<table><thead><tr><th>#</th><th>Event</th><th>Details</th></tr></thead><tbody>';
+  recs.forEach((r,i)=>{
+    const p=typeof r==='string'?JSON.parse(r):r;
+    const ev=p.event||p.payload?.event||'—';
+    h+=`<tr><td style="font-family:var(--mono)">${recs.length-i}</td>
+      <td><span style="font-weight:600">${ev}</span>${p.decision_kind?' · '+p.decision_kind:''}</td>
+      <td style="font-size:10px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis">${JSON.stringify(p).slice(0,120)}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  return h;
+}
+
+/* ---- Policy Panel ---- */
+function renderPolicy(data){
+  if(!data.components||!data.components.length){
+    return '<div style="color:var(--muted);text-align:center;padding:16px">Policy is generated after mapping validation.</div>';
+  }
+  let h=`<div class="stat-grid" style="margin-bottom:12px">
+    <div class="stat"><div class="v">${data.baseline_match_rate!=null?data.baseline_match_rate.toFixed(3):'—'}</div><div class="k">baseline (dry-run)</div></div>
+    <div class="stat accent"><div class="v">${data.current_match_rate!=null?data.current_match_rate.toFixed(3):'—'}</div><div class="k">current (live)</div></div>
+  </div>`;
+  h+='<table><thead><tr><th>Prec</th><th>Component</th><th>Enabled</th><th>Params</th></tr></thead><tbody>';
+  data.components.forEach(c=>{
+    h+=`<tr><td><span class="badge badge-info">${c.precedence}</span></td>
+      <td style="font-weight:600">${(c.component||'').replace(/_/g,' ')}</td>
+      <td>${c.enabled?'✅':'—'}</td>
+      <td style="font-size:10px;color:var(--muted)">${JSON.stringify(c.params||{})}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  if(data.fee_schedules&&data.fee_schedules.length){
+    h+=`<div style="margin-top:10px;color:var(--muted);font-size:11px">Fee schedule: ${data.fee_schedules.map(f=>f.provider+' · '+f.schedule_id).join(', ')}</div>`;
+  }
+  return h;
+}
+
+/* ===================== PANEL STRUCTURE ===================== */
+function buildPanels(){
+  const center=$('#centerScroll');
+  const right=$('#rightScroll');
+  center.innerHTML='';right.innerHTML='';
+
+  // Center panels
+  const centerPanels=[
+    {id:'ingestion',title:'Ingestion',chip:'data preview'},
+    {id:'mapping',title:'Mapping',chip:'schema alignment'},
+    {id:'policy',title:'Policy',chip:'matching rules'},
+    {id:'results',title:'Results',chip:'match output'},
+  ];
+  centerPanels.forEach(p=>{
+    const div=el('div','panel');div.id='p-'+p.id;
+    div.innerHTML=`<div class="panel-head" onclick="togglePanel('${p.id}')">
+      <span class="panel-dot" id="dot-${p.id}"></span>
+      <span class="panel-title">${p.title}</span>
+      <span class="panel-chip">${p.chip}</span>
+      <button class="panel-toggle">▾</button>
+    </div>
+    <div class="panel-body" id="${p.id}Body">
+      <div style="color:var(--muted);text-align:center;padding:16px">Waiting for pipeline data…</div>
+    </div>`;
+    center.appendChild(div);
+  });
+
+  // Right panels
+  const rightPanels=[
+    {id:'exceptions',title:'Exception Queue',chip:'review'},
+    {id:'audit',title:'Audit Chain',chip:'hash-linked'},
+  ];
+  rightPanels.forEach(p=>{
+    const div=el('div','panel');div.id='p-'+p.id;
+    div.innerHTML=`<div class="panel-head" onclick="togglePanel('${p.id}')">
+      <span class="panel-dot" id="dot-${p.id}"></span>
+      <span class="panel-title">${p.title}</span>
+      <span class="panel-chip">${p.chip}</span>
+      <button class="panel-toggle">▾</button>
+    </div>
+    <div class="panel-body" id="${p.id}Body">
+      <div style="color:var(--muted);text-align:center;padding:16px">Waiting for pipeline data…</div>
+    </div>`;
+    right.appendChild(div);
+  });
+}
+
+/* ===================== REFRESH PANELS ===================== */
+async function refreshIngestion(){
+  try{
+    const data=await fetchPanel('ingestion');
+    const body=$('#ingestionBody');if(body)body.innerHTML=renderIngestion(data);
+    const dot=$('#dot-ingestion');if(dot&&data.table_meta&&Object.keys(data.table_meta).length)dot.className='panel-dot active';
+  }catch(e){}
+}
+async function refreshMapping(){
+  try{
+    const data=await fetchPanel('mapping');
+    const body=$('#mappingBody');if(body)body.innerHTML=renderMapping(data);
+    const dot=$('#dot-mapping');if(dot&&data.committed)dot.className='panel-dot active';
+  }catch(e){}
+}
+async function refreshPolicy(){
+  try{
+    const data=await fetchPanel('policy');
+    const body=$('#policyBody');if(body)body.innerHTML=renderPolicy(data);
+    const dot=$('#dot-policy');if(dot&&data.components?.length)dot.className='panel-dot active';
+  }catch(e){}
+}
+async function refreshResults(){
+  try{
+    const data=await fetchPanel('results');
+    const body=$('#resultsBody');if(body)body.innerHTML=renderResults(data);
+    S.matchRate=data.match_rate;S.precision=data.precision_vs_truth;S.recall=data.recall_vs_truth;
+    S.final=data.final_report;S.cost=data.final_report?.cost_usd||S.cost;
+    updateChips();
+    const dot=$('#dot-results');if(dot&&data.executed)dot.className='panel-dot active';
+  }catch(e){}
+}
+async function refreshExceptions(){
+  try{
+    const data=await fetchPanel('exceptions');
+    const body=$('#exceptionsBody');if(body)body.innerHTML=renderExceptions(data);
+    const dot=$('#dot-exceptions');
+    if(dot){
+      if(data.summary?.needs_review>0)dot.className='panel-dot warn';
+      else if(data.summary?.total>0)dot.className='panel-dot active';
+    }
+  }catch(e){}
+}
+async function refreshAudit(){
+  try{
+    const data=await fetchPanel('audit');
+    const body=$('#auditBody');if(body)body.innerHTML=renderAudit(data);
+    const dot=$('#dot-audit');if(dot&&data.count>0)dot.className='panel-dot active';
+  }catch(e){}
+}
+async function refreshAll(){
+  await Promise.allSettled([refreshIngestion(),refreshMapping(),refreshPolicy(),refreshResults(),refreshExceptions(),refreshAudit()]);
+}
+// Poll for updates while running
+let pollTimer=null;
+function startPolling(){
+  if(pollTimer)return;
+  pollTimer=setInterval(async()=>{
+    if(!API.sid)return;
+    try{
+      const ov=await fetchPanel('overview');
+      S.state=ov.state||S.state;
+      S.cost=ov.cost_usd||S.cost;
+      updateChips();
+      // Refresh panels based on state
+      await refreshAll();
+      // Stop polling when archived or aborted
+      if(S.state==='ARCHIVED'||S.state==='ABORT_CONFIRMED'||S.state==='IDLE'){
+        S.running=false;updateChips();stopPolling();
+      }
+    }catch(e){}
+  },2500);
+}
+function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+
+/* ===================== MAIN ACTIONS ===================== */
+async function startRun(files){
+  if(S.running){toast('A run is already in progress.');return;}
+  if(!files||!files.length){toast('No files selected.');return;}
+  if(files.length<2){toast('Need at least 2 files (ledger + statement).');return;}
+  S.running=true;S.state='STARTING';
+  resetActivity();updateChips();
+  addSysMsg('Starting reconciliation run…');
+  try{
+    const r=await uploadAndRun(files);
+    addEngineMsg('🚀 Pipeline started with '+r.files.join(', ')+'. Watch the Activity Feed for progress.');
+    startPolling();
+  }catch(e){
+    S.running=false;updateChips();
+    addEngineMsg('❌ Failed to start: '+e.message);
+  }
+}
+
+/* ---- Sample data helper ---- */
+async function loadSampleData(){
+  if(S.running){toast('A run is already in progress.');return;}
+  addSysMsg('Loading sample dataset…');
+  // Create sample CSV blobs
+  const payCSV='order_id,amount,date\nORD_1,1000,2026-03-01\nORD_2,2000,2026-03-01\nORD_3,3000,2026-03-06\nORD_4,500,2026-03-02\nORD_4,500,2026-03-02\nORD_6,400,2026-03-02\nORD_7,700,2026-03-02\nMIS_800,900,2026-03-03';
+  const bankCSV='utr,credit,date\nORD_1,1000,2026-03-02\nORD_2,1952.80,2026-03-02\nORD_3,3000,2026-03-13\nORD_4,500,2026-03-03\nBATCH,1074.04,2026-03-03\nORD_9,850,2026-03-05\nREFUND,-250,2026-03-05';
+  const payFile=new File([payCSV],'payments.csv',{type:'text/csv'});
+  const bankFile=new File([bankCSV],'bank.csv',{type:'text/csv'});
+  addEngineMsg('📦 Sample data: payments (8 records) + bank (7 records). Starting run…');
+  await startRun([payFile,bankFile]);
+}
+
+/* ===================== UTILITIES ===================== */
+function downloadJSON(name,text){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));
+  a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  toast('Downloaded '+name);
+}
+let toastTimer=null;
+function toast(msg){
+  const t=$('#toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+/* ===================== INIT ===================== */
+async function init(){
+  buildPanels();
+  try{
+    await createSession();
+    connectWS();
+    addSysMsg('Session '+API.sid+' initialized. Upload files or load sample data to begin.');
+  }catch(e){
+    addEngineMsg('⚠️ Could not connect to backend: '+e.message+'. Check that the server is running.');
+  }
+}
+
+/* ---- Wire up buttons ---- */
+$('#btnUpload').onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=e=>{
+  const files=[...e.target.files];
+  if(files.length)startRun(files);
+  e.target.value='';
+};
+$('#btnSample').onclick=loadSampleData;
+$('#btnStart').onclick=()=>{
+  if(!S.running){
+    // If no files selected, prompt
+    $('#fileInput').click();
+  }
+};
+$('#btnAbort').onclick=async()=>{
+  if(S.abortToken){
+    try{await abortRun(S.abortToken);toast('Abort requested.');}
+    catch(e){toast('Abort failed: '+e.message);}
+  }
+};
+
+updateChips();
+init();
+</script>
+</body>
+</html>
+
+```
+
 ### recon_agent/tests/__init__.py
 
 ```python
@@ -3041,6 +4607,219 @@ def isolate_test_environment():
         os.environ["RECON_LOGS_DIR"] = old_logs
     else:
         os.environ.pop("RECON_LOGS_DIR", None)
+
+```
+
+### recon_agent/tests/test_api_v2_e2e.py
+
+```python
+import io
+import json
+import sys
+import time
+import requests
+import pandas as pd
+import numpy as np
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+
+BASE_URL = "http://127.0.0.1:8000"
+
+def test_api_v2_full_suite():
+    print("==================================================")
+    print("🚀 STARTING RECONCILIATION AGENT API v2 TEST SUITE")
+    print("==================================================")
+
+    # 1. Test Session Creation
+    print("\n[Step 1] Creating new session...")
+    r = requests.post(f"{BASE_URL}/api/v2/sessions")
+    assert r.status_code == 200, f"Session creation failed: {r.text}"
+    sid = r.json()["session_id"]
+    print(f"✅ Session Created: {sid}")
+
+    # 2. Test Overview (Empty State)
+    print("\n[Step 2] Testing initial overview...")
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/overview")
+    assert r.status_code == 200
+    ov = r.json()
+    assert ov["state"] == "IDLE"
+    print(f"✅ Initial State: {ov['state']}, Constants Version: {ov['constants_version']}")
+
+    # 3. Test File Upload & Run with Sample Data
+    print("\n[Step 3] Testing multipart file upload and reconciliation run...")
+    with open("sample_data/payments.csv", "rb") as f1, open("sample_data/bank.csv", "rb") as f2:
+        files = [
+            ("files", ("payments.csv", f1, "text/csv")),
+            ("files", ("bank.csv", f2, "text/csv")),
+        ]
+        r = requests.post(f"{BASE_URL}/api/v2/sessions/{sid}/run", files=files)
+    assert r.status_code == 200, f"Upload run failed: {r.text}"
+    print(f"✅ Upload & Run triggered: {r.json()['files']}")
+
+    # 4. Poll until completion (state reaches ARCHIVED)
+    print("\n[Step 4] Polling state machine progress...")
+    max_wait = 180
+    start_t = time.time()
+    final_state = None
+    while time.time() - start_t < max_wait:
+        r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/overview")
+        st = r.json()["state"]
+        print(f"  Current state: {st}")
+        if st in ("ARCHIVED", "ABORT_CONFIRMED", "RUN_FAILED"):
+            final_state = st
+            break
+        time.sleep(1)
+    
+    assert final_state == "ARCHIVED", f"Pipeline did not finish cleanly. Final state: {final_state}"
+    print(f"✅ Pipeline reached {final_state} in {time.time() - start_t:.2f}s")
+
+    # 5. Test Ingestion Endpoint & Pagination
+    print("\n[Step 5] Testing /ingestion endpoint & metadata...")
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/ingestion")
+    assert r.status_code == 200
+    ing = r.json()
+    assert "table_meta" in ing
+    assert "payments" in ing["table_meta"]
+    assert "bank" in ing["table_meta"]
+    print(f"✅ Ingested Tables: payments ({ing['table_meta']['payments']['total_rows']} rows), bank ({ing['table_meta']['bank']['total_rows']} rows)")
+
+    # 6. Test Mapping Endpoint
+    print("\n[Step 6] Testing /mapping endpoint...")
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/mapping")
+    assert r.status_code == 200
+    mapping = r.json()
+    assert mapping["committed"] is not None
+    print(f"✅ Committed Mapping: {mapping['committed']['left_key']} <-> {mapping['committed']['right_key']} (confidence: {mapping['confidence']})")
+
+    # 7. Test Policy Endpoint
+    print("\n[Step 7] Testing /policy endpoint...")
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/policy")
+    assert r.status_code == 200
+    pol = r.json()
+    assert len(pol["components"]) > 0
+    print(f"✅ Policy synthesized: {len(pol['components'])} components, baseline match rate: {pol['baseline_match_rate']}")
+
+    # 8. Test Results Endpoint
+    print("\n[Step 8] Testing /results endpoint...")
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/results")
+    assert r.status_code == 200
+    res = r.json()
+    assert res["executed"] is True
+    print(f"✅ Results: Match Rate = {res['match_rate']:.1%}, Matched Pairs = {len(res['matched'])}, Totals = {res['totals']}")
+
+    # 9. Test Exception Queue Endpoint
+    print("\n[Step 9] Testing /exceptions endpoint...")
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/exceptions")
+    assert r.status_code == 200
+    exc = r.json()
+    assert len(exc["queue"]) > 0
+    print(f"✅ Exception Queue: {len(exc['queue'])} items. Summary: {exc['summary']}")
+
+    # 10. Test Exception Override Action
+    print("\n[Step 10] Testing exception override action...")
+    first_exc = exc["queue"][0]
+    rid = first_exc["rid"]
+    r = requests.post(f"{BASE_URL}/api/v2/sessions/{sid}/exceptions/{rid}/action", json={"action": "approve", "note": "Verified by manager"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    print(f"✅ Exception #{rid} override status: {r.json()['action']}")
+
+    # 11. Test Cryptographic Audit Log
+    print("\n[Step 11] Testing /audit endpoint & SHA-256 chain verification...")
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid}/audit")
+    assert r.status_code == 200
+    audit = r.json()
+    assert audit["verified"] is True
+    print(f"✅ Audit records logged: {audit['count']}, Chain Integrity: {audit['verified']}")
+
+    # 12. Test Grounded Chat
+    print("\n[Step 12] Testing /chat grounded Q&A endpoint...")
+    r = requests.post(f"{BASE_URL}/api/v2/sessions/{sid}/chat", json={"message": "What is the match rate and total gross ledger volume?"})
+    assert r.status_code == 200
+    chat_res = r.json()
+    print(f"✅ Chat response: {chat_res.get('response', '')[:140]}...")
+
+    # 13. Test High-Volume 10,000+ Row Dataset (Excel .xlsx and CSV)
+    print("\n[Step 13] Generating 10,000+ row dataset in Excel (.xlsx) and CSV format...")
+    N = 10000
+    dates = pd.date_range("2026-03-01", periods=30).astype(str).tolist()
+    
+    # Left ledger (payments)
+    orders = [f"ORD_{i:06d}" for i in range(1, N + 1)]
+    amounts = np.random.uniform(50.0, 5000.0, size=N).round(2)
+    pay_dates = [dates[i % len(dates)] for i in range(N)]
+    
+    df_pay = pd.DataFrame({"order_id": orders, "amount": amounts, "date": pay_dates})
+    
+    # Right statement (bank) - 95% match, 5% fee variance or drift
+    bank_utrs = orders.copy()
+    bank_credits = amounts.copy()
+    # Introduce fee deductions to 10%
+    for i in range(0, N, 10):
+        fee = round(amounts[i] * 0.02 * 1.18, 2)
+        bank_credits[i] = round(amounts[i] - fee, 2)
+    
+    df_bank = pd.DataFrame({"utr": bank_utrs, "credit": bank_credits, "date": pay_dates})
+
+    # Save to Excel and CSV in-memory buffers
+    excel_buf = io.BytesIO()
+    with pd.ExcelWriter(excel_buf, engine="openpyxl") as writer:
+        df_pay.to_excel(writer, index=False, sheet_name="payments")
+    excel_buf.seek(0)
+
+    csv_buf = io.BytesIO()
+    df_bank.to_csv(csv_buf, index=False)
+    csv_buf.seek(0)
+
+    print(f"Generated payments (10,000 rows in Excel .xlsx) and bank (10,000 rows in CSV)")
+    
+    # Run 10k reconciliation via API
+    r = requests.post(f"{BASE_URL}/api/v2/sessions")
+    sid_large = r.json()["session_id"]
+    print(f"Created session for 10k run: {sid_large}")
+
+    t0 = time.time()
+    files = [
+        ("files", ("payments.xlsx", excel_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+        ("files", ("bank.csv", csv_buf, "text/csv")),
+    ]
+    r = requests.post(f"{BASE_URL}/api/v2/sessions/{sid_large}/run", files=files)
+    assert r.status_code == 200
+
+    # Wait for completion
+    while time.time() - t0 < 60:
+        r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid_large}/overview")
+        st = r.json()["state"]
+        if st in ("ARCHIVED", "RUN_FAILED"):
+            break
+        time.sleep(1)
+
+    elapsed = time.time() - t0
+    print(f"✅ 10,000+ Row Dataset Reconciled in {elapsed:.2f}s! Final state: {st}")
+
+    # Verify results of 10k run
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid_large}/results")
+    res_large = r.json()
+    assert res_large["executed"] is True
+    print(f"✅ 10k Run Stats: Match Rate = {res_large['match_rate']:.1%}, Matched = {len(res_large['matched'])}, Throughput = {res_large.get('throughput_rows_per_sec', 0):.0f} rows/sec")
+
+    # Verify paginated ingestion
+    r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid_large}/ingestion?table=payments&page=1&page_size=50")
+    ing_large = r.json()
+    assert "payments" in ing_large["tables"]
+    assert ing_large["tables"]["payments"]["total"] == 10000
+    assert len(ing_large["tables"]["payments"]["items"]) == 50
+    print(f"✅ Paginated Ingestion: Total {ing_large['tables']['payments']['total']} rows, Page size: 50, Total pages: {ing_large['tables']['payments']['total_pages']}")
+
+    print("\n==================================================")
+    print("🎉 ALL API v2 & LARGE DATASET TESTS PASSED 100%!")
+    print("==================================================")
+
+if __name__ == "__main__":
+    test_api_v2_full_suite()
 
 ```
 

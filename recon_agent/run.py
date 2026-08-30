@@ -237,8 +237,13 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
 
 def run_server(host: str = "127.0.0.1", port: int = 8000):
     import uvicorn
+    import webbrowser
+    import threading
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"- **Server**: Starting API Server on `http://{host}:{port}` ...", flush=True)
+    print(f"- **Console**: Opening `http://{host}:{port}/console` in browser ...", flush=True)
+    # Open browser after a short delay
+    threading.Timer(1.5, lambda: webbrowser.open(f"http://{host}:{port}/console")).start()
     uvicorn.run(
         "app.server.main:app",
         host=host,
@@ -283,7 +288,8 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output final report as formatted JSON")
     parser.add_argument("--chat", "-i", action="store_true", help="Start continuous interactive chatbot REPL after reconciliation")
     parser.add_argument("--clear-logs", action="store_true", help="Delete all session logs, audit trails, and uploads")
-    parser.add_argument("--server", action="store_true", help="Launch FastAPI REST/WebSocket server")
+    parser.add_argument("--server", action="store_true", help="Launch FastAPI REST/WebSocket server with web console")
+    parser.add_argument("--cli", action="store_true", help="Force CLI mode (skip auto-server)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Server host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="Server port (default: 8000)")
     
@@ -308,9 +314,15 @@ def main():
         run_server(host=args.host, port=args.port)
     elif args.files:
         run_cli(files=args.files, truth=args.truth, auto_ack=True, as_json=args.json, deterministic=args.deterministic, chat=args.chat)
-    else:
+    elif args.cli:
         parser.print_help()
+    else:
+        # Default: launch web console when no files are provided
+        print("# ⚡ Razorpay Reconciliation Agent", flush=True)
+        print("No files specified — launching web console...\n", flush=True)
+        run_server(host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
     main()
+

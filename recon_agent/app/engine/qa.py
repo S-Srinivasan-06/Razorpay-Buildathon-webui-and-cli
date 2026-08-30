@@ -8,16 +8,16 @@ CTX_KEYS = ["dup_rids", "split_targets", "single_target", "partial", "fee_match"
 _PREDICATES = {
     H.DUPLICATE:             lambda rec, ctx: bool(ctx["dup_rids"]),
     H.SPLIT:                 lambda rec, ctx: bool(ctx["split_targets"]),
-    H.PARTIAL_PAYMENT:       lambda rec, ctx: rec.delta is not None and rec.delta > 0
+    H.PARTIAL_PAYMENT:       lambda rec, ctx: rec.delta is not None and rec.delta > 0.01
                                                 and ctx["single_target"] and ctx["partial"],
     H.REFUND_OFFSET:         lambda rec, ctx: ctx["negative_credit"]
-                                                or (rec.delta is not None and rec.delta < 0),
+                                                or (rec.delta is not None and rec.delta < -0.01),
     H.FEE_DEDUCTION:         lambda rec, ctx: ctx["fee_match"],
     H.TAX_WITHHOLDING:       lambda rec, ctx: ctx["tax_match"],
     H.CURRENCY_CONVERSION:   lambda rec, ctx: ctx["fx_match"],
     H.TEMPORAL_DRIFT:        lambda rec, ctx: ctx["date_only_mismatch"],
     H.COUNTERPARTY_MISMATCH: lambda rec, ctx: ctx["fuzzy_key"],
-    H.AMOUNT_DELTA:          lambda rec, ctx: rec.delta is not None,
+    H.AMOUNT_DELTA:          lambda rec, ctx: rec.delta is not None and abs(rec.delta) > 0.01,
     H.UNCLASSIFIED:          lambda rec, ctx: True,
 }
 

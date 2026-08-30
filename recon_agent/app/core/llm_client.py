@@ -116,15 +116,11 @@ def conversational_chat(messages: List[Dict[str, str]], system_instruction: str,
             "parts": [{"text": msg.get("content", "")}]
         })
 
-    # If first message is from model or empty, prepend system instruction to first user message
-    if formatted_contents and formatted_contents[0]["role"] == "user":
-        formatted_contents[0]["parts"][0]["text"] = (
-            f"[SYSTEM INSTRUCTION]:\n{system_instruction}\n\n"
-            f"[USER MESSAGE]:\n{formatted_contents[0]['parts'][0]['text']}"
-        )
-
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{actual_model}:generateContent?key={key}"
     payload = {
+        "system_instruction": {
+            "parts": [{"text": system_instruction + "\n\nCRITICAL INSTRUCTION: Reply directly to the user as the assistant. Do NOT output internal thoughts, reasoning steps, or notes analyzing the prompt. Provide ONLY the final, polished response directly to the user."}]
+        },
         "contents": formatted_contents,
         "generationConfig": {
             "temperature": 0.2,

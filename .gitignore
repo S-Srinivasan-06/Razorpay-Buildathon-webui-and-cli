@@ -8,15 +8,24 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Environments
+# Environments & Sensitive Keys
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
 ENV/
+
+# IDE / System
+.vscode/
+.idea/
+.agents/
+.DS_Store
 
 # Runtime data, logs, and audit files
 data/
 recon_agent/data/
 *.log
 *.audit.jsonl
+
