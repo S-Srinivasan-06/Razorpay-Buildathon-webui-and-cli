@@ -1,8 +1,21 @@
+"""Autonomous Reconciliation Pipeline Orchestrator.
+
+Implements the complete 7-stage financial reconciliation lifecycle:
+  1. Ingestion: Parsing CSV and Excel statements, assigning internal Row IDs (_rid).
+  2. Profiling: Statistical column analysis, data type detection, PII likelihood scoring.
+  3. Schema Mapping: Deterministic candidate key overlap & LLM semantic field linking.
+  4. Policy Synthesis & Dry-Run: Baseline match rate calibration and tolerance bounds.
+  5. Multi-Attribute Execution: Exact key indexing, amount tolerance, and date proximity.
+  6. Quality Assurance & Split Detection: Combinatorial subset sum solving and discrepancy taxonomy.
+  7. Aggregation & Audit Trail: Balance summation, metered cost calculation, and cryptographic signing.
+"""
+
 import itertools
 import json
 import time
 import uuid
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import pandas as pd
 from pydantic import BaseModel, model_validator
@@ -10,9 +23,20 @@ from pydantic import BaseModel, model_validator
 from app.core.audit import audit_for
 from app.core.channels import validate_and_route
 from app.core.constants import REG
-from app.core.contracts import (Actor, DecisionRecord, EvidencePiece, MatchComponent, MatchedRecord,
-                                MessageKind, Policy, PolicyComponent, UnmatchedRecord,
-                                VarianceMetrics)
+from app.core.contracts import (
+    Actor,
+    DecisionRecord,
+    EvidencePiece,
+    ExecutionResult,
+    FinalReport,
+    MatchComponent,
+    MatchedRecord,
+    MessageKind,
+    Policy,
+    PolicyComponent,
+    UnmatchedRecord,
+    VarianceMetrics,
+)
 from app.core.dispatcher import breaker_open, dispatch_tool_call, ToolCall
 from app.core.states import State, StateMachine
 from app.engine import match, qa, report, resolving
@@ -20,21 +44,25 @@ from app.engine.match import _sim, fee_explains
 
 
 class MapArgs(BaseModel):
-    tables: dict
+    """Input payload for the LLM semantic schema mapping tool."""
+    tables: Dict[str, List[str]]
+
 
 class MapResult(BaseModel):
+    """Schema mapping configuration specifying linked keys, amounts, and dates."""
     left_table: str = "payments"
     right_table: str = "bank"
     left_key: str = "order_id"
     right_key: str = "utr"
-    left_amount: str | None = "amount"
-    right_amount: str | None = "credit"
-    left_date: str | None = "date"
-    right_date: str | None = "date"
+    left_amount: Optional[str] = "amount"
+    right_amount: Optional[str] = "credit"
+    left_date: Optional[str] = "date"
+    right_date: Optional[str] = "date"
 
     @model_validator(mode="before")
     @classmethod
-    def parse_llm_json(cls, data):
+    def parse_llm_json(cls, data: Any) -> Dict[str, Any]:
+        """Normalize varied JSON responses from LLM mapping into canonical schema fields."""
         if not isinstance(data, dict):
             return {}
         res = dict(data)
@@ -59,39 +87,70 @@ class MapResult(BaseModel):
         return res
 
 
-def _overlap(xs, ys):
+def _overlap(xs: List[Any], ys: List[Any]) -> float:
+    """Calculate the Jaccard-like set overlap ratio between two column value sets.
+    
+    Args:
+        xs: First list of column values.
+        ys: Second list of column values.
+        
+    Returns:
+        Intersection size divided by the minimum set size (0.0 to 1.0).
+    """
     a, b = set(map(str, xs)), set(map(str, ys))
     return len(a & b) / max(min(len(a), len(b)), 1)
 
 
 class Pipeline:
-    def __init__(self, sid: str, auto_ack: bool = False):
-        self.sid = sid
-        self.auto_ack = auto_ack
-        self.sm = StateMachine(sid)
-        self.fb: list[str] = []
-        self.tables: dict[str, list[dict]] = {}
-        self.cfg: dict = {}
-        self.schedule = next(iter(REG.fee_schedules.values()), None)
-        self.truth: list[dict] = []
-        self.profiles: dict = {}
-        self._map_cands: list = []
-        self._map_conf = 0.0
-        self._ambiguous = False
+    """Core stateful reconciliation engine coordinating all execution phases.
+    
+    Maintains ingested table records, profiling statistics, schema configurations,
+    match policies, intermediate results, exception queues, and final reports.
+    """
 
-    # ---------- bus helpers ----------
-    def _chat(self, text):
+    def __init__(self, sid: str, auto_ack: bool = False) -> None:
+        """Initialize pipeline for a session.
+        
+        Args:
+            sid: Unique session identifier string.
+            auto_ack: If True (CLI/test mode), automatically resumes on halts.
+                      If False (Web/interactive mode), leaves state at HALT for operator action.
+        """
+        self.sid: str = sid
+        self.auto_ack: bool = auto_ack
+        self.sm: StateMachine = StateMachine(sid)
+        self.fb: List[str] = []
+        self.tables: Dict[str, List[Dict[str, Any]]] = {}
+        self.cfg: Dict[str, Any] = {}
+        self.schedule: Optional[Any] = next(iter(REG.fee_schedules.values()), None)
+        self.truth: List[Dict[str, Any]] = []
+        self.profiles: Dict[str, List[Any]] = {}
+        self._map_cands: List[Any] = []
+        self._map_conf: float = 0.0
+        self._ambiguous: bool = False
+        self.exec_res: Optional[ExecutionResult] = None
+        self.final: Optional[FinalReport] = None
+        self.queue: List[Dict[str, Any]] = []
+
+    # ---------- Event bus helper methods ----------
+    def _chat(self, text: str) -> None:
+        """Broadcast a CHAT message event."""
         validate_and_route(self.sid, MessageKind.CHAT, {"text": text[:2000]}, "system")
 
-    def _trace(self, event, **d):
+    def _trace(self, event: str, **d: Any) -> None:
+        """Broadcast an execution TRACE telemetry event."""
         validate_and_route(self.sid, MessageKind.TRACE, {"event": event, "detail": d}, "system")
 
-    def _maybe_ack(self, tools):
-        """Never raises. auto_ack=True resumes in-place immediately (CLI/test use).
-        auto_ack=False leaves state at HALT for the caller to stop cleanly on."""
+    def _maybe_ack(self, tools: List[str]) -> None:
+        """Handle potential state machine halt based on the auto_ack configuration.
+        
+        When auto_ack=True, resumes immediately in-place (used for CLI or automated tests).
+        When auto_ack=False, leaves state at HALT for the interactive caller to resolve.
+        """
         if self.auto_ack:
             self.sm.resume()
 
+    # Mapping of State enum values to corresponding Pipeline step handler method names
     _STEP_FN_ATTR = {
         State.PROFILING: "profile",
         State.MAPPING_PROPOSED: "propose_mapping",
@@ -105,15 +164,24 @@ class Pipeline:
         State.RESOLVING: "resolve",
     }
 
-    # ---------- states ----------
-    def ingest(self, files, truth=None):
+    # ---------- Step 1: Ingestion ----------
+    def ingest(self, files: List[Path], truth: Optional[Union[str, Path]] = None) -> bool:
+        """Parse input CSV/Excel files into memory and assign internal Row IDs (_rid).
+        
+        Args:
+            files: List of file Paths (.csv or .xlsx) representing ledger and statement files.
+            truth: Optional path to ground truth JSONL file for benchmark precision/recall evaluation.
+            
+        Returns:
+            True if transitioned to PROFILING state, False otherwise.
+        """
         self.sm.enter(State.INGESTING)
         for f in files:
             try:
                 df = pd.read_csv(f) if f.suffix == ".csv" else pd.read_excel(f)
                 df.insert(0, "_rid", range(1, len(df) + 1))
                 tbl_name = f.stem
-                # Strip session ID prefix (e.g., 'd11231d8_payments' -> 'payments')
+                # Strip session ID prefix if present (e.g., 'd11231d8_payments' -> 'payments')
                 if "_" in tbl_name:
                     prefix, rest = tbl_name.split("_", 1)
                     if len(prefix) == 8 and all(c in "0123456789abcdefABCDEF" for c in prefix):
@@ -125,10 +193,13 @@ class Pipeline:
             self.truth = [json.loads(l) for l in Path(truth).read_text().splitlines() if l]
         return self.sm.transition(State.PROFILING, f"{len(self.tables)} tables")
 
-    def profile(self):
-        print(f"- **Step 1/7**: Profiling table schemas and column statistics...", flush=True)
+    # ---------- Step 2: Profiling ----------
+    def profile(self) -> bool:
+        """Compute statistical profiles, column data types, and PII likelihood for each table."""
+        print("- **Step 1/7**: Profiling table schemas and column statistics...", flush=True)
         from app.core.contracts import ColumnProfile
         from app.core.masking import pii_score
+
         for name, rows in self.tables.items():
             df = pd.DataFrame(rows)
             self.profiles[name] = []
@@ -138,25 +209,35 @@ class Pipeline:
                 s = df[c].astype(str)
                 num = pd.to_numeric(df[c], errors="coerce").notna().mean()
                 dat = pd.to_datetime(df[c], errors="coerce", format="mixed").notna().mean()
-                self.profiles[name].append(ColumnProfile(
-                    name=c, dtype=str(df[c].dtype), numeric_ratio=float(num),
-                    date_ratio=float(dat), cardinality=float(df[c].nunique() / max(len(df), 1)),
-                    null_rate=float(df[c].isna().mean()),
-                    min_len=int(s.str.len().min() or 0), max_len=int(s.str.len().max() or 0),
-                    sample_values=s.head(3).tolist(),
-                    pii_likelihood=max((pii_score(c, v) for v in s.head(5)), default=0.0)))
+                self.profiles[name].append(
+                    ColumnProfile(
+                        name=c,
+                        dtype=str(df[c].dtype),
+                        numeric_ratio=float(num),
+                        date_ratio=float(dat),
+                        cardinality=float(df[c].nunique() / max(len(df), 1)),
+                        null_rate=float(df[c].isna().mean()),
+                        min_len=int(s.str.len().min() or 0),
+                        max_len=int(s.str.len().max() or 0),
+                        sample_values=s.head(3).tolist(),
+                        pii_likelihood=max((pii_score(c, v) for v in s.head(5)), default=0.0),
+                    )
+                )
         return self.sm.transition(State.MAPPING_PROPOSED)
 
-    def _pick(self, t, kind):
-        for p in self.profiles[t]:
-            if kind == "numeric" and p.numeric_ratio > .8 and p.cardinality > .3:
+    def _pick(self, t: str, kind: str) -> Optional[str]:
+        """Heuristically select a column name of a given semantic type ('numeric' or 'date')."""
+        for p in self.profiles.get(t, []):
+            if kind == "numeric" and p.numeric_ratio > 0.8 and p.cardinality > 0.3:
                 return p.name
-            if kind == "date" and p.date_ratio > .8 and p.numeric_ratio <= .8:
+            if kind == "date" and p.date_ratio > 0.8 and p.numeric_ratio <= 0.8:
                 return p.name
         return None
 
-    def propose_mapping(self):
-        print(f"- **Step 2/7**: Linking schema keys and amounts via mapping tool...", flush=True)
+    # ---------- Step 3: Schema Mapping ----------
+    def propose_mapping(self) -> bool:
+        """Identify candidate primary keys and invoke LLM semantic mapping tool."""
+        print("- **Step 2/7**: Linking schema keys and amounts via mapping tool...", flush=True)
         names = list(self.tables)
         cands = []
         for lt in names:
@@ -165,19 +246,32 @@ class Pipeline:
                     continue
                 for lc in [p.name for p in self.profiles[lt]]:
                     for rc in [p.name for p in self.profiles[rt]]:
-                        ov = _overlap([r.get(lc) for r in self.tables[lt]],
-                                      [r.get(rc) for r in self.tables[rt]])
+                        ov = _overlap(
+                            [r.get(lc) for r in self.tables[lt]],
+                            [r.get(rc) for r in self.tables[rt]],
+                        )
                         if ov >= 0.10:
                             cands.append((ov, lt, lc, rt, rc))
         cands.sort(reverse=True)
         self._map_cands = cands
-        tool = ToolCall(name="mapping_semantic", args_schema=MapArgs, result_schema=MapResult,
-                        timeout_s=REG["llm_tool_timeout_s"], retries=2,
-                        fallback=lambda a: None, cost_budget_usd=0.005)
+
+        tool = ToolCall(
+            name="mapping_semantic",
+            args_schema=MapArgs,
+            result_schema=MapResult,
+            timeout_s=REG["llm_tool_timeout_s"],
+            retries=2,
+            fallback=lambda a: None,
+            cost_budget_usd=0.005,
+        )
         llm_map, fb = dispatch_tool_call(
-            self.sid, tool, {"tables": {n: [p.name for p in self.profiles[n]] for n in names}})
+            self.sid,
+            tool,
+            {"tables": {n: [p.name for p in self.profiles[n]] for n in names}},
+        )
         if llm_map is None and fb:
             self.fb.append(f"mapping_heuristic:{fb}")
+
         if isinstance(llm_map, MapResult):
             self.cfg = llm_map.model_dump()
             self.cfg["left_amount"] = self.cfg.get("left_amount") or self._pick(self.cfg["left_table"], "numeric")
@@ -188,9 +282,16 @@ class Pipeline:
         elif cands:
             ov, lt, lc, rt, rc = cands[0]
             self._ambiguous = len(cands) > 1 and (cands[0][0] - cands[1][0]) <= REG["mapping_ambiguity_delta"]
-            self.cfg = {"left_table": lt, "right_table": rt, "left_key": lc, "right_key": rc,
-                        "left_amount": self._pick(lt, "numeric"), "right_amount": self._pick(rt, "numeric"),
-                        "left_date": self._pick(lt, "date"), "right_date": self._pick(rt, "date")}
+            self.cfg = {
+                "left_table": lt,
+                "right_table": rt,
+                "left_key": lc,
+                "right_key": rc,
+                "left_amount": self._pick(lt, "numeric"),
+                "right_amount": self._pick(rt, "numeric"),
+                "left_date": self._pick(lt, "date"),
+                "right_date": self._pick(rt, "date"),
+            }
             self._map_conf = min(0.45 + ov / 2, 0.95)
         else:
             self.sm.halt("no linkable columns")
@@ -198,68 +299,112 @@ class Pipeline:
             if self.sm.state == State.HALT:
                 self.sm._pre_halt = State.MAPPING_PROPOSED
                 return False
+
         if breaker_open(self.sid, "mapping_semantic"):
             self.sm.halt("circuit open: mapping_semantic", tools=["mapping_semantic"])
             self._maybe_ack(["mapping_semantic"])
             if self.sm.state == State.HALT:
                 self.sm._pre_halt = State.MAPPING_VALIDATED
                 return False
+
         return self.sm.transition(State.MAPPING_VALIDATED)
 
-    def validate_mapping(self):
-        audit_for(self.sid).append(DecisionRecord(
-            decision_id=uuid.uuid4().hex, ts=pd.Timestamp.now(tz="UTC").to_pydatetime(),
-            state="MAPPING_VALIDATED", actor=Actor.SYSTEM, decision_kind="mapping",
-            proposal={"candidates": [list(c[1:]) for c in self._map_cands[:3]]},
-            final={k: self.cfg.get(k) for k in ("left_table", "right_table", "left_key", "right_key")},
-            confidence=self._map_conf, evidence=[]).model_dump(mode="json"))
+    def validate_mapping(self) -> bool:
+        """Validate proposed schema mapping confidence and record decision in audit log."""
+        audit_for(self.sid).append(
+            DecisionRecord(
+                decision_id=uuid.uuid4().hex,
+                ts=pd.Timestamp.now(tz="UTC").to_pydatetime(),
+                state="MAPPING_VALIDATED",
+                actor=Actor.SYSTEM,
+                decision_kind="mapping",
+                proposal={"candidates": [list(c[1:]) for c in self._map_cands[:3]]},
+                final={k: self.cfg.get(k) for k in ("left_table", "right_table", "left_key", "right_key")},
+                confidence=self._map_conf,
+                evidence=[],
+            ).model_dump(mode="json")
+        )
+
         if self._map_conf < REG["mapping_review_floor"]:
             self.sm.halt("mapping below review floor")
             self._maybe_ack([])
             if self.sm.state == State.HALT:
                 self.sm._pre_halt = State.MAPPING_VALIDATED
                 return False
+
         if self._ambiguous or self._map_conf < REG["mapping_auto_accept"]:
             self._chat(f"Mapping confidence {self._map_conf:.2f} — proceeding with trace visibility.")
+
         return self.sm.transition(State.POLICY_GENERATED)
 
-    def policy(self):
-        print(f"- **Step 3/7**: Synthesizing policy components & tolerance windows...", flush=True)
-        comps = [PolicyComponent(component=c, params={}, precedence=i)
-                 for i, c in enumerate(MatchComponent, 1)]
+    # ---------- Step 4: Policy Synthesis & Dry-Run ----------
+    def policy(self) -> bool:
+        """Synthesize match policy components and initialize tolerance windows."""
+        print("- **Step 3/7**: Synthesizing policy components & tolerance windows...", flush=True)
+        comps = [
+            PolicyComponent(component=c, params={}, precedence=i)
+            for i, c in enumerate(MatchComponent, 1)
+        ]
         comps[3].params = {"tolerance": 0.01, "window_days": 3}
         self.policy_doc = Policy(
-            components=comps, baseline_match_rate=0.0,
+            components=comps,
+            baseline_match_rate=0.0,
             baseline_computed_at=pd.Timestamp.now(tz="UTC").to_pydatetime(),
-            baseline_constants_version=REG.version)
+            baseline_constants_version=REG.version,
+        )
         self.cfg.setdefault("tolerance", 0.01)
         self.cfg.setdefault("window_days", 3)
         return self.sm.transition(State.DRY_RUN)
 
-    # ---------- scoring core ----------
-    def _score_all(self, rows_l, rows_r):
-        self._last_cand_scores = []
-        matched, unmatched, dups, per = [], [], [], []
-        unmatched_ctx = []
-        lkeys = {}
+    # ---------- Scoring Core ----------
+    def _score_all(self, rows_l: List[Dict[str, Any]], rows_r: List[Dict[str, Any]]) -> ExecutionResult:
+        """Execute multi-attribute matching across left ledger and right statement rows.
+        
+        Optimizations:
+          - Pre-indexes right rows by exact key for O(1) direct candidate lookups.
+          - Filters candidate search pool by amount proximity on large datasets (>300 rows).
+          - Detects duplicates in the left ledger.
+          - Tracks soft-paired right rows to prevent duplicate exception listings.
+        """
+        self._last_cand_scores: List[float] = []
+        matched: List[MatchedRecord] = []
+        unmatched: List[UnmatchedRecord] = []
+        dups: List[Dict[str, Any]] = []
+        per: List[Dict[str, Any]] = []
+        unmatched_ctx: List[Tuple[UnmatchedRecord, Optional[Dict[str, Any]], List[EvidencePiece], Optional[float]]] = []
+
+        # Index left rows by key to identify duplicates
+        lkeys: Dict[str, List[Dict[str, Any]]] = {}
         for l in rows_l:
             lkeys.setdefault(str(l[self.cfg["left_key"]]), []).append(l)
         dup_keys = {k for k, v in lkeys.items() if len(v) > 1}
-        seen_dup = set()
-        used_r = set()
-        soft_paired_r = set()          # T1: r's already represented via an l-pairing
+        seen_dup: Set[str] = set()
 
-        # Index rows_r by key for O(1) candidate lookup on exact matches
-        r_by_key = {}
+        used_r: Set[int] = set()
+        soft_paired_r: Set[int] = set()  # Right records already represented via an unmatched left pairing
+
+        # Index right rows by key for instant exact candidate lookup
+        r_by_key: Dict[str, List[Dict[str, Any]]] = {}
         rk = self.cfg["right_key"]
         for r in rows_r:
             r_by_key.setdefault(str(r.get(rk)), []).append(r)
 
-        def mk_unmatched(l, r, v, ev, sd):
-            side = "L" if l is not None else "R"
-            ref_key = self.cfg["left_key"] if l is not None else self.cfg["right_key"]
-            rec = UnmatchedRecord(side=side, rid=(l or r)["_rid"],
-                                  ref=str((l or r).get(ref_key)), delta=sd, match_confidence=v)
+        def mk_unmatched(
+            l_row: Optional[Dict[str, Any]],
+            r_row: Optional[Dict[str, Any]],
+            v: Optional[float],
+            ev: List[EvidencePiece],
+            sd: Optional[float],
+        ) -> Tuple[UnmatchedRecord, List[EvidencePiece]]:
+            side = "L" if l_row is not None else "R"
+            ref_key = self.cfg["left_key"] if l_row is not None else self.cfg["right_key"]
+            rec = UnmatchedRecord(
+                side=side,
+                rid=(l_row or r_row)["_rid"],
+                ref=str((l_row or r_row).get(ref_key)),
+                delta=sd,
+                match_confidence=v,
+            )
             return rec, ev
 
         is_large = len(rows_r) > 300
@@ -269,86 +414,120 @@ class Pipeline:
                 dups.append({"side": "L", "key": key, "rids": [x["_rid"] for x in lkeys[key]]})
                 seen_dup.add(key)
 
-            # Check direct exact key matches first for blazing fast execution on large data
+            # Check direct exact key matches first
             direct_cands = [r for r in r_by_key.get(key, []) if r["_rid"] not in used_r]
             if direct_cands:
-                cands = [(r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
-                         for r in direct_cands]
+                cands = [
+                    (r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
+                    for r in direct_cands
+                ]
                 cands = [(r, v, c, e, d) for (r, v, c, e, d) in cands if v >= REG["match_review_floor"]]
             else:
                 cands = []
 
-            # If no direct match meets threshold, check other candidates
+            # If no direct match meets threshold, search candidate pool
             if not cands:
                 search_pool = [r for r in rows_r if r["_rid"] not in used_r]
                 if is_large and len(search_pool) > 200:
-                    # On large datasets, filter candidates by amount / date proximity
+                    # On large datasets, filter candidates by amount proximity
                     la = float(l.get(self.cfg.get("left_amount", ""), 0) or 0)
                     ra_key = self.cfg.get("right_amount", "")
                     search_pool = sorted(
                         search_pool,
-                        key=lambda r: abs(la - float(r.get(ra_key, 0) or 0)) if ra_key else 0
+                        key=lambda r: abs(la - float(r.get(ra_key, 0) or 0)) if ra_key else 0,
                     )[:150]
 
-                cands = [(r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
-                         for r in search_pool]
+                cands = [
+                    (r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
+                    for r in search_pool
+                ]
                 cands = [(r, v, c, e, d) for (r, v, c, e, d) in cands if v >= REG["match_review_floor"]]
 
             self._last_cand_scores.extend(v for _, v, _, _, _ in cands)
+
             if not cands:
                 rec, ev = mk_unmatched(l, None, None, [], None)
                 unmatched.append(rec)
                 unmatched_ctx.append((rec, None, ev, None))
                 continue
+
             r, v, comps, ev, sd = max(cands, key=lambda t: t[1])
             if v >= REG["match_auto_threshold"]:
                 used_r.add(r["_rid"])
-                matched.append(MatchedRecord(l_rid=l["_rid"], r_rid=r["_rid"],
-                                             composite_score=v, components=comps,
-                                             policy_version=REG.version))
+                matched.append(
+                    MatchedRecord(
+                        l_rid=l["_rid"],
+                        r_rid=r["_rid"],
+                        composite_score=v,
+                        components=comps,
+                        policy_version=REG.version,
+                    )
+                )
                 per.append({"l_id": l["_rid"], "r_id": r["_rid"], "abs": abs(sd or 0), "signed": sd})
             else:
                 rec, ev = mk_unmatched(l, r, v, ev, sd)
                 unmatched.append(rec)
                 unmatched_ctx.append((rec, r, ev, sd))
-                soft_paired_r.add(r["_rid"])          # T1: don't list this r again below
+                soft_paired_r.add(r["_rid"])  # Prevent right record from appearing as duplicate standalone entry
+
+        # Collect remaining unmatched right statement records
         for r in rows_r:
-            if r["_rid"] not in used_r and r["_rid"] not in soft_paired_r:   # T1
+            if r["_rid"] not in used_r and r["_rid"] not in soft_paired_r:
                 rec, ev = mk_unmatched(None, r, None, [], None)
                 unmatched.append(rec)
                 unmatched_ctx.append((rec, None, ev, None))
 
-        var = VarianceMetrics(abs_sum=sum(p["abs"] for p in per),
-                              signed_sum=sum(p["signed"] for p in per), per_record=per)
-        from app.core.contracts import ExecutionResult
+        var = VarianceMetrics(
+            abs_sum=sum(p["abs"] for p in per),
+            signed_sum=sum(p["signed"] for p in per),
+            per_record=per,
+        )
         self._last_unmatched_ctx = unmatched_ctx
-        return ExecutionResult(matched=matched, unmatched=unmatched,
-                               duplicates=dups, splits=[], variance=var)
+        return ExecutionResult(
+            matched=matched,
+            unmatched=unmatched,
+            duplicates=dups,
+            splits=[],
+            variance=var,
+        )
 
-    def dry_run(self):
-        print(f"- **Step 4/7**: Performing dry-run calibration on sample rows...", flush=True)
+    def dry_run(self) -> bool:
+        """Run dry-run calibration on the first 100 records to establish a baseline match rate."""
+        print("- **Step 4/7**: Performing dry-run calibration on sample rows...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]][:100]
         rows_r = self.tables[self.cfg["right_table"]]
         t0 = time.time()
         res = self._score_all(rows_l, rows_r)
         self.policy_doc.baseline_match_rate = len(res.matched) / max(len(rows_l), 1)
-        mean_cand = sum(self._last_cand_scores) / len(self._last_cand_scores) if self._last_cand_scores else 0.0
+        mean_cand = (
+            sum(self._last_cand_scores) / len(self._last_cand_scores)
+            if self._last_cand_scores
+            else 0.0
+        )
         if mean_cand < REG["calibration_sanity_floor"]:
             self._trace("CALIBRATION_DRIFT_WARNING", mean_cand=round(mean_cand, 3))
-        self._trace("dry_run_done", s=round(time.time() - t0, 2),
-                    baseline=round(self.policy_doc.baseline_match_rate, 3),
-                    mean_cand=round(mean_cand, 3))
+        self._trace(
+            "dry_run_done",
+            s=round(time.time() - t0, 2),
+            baseline=round(self.policy_doc.baseline_match_rate, 3),
+            mean_cand=round(mean_cand, 3),
+        )
         return self.sm.transition(State.EXECUTING)
 
-    def execute(self):
-        print(f"- **Step 5/7**: Executing multi-attribute matching engine...", flush=True)
+    # ---------- Step 5: Multi-Attribute Execution ----------
+    def execute(self) -> bool:
+        """Execute the full matching run across all ingested records."""
+        print("- **Step 5/7**: Executing multi-attribute matching engine...", flush=True)
         t0 = time.time()
-        self.exec_res = self._score_all(self.tables[self.cfg["left_table"]],
-                                        self.tables[self.cfg["right_table"]])
+        self.exec_res = self._score_all(
+            self.tables[self.cfg["left_table"]],
+            self.tables[self.cfg["right_table"]],
+        )
         self._exec_s = max(time.time() - t0, 1e-6)
         return self.sm.transition(State.INSPECTING)
 
-    def _inspect_metrics(self):
+    def _inspect_metrics(self) -> None:
+        """Compute match rate, throughput, and precision/recall against ground truth."""
         r = self.exec_res
         total = len(r.matched) + len(r.unmatched)
         self.match_rate = len(r.matched) / max(total, 1)
@@ -370,41 +549,60 @@ class Pipeline:
         self.precision = (len(pred & truth) / len(pred)) if pred else None
         self.recall = (len(pred & truth) / len(truth)) if truth else None
 
-    def inspect(self):
+    def inspect(self) -> bool:
+        """Inspect match quality metrics; trigger adaptive revision if below threshold."""
         self._inspect_metrics()
         if self.match_rate < REG["revision_match_rate_threshold"]:
             return self.sm.transition(State.REVISION)
         return self.sm.transition(State.QA)
 
-    def revise(self):
+    def revise(self) -> bool:
+        """Adaptive revision loop adjusting amount tolerance bounds when match rate is low."""
         it, t0 = 0, time.time()
-        while (self.match_rate < REG["revision_match_rate_threshold"]
-               and it < REG["revision_iteration_cap"]
-               and time.time() - t0 < REG["revision_time_cap_s"]):
+        while (
+            self.match_rate < REG["revision_match_rate_threshold"]
+            and it < REG["revision_iteration_cap"]
+            and time.time() - t0 < REG["revision_time_cap_s"]
+        ):
             old = self.cfg["tolerance"]
             self.cfg["tolerance"] = round(old * 1.2, 4)
             self._trace("revision", it=it, tol=self.cfg["tolerance"])
             self.execute()
             self._inspect_metrics()
+            # If tolerance expansion caused a regression compared to baseline, revert and break
             if self.policy_doc.baseline_match_rate - self.match_rate > REG["regression_reject_delta"]:
                 self.cfg["tolerance"] = old
                 self._trace("revision_regression_rejected", it=it)
-                break                                   # T7: stop repeating an already-rejected tweak
+                break
             it += 1
+
         if self.match_rate < REG["revision_match_rate_threshold"]:
-            self.sm.halt("revision caps exhausted or regression rejected")   # T2: restored
+            self.sm.halt("revision caps exhausted or regression rejected")
             self._maybe_ack([])
             if self.sm.state == State.HALT:
                 self.sm._pre_halt = State.QA
                 return False
         return self.sm.transition(State.QA)
 
-    # ---------- QA / resolving ----------
-    def _ctx(self, side, l, r, rows_l, rows_r, sd, used_l=None):
+    # ---------- Step 6: QA & Exception Classification ----------
+    def _ctx(
+        self,
+        side: str,
+        l: Optional[Dict[str, Any]],
+        r: Optional[Dict[str, Any]],
+        rows_l: List[Dict[str, Any]],
+        rows_r: List[Dict[str, Any]],
+        sd: Optional[float],
+        used_l: Optional[Set[int]] = None,
+    ) -> Dict[str, Any]:
+        """Extract diagnostic context signals for a specific unmatched record."""
         lk, rk = self.cfg["left_key"], self.cfg["right_key"]
         tol = self.cfg["tolerance"]
         used_l = used_l or set()
-        ctx = {k: ([] if k in ("dup_rids", "split_targets") else False) for k in qa.CTX_KEYS}
+        ctx: Dict[str, Any] = {
+            k: ([] if k in ("dup_rids", "split_targets") else False) for k in qa.CTX_KEYS
+        }
+
         if side == "L" and l is not None:
             key = str(l[lk])
             ctx["dup_rids"] = [x["_rid"] for x in rows_l if str(x[lk]) == key and x["_rid"] != l["_rid"]]
@@ -416,19 +614,29 @@ class Pipeline:
                 ctx["fee_match"] = fee_explains(a, rv, self.schedule, tol)
                 ctx["partial"] = rv < a and not ctx["fee_match"]
                 if self.cfg.get("left_date"):
-                    dd = match._busdays(match._d(l[self.cfg["left_date"]]),
-                                        match._d(cands[0][self.cfg["right_date"]]))
+                    dd = match._busdays(
+                        match._d(l[self.cfg["left_date"]]),
+                        match._d(cands[0][self.cfg["right_date"]]),
+                    )
                     ctx["date_only_mismatch"] = dd > self.cfg["window_days"] and (
-                        abs(a - rv) <= tol or ctx["fee_match"])
+                        abs(a - rv) <= tol or ctx["fee_match"]
+                    )
             if not cands:
-                # Corroborate fuzzy key with amount/fee consistency
+                # Corroborate fuzzy key similarity with amount/fee consistency
                 a = float(l[self.cfg["left_amount"]]) if self.cfg.get("left_amount") else None
-                search_r = rows_r if len(rows_r) <= 500 else [
-                    x for x in rows_r if abs(a - float(x.get(self.cfg.get("right_amount", ""), 0) or 0)) <= 1000
-                ][:100]
+                search_r = (
+                    rows_r
+                    if len(rows_r) <= 500
+                    else [
+                        x
+                        for x in rows_r
+                        if abs(a - float(x.get(self.cfg.get("right_amount", ""), 0) or 0)) <= 1000
+                    ][:100]
+                )
                 if a is not None and self.cfg.get("right_amount"):
                     ctx["fuzzy_key"] = any(
-                        match._sim(key, str(x[rk])) >= 0.75 and (
+                        match._sim(key, str(x[rk])) >= 0.75
+                        and (
                             abs(a - float(x[self.cfg["right_amount"]])) <= tol
                             or fee_explains(a, float(x[self.cfg["right_amount"]]), self.schedule, tol)
                         )
@@ -436,16 +644,17 @@ class Pipeline:
                     )
                 else:
                     ctx["fuzzy_key"] = max((match._sim(key, str(x[rk])) for x in search_r), default=0) >= 0.75
+
         if side == "R" and r is not None:
             rv = float(r[self.cfg["right_amount"]]) if self.cfg.get("right_amount") else 0.0
             ctx["negative_credit"] = rv < 0
             nets = []
-            # Only use UNMATCHED left rows to prevent reusing already 1:1 matched records (e.g. RID 1)
+            # Only search among UNMATCHED left rows to avoid reusing 1:1 matched records
             unmatched_l = [x for x in rows_l if x["_rid"] not in used_l]
             for x in unmatched_l:
                 a = float(x.get(self.cfg["left_amount"], 0))
                 nets.append((x["_rid"], a - (match.compute_fee(a, self.schedule) if self.schedule else 0)))
-            # Bounded pool search for split combinations to prevent exponential explosion on large files
+            # Bounded pool search for combinatorial split subsets
             valid_nets = [x for x in nets if 0 < x[1] <= rv + tol]
             pool = valid_nets[:40]
             for k in (2, 3):
@@ -455,33 +664,36 @@ class Pipeline:
                         break
                 if ctx["split_targets"]:
                     break
+
         return ctx
 
-    def qa_state(self):
-        print(f"- **Step 6/7**: Classifying exceptions & verifying invariant proofs...", flush=True)
+    def qa_state(self) -> bool:
+        """Classify exceptions and solve combinatorial batch/split transactions globally."""
+        print("- **Step 6/7**: Classifying exceptions & verifying invariant proofs...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]]
         rows_r = self.tables[self.cfg["right_table"]]
         used_l = {m.l_rid for m in self.exec_res.matched}
         tol = self.cfg["tolerance"]
-        
-        # 1. First pass: solve combinatorial splits globally with disjoint left allocation
-        # Candidates for split legs are unmatched left rows not claimed by temporal/fuzzy
-        right_splits = {}
-        allocated_split_l = set()
+
+        # 1. First pass: solve combinatorial splits globally with disjoint left allocations
+        right_splits: Dict[int, List[int]] = {}
+        allocated_split_l: Set[int] = set()
         unmatched_r_items = [
-            (rec, r_cand, ev, sd) for (rec, r_cand, ev, sd) in self._last_unmatched_ctx if rec.side == "R"
+            (rec, r_cand, ev, sd)
+            for (rec, r_cand, ev, sd) in self._last_unmatched_ctx
+            if rec.side == "R"
         ]
 
-        # Exclude left rows that have a direct key match in rows_r (e.g. Temporal Drift rows 21-35)
+        # Exclude left rows that have a direct key match in rows_r (e.g. Temporal Drift rows)
         r_keys = {str(x.get(self.cfg["right_key"])): x for x in rows_r}
-        temporal_or_direct_l = set()
+        temporal_or_direct_l: Set[int] = set()
         for x in rows_l:
             key = str(x.get(self.cfg["left_key"]))
             if key in r_keys:
                 temporal_or_direct_l.add(x["_rid"])
 
         # Calculate net amounts for all unmatched left rows eligible for split pools
-        left_nets = []
+        left_nets: List[Tuple[int, float]] = []
         for x in rows_l:
             if x["_rid"] not in used_l and x["_rid"] not in temporal_or_direct_l:
                 a = float(x.get(self.cfg["left_amount"], 0))
@@ -508,9 +720,9 @@ class Pipeline:
                 right_splits[rec.rid] = found_combo
                 allocated_split_l.update(found_combo)
 
-        # 2. Construct queue with accurate classification
+        # 2. Second pass: construct exception queue with accurate classification
         self.queue = []
-        left_split_map = {}
+        left_split_map: Dict[int, str] = {}
         for r_rid, target_l_rids in right_splits.items():
             r_row = next((x for x in rows_r if x["_rid"] == r_rid), {})
             r_ref = str(r_row.get(self.cfg["right_key"]) or f"RID_{r_rid}")
@@ -544,7 +756,8 @@ class Pipeline:
 
         return self.sm.transition(State.RESOLVING)
 
-    def resolve(self):
+    def resolve(self) -> bool:
+        """Evaluate confidence scores, assign resolution actions, and record decision audit logs."""
         for item in self.queue:
             rec, pieces, ctx = item["rec"], item["pieces"], item.get("ctx", {})
             conf = resolving.exception_confidence(len(pieces), rec.reason, None)
@@ -552,61 +765,112 @@ class Pipeline:
             explanation = resolving.generate_explanation(rec, ctx)
             rec.explanation = explanation
             item["action"], item["conf"], item["explanation"] = action, conf, explanation
-            actor = Actor.SYSTEM if action in ("auto_resolve", "mark_pending", "request_confirmation") \
+            actor = (
+                Actor.SYSTEM
+                if action in ("auto_resolve", "mark_pending", "request_confirmation")
                 else Actor.FALLBACK
-            audit_for(self.sid).append(DecisionRecord(
-                decision_id=uuid.uuid4().hex, ts=pd.Timestamp.now(tz="UTC").to_pydatetime(),
-                state="RESOLVING", actor=actor, decision_kind="exception_resolve",
-                proposal={"category": rec.reason.value, "explanation": explanation},
-                final={"action": action},
-                confidence=conf, evidence=pieces).model_dump(mode="json"))
+            )
+            audit_for(self.sid).append(
+                DecisionRecord(
+                    decision_id=uuid.uuid4().hex,
+                    ts=pd.Timestamp.now(tz="UTC").to_pydatetime(),
+                    state="RESOLVING",
+                    actor=actor,
+                    decision_kind="exception_resolve",
+                    proposal={"category": rec.reason.value, "explanation": explanation},
+                    final={"action": action},
+                    confidence=conf,
+                    evidence=pieces,
+                ).model_dump(mode="json")
+            )
         return self.sm.transition(State.AGGREGATING)
 
-    def aggregate(self, elapsed: float):
-        print(f"- **Step 7/7**: Aggregating financial balances & signing cryptographic audit ledger...", flush=True)
+    # ---------- Step 7: Aggregation & Final Report ----------
+    def aggregate(self, elapsed: float) -> bool:
+        """Sum gross, net, fee, and exception balances, then construct the FinalReport."""
+        print("- **Step 7/7**: Aggregating financial balances & signing cryptographic audit ledger...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]]
         rows_r = self.tables[self.cfg["right_table"]]
         g = sum(float(x.get(self.cfg["left_amount"], 0)) for x in rows_l)
         n = sum(float(x.get(self.cfg["right_amount"], 0)) for x in rows_r)
-        mv = sum(float(x.get(self.cfg["left_amount"], 0)) for x in rows_l
-                 if x["_rid"] in {m.l_rid for m in self.exec_res.matched})
-        totals = {"gross": round(g, 2), "net": round(n, 2), "fees": round(g - n, 2),
-                  "matched_value": round(mv, 2), "exception_value": round(g - mv, 2)}
+        mv = sum(
+            float(x.get(self.cfg["left_amount"], 0))
+            for x in rows_l
+            if x["_rid"] in {m.l_rid for m in self.exec_res.matched}
+        )
+        totals = {
+            "gross": round(g, 2),
+            "net": round(n, 2),
+            "fees": round(g - n, 2),
+            "matched_value": round(mv, 2),
+            "exception_value": round(g - mv, 2),
+        }
         self.final = report.build_final_report(
-            self.sid, match_rate=self.match_rate, precision_vs_truth=self.precision,
-            recall_vs_truth=self.recall, throughput_rows_per_sec=self.throughput,
-            exceptions=self.queue, elapsed_seconds=elapsed, totals=totals,
-            llm_user_disagreements=[], fallback_events=self.fb)
+            self.sid,
+            match_rate=self.match_rate,
+            precision_vs_truth=self.precision,
+            recall_vs_truth=self.recall,
+            throughput_rows_per_sec=self.throughput,
+            exceptions=self.queue,
+            elapsed_seconds=elapsed,
+            totals=totals,
+            llm_user_disagreements=[],
+            fallback_events=self.fb,
+        )
         return self.sm.transition(State.ARCHIVED)
 
-    # ---------- driver ----------
-    def run(self, files, truth=None):
+    # ---------- Driver Loop ----------
+    def run(self, files: List[Path], truth: Optional[Union[str, Path]] = None) -> Optional[FinalReport]:
+        """Execute the complete end-to-end reconciliation pipeline starting from ingestion.
+        
+        Args:
+            files: Ingested file paths.
+            truth: Optional ground truth benchmark file path.
+            
+        Returns:
+            Completed FinalReport model, or None if halted interactively.
+        """
         self._t0 = time.time()
         self.ingest(files, truth)
         return self.continue_run()
 
-    def continue_run(self):
-        """Re-entrant driver: dispatches on self.sm.state. A HALT stops this
-        cleanly (returns None) without losing self.tables/self.cfg/etc; calling
-        this again after sm.resume() picks up exactly where it left off."""
+    def continue_run(self) -> Optional[FinalReport]:
+        """Re-entrant driver: dispatches step methods based on current StateMachine state.
+        
+        A HALT pauses execution cleanly (returning None) without losing state. Calling
+        `continue_run()` after `sm.resume()` resumes exactly where it left off.
+        """
         while self.sm.state not in (State.AGGREGATING, State.ARCHIVED, State.ABORT_CONFIRMED):
             attr = self._STEP_FN_ATTR.get(self.sm.state)
             if attr is None:
                 break
             ok = getattr(self, attr)()
             if self.sm.state == State.HALT:
-                return None                      # T3: stop, don't crash the thread
+                return None  # Stop gracefully on interactive halt
             if ok is False:
                 return None
+
         if self.sm.state == State.RESOLVING or getattr(self, "queue", None) is not None:
             if self.sm.state != State.ARCHIVED:
                 self.aggregate(time.time() - getattr(self, "_t0", time.time()))
+
         if getattr(self, "final", None):
-            validate_and_route(self.sid, MessageKind.ARTIFACT,
-                               {"kind": "report", "summary": self.final.model_dump(),
-                                "confidence_threshold": REG["match_auto_threshold"],
-                                "fallback_events": self.fb}, "engine")
-            self._chat(f"Reconciliation complete: {self.final.match_rate:.0%} matched, "
-                       f"{self.final.honest_exception_count} exceptions, "
-                       f"{self.final.auto_resolved_count} auto-resolved.")
+            validate_and_route(
+                self.sid,
+                MessageKind.ARTIFACT,
+                {
+                    "kind": "report",
+                    "summary": self.final.model_dump(),
+                    "confidence_threshold": REG["match_auto_threshold"],
+                    "fallback_events": self.fb,
+                },
+                "engine",
+            )
+            self._chat(
+                f"Reconciliation complete: {self.final.match_rate:.0%} matched, "
+                f"{self.final.honest_exception_count} exceptions, "
+                f"{self.final.auto_resolved_count} auto-resolved."
+            )
+
         return self.final
+

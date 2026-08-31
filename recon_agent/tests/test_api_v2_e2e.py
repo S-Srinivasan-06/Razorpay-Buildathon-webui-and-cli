@@ -1,25 +1,39 @@
+"""End-to-End Test Suite for FastAPI Reconciliation Server and API v2.
+
+Tests the full API v2 REST surface, multipart file upload, state machine polling,
+schema mapping retrieval, policy inspection, paginated ingestion, exception queue
+pagination, operator override actions, SHA-256 cryptographic audit verification,
+grounded assistant chat, and high-volume (10,000+ row) Excel/CSV reconciliation throughput.
+"""
+
 import io
 import json
 import sys
 import time
-import requests
-import pandas as pd
+from typing import Any, Dict, List
+
 import numpy as np
+import pandas as pd
+import pytest
+import requests
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
-import pytest
-
 BASE_URL = "http://127.0.0.1:8000"
 
-def test_api_v2_full_suite():
+
+def test_api_v2_full_suite() -> None:
+    """Execute complete end-to-end integration tests against the live API v2 server."""
     try:
         r_check = requests.get(f"{BASE_URL}/docs", timeout=1.0)
     except Exception:
-        pytest.skip("FastAPI server not running on http://127.0.0.1:8000. Start server with `python run.py --server` to run this E2E test.")
+        pytest.skip(
+            "FastAPI server not running on http://127.0.0.1:8000. "
+            "Start server with `python run.py --server` to run this E2E test."
+        )
 
     print("==================================================")
     print("STARTING RECONCILIATION AGENT API v2 TEST SUITE")
@@ -64,7 +78,7 @@ def test_api_v2_full_suite():
             final_state = st
             break
         time.sleep(1)
-    
+
     assert final_state == "ARCHIVED", f"Pipeline did not finish cleanly. Final state: {final_state}"
     print(f"[OK] Pipeline reached {final_state} in {time.time() - start_t:.2f}s")
 
@@ -136,24 +150,24 @@ def test_api_v2_full_suite():
 
     # 13. Test High-Volume 10,000+ Row Dataset (Excel .xlsx and CSV)
     print("\n[Step 13] Generating 10,000+ row dataset in Excel (.xlsx) and CSV format...")
-    N = 10000
+    n_rows = 10000
     dates = pd.date_range("2026-03-01", periods=30).astype(str).tolist()
-    
+
     # Left ledger (payments)
-    orders = [f"ORD_{i:06d}" for i in range(1, N + 1)]
-    amounts = np.random.uniform(50.0, 5000.0, size=N).round(2)
-    pay_dates = [dates[i % len(dates)] for i in range(N)]
-    
+    orders = [f"ORD_{i:06d}" for i in range(1, n_rows + 1)]
+    amounts = np.random.uniform(50.0, 5000.0, size=n_rows).round(2)
+    pay_dates = [dates[i % len(dates)] for i in range(n_rows)]
+
     df_pay = pd.DataFrame({"order_id": orders, "amount": amounts, "date": pay_dates})
-    
+
     # Right statement (bank) - 95% match, 5% fee variance or drift
     bank_utrs = orders.copy()
     bank_credits = amounts.copy()
     # Introduce fee deductions to 10%
-    for i in range(0, N, 10):
+    for i in range(0, n_rows, 10):
         fee = round(amounts[i] * 0.02 * 1.18, 2)
         bank_credits[i] = round(amounts[i] - fee, 2)
-    
+
     df_bank = pd.DataFrame({"utr": bank_utrs, "credit": bank_credits, "date": pay_dates})
 
     # Save to Excel and CSV in-memory buffers
@@ -166,8 +180,8 @@ def test_api_v2_full_suite():
     df_bank.to_csv(csv_buf, index=False)
     csv_buf.seek(0)
 
-    print(f"Generated payments (10,000 rows in Excel .xlsx) and bank (10,000 rows in CSV)")
-    
+    print("Generated payments (10,000 rows in Excel .xlsx) and bank (10,000 rows in CSV)")
+
     # Run 10k reconciliation via API
     r = requests.post(f"{BASE_URL}/api/v2/sessions")
     sid_large = r.json()["session_id"]
@@ -182,6 +196,7 @@ def test_api_v2_full_suite():
     assert r.status_code == 200
 
     # Wait for completion
+    st = "RUNNING"
     while time.time() - t0 < 60:
         r = requests.get(f"{BASE_URL}/api/v2/sessions/{sid_large}/overview")
         st = r.json()["state"]
@@ -210,5 +225,7 @@ def test_api_v2_full_suite():
     print("ALL API v2 & LARGE DATASET TESTS PASSED 100%!")
     print("==================================================")
 
+
 if __name__ == "__main__":
     test_api_v2_full_suite()
+

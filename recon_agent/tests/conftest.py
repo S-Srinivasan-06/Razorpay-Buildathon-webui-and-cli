@@ -1,13 +1,21 @@
+"""Pytest Test Suite Configuration and Global Fixtures.
+
+Provides session-scoped test environment isolation, redirecting audit ledgers,
+logs, and uploaded datasets to a temporary directory so unit and integration tests
+do not pollute production or local development workspace folders.
+"""
+
 import os
+from pathlib import Path
 import shutil
 import tempfile
+
 import pytest
-from pathlib import Path
 
 
 @pytest.fixture(autouse=True, scope="session")
-def isolate_test_environment():
-    """Ensure tests write temporary logs and audit files to a temporary directory."""
+def isolate_test_environment() -> None:
+    """Ensure all test runs write temporary logs and audit files to an isolated temp directory."""
     temp_dir = Path(tempfile.mkdtemp(prefix="recon_test_"))
     test_audit = temp_dir / "audit"
     test_logs = temp_dir / "logs"
@@ -21,9 +29,10 @@ def isolate_test_environment():
     os.environ["RECON_AUDIT_DIR"] = str(test_audit)
     os.environ["RECON_LOGS_DIR"] = str(test_logs)
 
-    # Import modules to patch directories
-    from app.core import audit
+    # Import modules to patch directories dynamically
     from app import config
+    from app.core import audit
+
     audit.AUDIT_DIR = test_audit
     config.AUDIT_DIR = test_audit
     config.LOGS_DIR = test_logs
@@ -31,7 +40,7 @@ def isolate_test_environment():
 
     yield
 
-    # Cleanup after test session
+    # Cleanup temporary test directory after test session
     try:
         shutil.rmtree(temp_dir, ignore_errors=True)
     except Exception:
@@ -45,3 +54,4 @@ def isolate_test_environment():
         os.environ["RECON_LOGS_DIR"] = old_logs
     else:
         os.environ.pop("RECON_LOGS_DIR", None)
+

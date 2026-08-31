@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
-"""Razorpay Reconciliation Agent CLI & Server Runner
+"""Razorpay Autonomous Financial Reconciliation Agent CLI & Server Runner.
 
-Usage:
-  # Run CLI reconciliation:
+Provides the unified command-line entry point for both the terminal CLI engine
+and the FastAPI web application server.
+
+CLI Usage Examples:
+  # Standard two-file reconciliation (payments vs bank):
   python run.py sample_data/payments.csv sample_data/bank.csv
+
+  # Reconciliation with precision/recall benchmark evaluation against ground truth:
   python run.py sample_data/payments.csv sample_data/bank.csv --truth sample_data/ground_truth.jsonl
+
+  # Start interactive grounded AI assistant REPL after reconciliation:
   python run.py sample_data/payments.csv sample_data/bank.csv --chat
+
+  # Run in pure offline deterministic mode without external LLM calls:
   python run.py sample_data/payments.csv sample_data/bank.csv --deterministic
 
-  # Run API server:
-  python run.py --server [--host 127.0.0.1] [--port 8000]
+  # Output final report and classified exception queue as structured JSON:
+  python run.py sample_data/payments.csv sample_data/bank.csv --json
+
+Server Usage Examples:
+  # Launch FastAPI web console server (defaults to http://127.0.0.1:8000/console):
+  python run.py --server
+  python run.py --server --host 0.0.0.0 --port 8000
 """
 
 import argparse
@@ -20,7 +34,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict, List, Optional, Union
 
 # Ensure UTF-8 output encoding on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -36,7 +50,18 @@ from app.pipeline import Pipeline
 
 
 def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
-    """Format data rows into a clean, aligned Markdown table."""
+    """Format tabular data into a clean, aligned GitHub-flavored Markdown table.
+    
+    Dynamically computes maximum column widths to ensure clean monospaced alignment
+    without requiring third-party table formatting packages.
+    
+    Args:
+        headers: List of column header strings.
+        rows: List of row lists containing cell values.
+        
+    Returns:
+        Formatted Markdown table string.
+    """
     if not headers or not rows:
         return "_No records available._"
     str_rows = [[str(val) for val in row] for row in rows]
@@ -55,12 +80,18 @@ def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
     return "\n".join([header_line, separator_line] + data_lines)
 
 
-def start_chat_repl(pipe: Pipeline, sid: str):
+def start_chat_repl(pipe: Pipeline, sid: str) -> None:
+    """Start an interactive terminal chat REPL grounded in the current reconciliation session.
+    
+    Args:
+        pipe: Completed Pipeline instance containing active datasets and reports.
+        sid: Session identifier string.
+    """
     print("\n---\n", flush=True)
     print(f"## 💬 Interactive Reconciliation Assistant (Session: `{sid}`)\n", flush=True)
-    print(f"- Connected to **Gemma 4 31B** (`gemma-4-31b-it`) strictly grounded in active session datasets.", flush=True)
-    print(f"- Ask questions about matched records, fee schedules, duplicates, or root causes.", flush=True)
-    print(f"- Type `exit` or `quit` to end the conversation.\n", flush=True)
+    print("- Connected to **Gemma 4 31B** (`gemma-4-31b-it`) strictly grounded in active session datasets.", flush=True)
+    print("- Ask questions about matched records, fee schedules, duplicates, or root causes.", flush=True)
+    print("- Type `exit` or `quit` to end the conversation.\n", flush=True)
 
     chat_session = ReconChatSession(sid, pipe)
 
@@ -89,7 +120,24 @@ def start_chat_repl(pipe: Pipeline, sid: str):
             break
 
 
-def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True, as_json: bool = False, deterministic: bool = False, chat: bool = False):
+def run_cli(
+    files: List[Path],
+    truth: Optional[Path] = None,
+    auto_ack: bool = True,
+    as_json: bool = False,
+    deterministic: bool = False,
+    chat: bool = False,
+) -> None:
+    """Execute reconciliation pipeline in terminal CLI mode and render results.
+    
+    Args:
+        files: List of statement file paths (.csv or .xlsx).
+        truth: Optional ground truth benchmark file path (.jsonl).
+        auto_ack: Whether to auto-acknowledge non-fatal halts.
+        as_json: If True, prints output as structured JSON.
+        deterministic: If True, disables external LLM calls and forces heuristic paths.
+        chat: If True, launches interactive grounded chat REPL upon completion.
+    """
     sid = uuid.uuid4().hex[:8]
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     session_file = LOGS_DIR / f"{sid}.log"
@@ -97,13 +145,13 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
     session_file.write_text("", encoding="utf-8")
     latest_session_log.write_text("", encoding="utf-8")
 
-    print(f"# ⚡ Razorpay Reconciliation Agent", flush=True)
+    print("# ⚡ Razorpay Reconciliation Agent", flush=True)
     print(f"**Session ID**: `{sid}`\n", flush=True)
     print("## Execution Steps", flush=True)
     
     if deterministic:
-        print(f"- **Mode**: Deterministic Engine (Offline / Zero-LLM)", flush=True)
-        def boom(*a, **k):
+        print("- **Mode**: Deterministic Engine (Offline / Zero-LLM)", flush=True)
+        def boom(*a: Any, **k: Any) -> None:
             raise ConnectionError("Deterministic mode enabled")
         llm_client.json_chat = boom
 
@@ -129,7 +177,7 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         out = {
             "session_id": sid,
             "input_data": pipe.tables,
-            "report": report.model_dump(mode="json"),
+            "report": report.model_dump(mode="json") if report else None,
             "exceptions": [
                 {
                     "rid": item["rec"].rid,
@@ -170,39 +218,40 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
     print("\n---\n", flush=True)
     print("## Reconciliation Report", flush=True)
     
-    perf_headers = ["Metric", "Value"]
-    perf_rows = [
-        ["Match Rate", f"{report.match_rate:.1%}"],
-        ["Precision vs Truth", f"{report.precision_vs_truth:.1%}" if report.precision_vs_truth is not None else "N/A"],
-        ["Recall vs Truth", f"{report.recall_vs_truth:.1%}" if report.recall_vs_truth is not None else "N/A"],
-        ["Throughput", f"{report.throughput_rows_per_sec:.0f} rows/sec"],
-        ["Execution Time", f"{elapsed:.2f}s"],
-        ["LLM Metered Cost", f"${report.cost_usd:.6f}"]
-    ]
-    print("\n### Performance & Metrics\n", flush=True)
-    print(format_markdown_table(perf_headers, perf_rows), flush=True)
+    if report:
+        perf_headers = ["Metric", "Value"]
+        perf_rows = [
+            ["Match Rate", f"{report.match_rate:.1%}"],
+            ["Precision vs Truth", f"{report.precision_vs_truth:.1%}" if report.precision_vs_truth is not None else "N/A"],
+            ["Recall vs Truth", f"{report.recall_vs_truth:.1%}" if report.recall_vs_truth is not None else "N/A"],
+            ["Throughput", f"{report.throughput_rows_per_sec:.0f} rows/sec"],
+            ["Execution Time", f"{elapsed:.2f}s"],
+            ["LLM Metered Cost", f"${report.cost_usd:.6f}"]
+        ]
+        print("\n### Performance & Metrics\n", flush=True)
+        print(format_markdown_table(perf_headers, perf_rows), flush=True)
 
-    fin_headers = ["Financial Balance Component", "Amount (INR)"]
-    fin_rows = [
-        ["Gross Ledger Volume", f"₹{report.total_gross:,.2f}"],
-        ["Net Bank Inflow", f"₹{report.total_net:,.2f}"],
-        ["Gateway Fees Variance", f"₹{report.total_fees:,.2f}"],
-        ["Matched Value", f"₹{report.matched_value:,.2f}"],
-        ["Exception Value", f"₹{report.exception_value:,.2f}"]
-    ]
-    print("\n### Financial Balances\n", flush=True)
-    print(format_markdown_table(fin_headers, fin_rows), flush=True)
-    
-    inv_ok = (report.auto_resolved_count + report.escalated_count + report.unresolved_count == report.honest_exception_count)
-    q_headers = ["Queue Metric", "Count", "Status"]
-    q_rows = [
-        ["Auto-Resolved (Approved)", str(report.auto_resolved_count), "APPROVED [NO ERROR]"],
-        ["Escalated (Review Req)", str(report.escalated_count), "REQUIRES ACTION [ERROR]"],
-        ["Unresolved Pending", str(report.unresolved_count), "PENDING"],
-        ["Total Honest Exceptions", str(report.honest_exception_count), f"Sum Invariant: {'VALID [OK]' if inv_ok else 'INVALID'}"]
-    ]
-    print(f"\n### Exception Queue Summary ({report.honest_exception_count} Total)\n", flush=True)
-    print(format_markdown_table(q_headers, q_rows), flush=True)
+        fin_headers = ["Financial Balance Component", "Amount (INR)"]
+        fin_rows = [
+            ["Gross Ledger Volume", f"₹{report.total_gross:,.2f}"],
+            ["Net Bank Inflow", f"₹{report.total_net:,.2f}"],
+            ["Gateway Fees Variance", f"₹{report.total_fees:,.2f}"],
+            ["Matched Value", f"₹{report.matched_value:,.2f}"],
+            ["Exception Value", f"₹{report.exception_value:,.2f}"]
+        ]
+        print("\n### Financial Balances\n", flush=True)
+        print(format_markdown_table(fin_headers, fin_rows), flush=True)
+        
+        inv_ok = (report.auto_resolved_count + report.escalated_count + report.unresolved_count == report.honest_exception_count)
+        q_headers = ["Queue Metric", "Count", "Status"]
+        q_rows = [
+            ["Auto-Resolved (Approved)", str(report.auto_resolved_count), "APPROVED [NO ERROR]"],
+            ["Escalated (Review Req)", str(report.escalated_count), "REQUIRES ACTION [ERROR]"],
+            ["Unresolved Pending", str(report.unresolved_count), "PENDING"],
+            ["Total Honest Exceptions", str(report.honest_exception_count), f"Sum Invariant: {'VALID [OK]' if inv_ok else 'INVALID'}"]
+        ]
+        print(f"\n### Exception Queue Summary ({report.honest_exception_count} Total)\n", flush=True)
+        print(format_markdown_table(q_headers, q_rows), flush=True)
     
     if pipe.queue:
         print("\n### Classified Discrepancies & Diagnostics\n", flush=True)
@@ -235,10 +284,16 @@ def run_cli(files: list[Path], truth: Path | None = None, auto_ack: bool = True,
         start_chat_repl(pipe, sid)
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8000):
+def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Launch the FastAPI server and open the web console in the default browser.
+    
+    Args:
+        host: Network interface host to bind to.
+        port: Network port to listen on.
+    """
+    import threading
     import uvicorn
     import webbrowser
-    import threading
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"- **Server**: Starting API Server on `http://{host}:{port}` ...", flush=True)
     print(f"- **Console**: Opening `http://{host}:{port}/console` in browser ...", flush=True)
@@ -277,7 +332,8 @@ def run_server(host: str = "127.0.0.1", port: int = 8000):
     )
 
 
-def main():
+def main() -> None:
+    """Parse CLI arguments and dispatch execution to run_server or run_cli."""
     parser = argparse.ArgumentParser(
         description="Razorpay Autonomous Financial Reconciliation Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -325,4 +381,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

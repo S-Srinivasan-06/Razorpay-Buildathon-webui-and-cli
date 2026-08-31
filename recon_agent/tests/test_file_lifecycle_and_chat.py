@@ -1,13 +1,24 @@
+"""Unit & Integration Tests for File Lifecycle Management and Chat Grounding.
+
+Verifies:
+  1. Assistant refuses to chat if no files are ingested in the active session.
+  2. Deleted files/tables are immediately purged from grounded context to prevent hallucinations.
+  3. REST endpoints correctly track file uploads, listings, deletions, and chat gating.
+"""
+
 import io
-import pytest
+from pathlib import Path
+
 from fastapi.testclient import TestClient
+import pytest
 
 from app.engine.chatbot import build_grounded_context, ReconChatSession
 from app.pipeline import Pipeline
-from app.server.main import app, SESSIONS, CHAT_SESSIONS
+from app.server.main import app, CHAT_SESSIONS, SESSIONS
 
 
-def test_chat_refuses_without_files():
+def test_chat_refuses_without_files() -> None:
+    """Verify that ReconChatSession refuses to query LLM when no active files are loaded."""
     session = ReconChatSession("test_sid", pipe=None)
     res = session.chat("What was the total volume?")
     assert res["ok"] is False
@@ -20,7 +31,8 @@ def test_chat_refuses_without_files():
     assert "No active files loaded" in res2["error"]
 
 
-def test_deleted_file_excluded_from_context(tmp_path):
+def test_deleted_file_excluded_from_context(tmp_path: Path) -> None:
+    """Verify that purged tables are immediately excluded from the grounded context string."""
     p1 = tmp_path / "payments.csv"
     p1.write_text("order_id,amount,date\nORD_1,1000.00,2026-03-01\nORD_2,2000.00,2026-03-01\n", encoding="utf-8")
 
@@ -42,9 +54,10 @@ def test_deleted_file_excluded_from_context(tmp_path):
     assert "Table 'bank'" in ctx_after
 
 
-def test_server_file_lifecycle_and_chat_endpoints():
+def test_server_file_lifecycle_and_chat_endpoints() -> None:
+    """Verify multipart upload, file listing, file deletion, and chat rejection REST endpoints."""
     client = TestClient(app)
-    
+
     # 1. Create session
     resp = client.post("/api/sessions")
     assert resp.status_code == 200
@@ -76,3 +89,4 @@ def test_server_file_lifecycle_and_chat_endpoints():
     assert del_resp.json()["deleted"] == "payments.csv"
     assert "payments.csv" not in del_resp.json()["remaining_files"]
     assert "bank.csv" in del_resp.json()["remaining_files"]
+
