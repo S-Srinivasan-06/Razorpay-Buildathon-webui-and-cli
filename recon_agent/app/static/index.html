@@ -4,1287 +4,391 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Razorpay Reconciliation Agent · Financial AI Terminal</title>
+  <title>Razorpay Reconciliation Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          colors: {
+            ink: '#0F172A',
+            emerald: '#059669'
+          }
+        }
+      }
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    :root {
-      --bg-app: #F8FAFC;
-      --bg-white: #FFFFFF;
-      --bg-subtle: #F1F5F9;
-      --bg-dark: #0F172A;
-      --bg-dark-surface: #1E293B;
-
-      --text-main: #0F172A;
-      --text-muted: #64748B;
-      --text-dim: #94A3B8;
-
-      --border-color: #E2E8F0;
-      --border-strong: #CBD5E1;
-      --border-dark: #334155;
-
-      --accent: #2563EB;
-      --accent-light: #EFF6FF;
-      --accent-hover: #1D4ED8;
-
-      --success: #10B981;
-      --success-light: #ECFDF5;
-      --success-border: #A7F3D0;
-      --success-text: #065F46;
-
-      --warning: #F59E0B;
-      --warning-light: #FFFBEB;
-      --warning-border: #FDE68A;
-      --warning-text: #92400E;
-
-      --danger: #EF4444;
-      --danger-light: #FEF2F2;
-      --danger-border: #FECACA;
-      --danger-text: #991B1B;
-
-      --purple: #8B5CF6;
-      --purple-light: #F5F3FF;
-      --purple-border: #DDD6FE;
-      --purple-text: #5B21B6;
-
-      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
-
-      --radius-sm: 4px;
-      --radius-md: 6px;
-      --radius-lg: 8px;
-
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+    body {
+      background: linear-gradient(135deg, #F0F9FF 0%, #FFFFFF 45%, #F0FDF4 100%);
+      color: #0F172A;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    .glass {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
     }
 
-    html, body {
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      font-family: var(--font-sans);
-      font-size: 13px;
-      color: var(--text-main);
-      background: var(--bg-app);
-      -webkit-font-smoothing: antialiased;
-    }
-
-    .mono {
-      font-family: var(--font-mono);
-      font-feature-settings: "tnum";
-    }
-
-    /* Buttons */
-    button {
-      font-family: var(--font-sans);
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      border: 1px solid var(--border-strong);
-      background: var(--bg-white);
-      color: var(--text-main);
-      padding: 6px 12px;
-      border-radius: var(--radius-sm);
-      transition: all 0.15s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      white-space: nowrap;
-      user-select: none;
-    }
-
-    button:hover:not(:disabled) {
-      background: var(--bg-subtle);
-      border-color: var(--text-muted);
-    }
-
-    button:active:not(:disabled) {
-      transform: translateY(1px);
-    }
-
-    button.primary {
-      background: var(--accent);
-      color: #FFFFFF;
-      border-color: var(--accent);
-    }
-
-    button.primary:hover:not(:disabled) {
-      background: var(--accent-hover);
-      border-color: var(--accent-hover);
-    }
-
-    button.success {
-      background: var(--success);
-      color: #FFFFFF;
-      border-color: var(--success);
-    }
-
-    button.success:hover:not(:disabled) {
-      background: #059669;
-      border-color: #059669;
-    }
-
-    button.danger {
-      background: var(--danger-light);
-      color: var(--danger-text);
-      border-color: var(--danger-border);
-    }
-
-    button.danger:hover:not(:disabled) {
-      background: var(--danger);
-      color: #FFFFFF;
-      border-color: var(--danger);
-    }
-
-    button.ghost {
-      background: transparent;
-      border-color: transparent;
-      color: var(--text-muted);
-    }
-
-    button.ghost:hover:not(:disabled) {
-      background: var(--bg-subtle);
-      color: var(--text-main);
-    }
-
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
-
-    /* Badges */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 7px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 600;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border-strong);
-      background: var(--bg-white);
-      color: var(--text-main);
-    }
-
-    .badge.success {
-      background: var(--success-light);
-      color: var(--success-text);
-      border-color: var(--success-border);
-    }
-
-    .badge.warning {
-      background: var(--warning-light);
-      color: var(--warning-text);
-      border-color: var(--warning-border);
-    }
-
-    .badge.danger {
-      background: var(--danger-light);
-      color: var(--danger-text);
-      border-color: var(--danger-border);
-    }
-
-    .badge.ai {
-      background: var(--purple-light);
-      color: var(--purple-text);
-      border-color: var(--purple-border);
-    }
-
-    .badge.info {
-      background: var(--accent-light);
-      color: var(--accent);
-      border-color: #BFDBFE;
-    }
-
-    /* App Shell */
-    .app {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
-    }
-
-    /* Topbar */
-    .topbar {
-      flex: 0 0 52px;
-      height: 52px;
-      background: var(--bg-dark);
-      color: #FFFFFF;
-      display: flex;
-      align-items: center;
-      padding: 0 18px;
-      gap: 16px;
-      border-bottom: 1px solid var(--border-dark);
-      z-index: 100;
-    }
-
-    .logo {
-      font-weight: 700;
-      font-size: 15px;
-      letter-spacing: -0.02em;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .logo-icon {
-      width: 22px;
-      height: 22px;
-      background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 800;
-      color: #fff;
-    }
-
-    .status-pill {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 10px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: var(--radius-sm);
-      font-family: var(--font-mono);
-      font-size: 11px;
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--text-dim);
-    }
-
-    .status-dot.active {
-      background: #10B981;
-      box-shadow: 0 0 6px #10B981;
-    }
-
-    .status-dot.running {
-      background: #3B82F6;
-      box-shadow: 0 0 6px #3B82F6;
-      animation: pulse 1.4s infinite;
-    }
-
-    .status-dot.halted {
-      background: #F59E0B;
-      box-shadow: 0 0 6px #F59E0B;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(1.2); }
-    }
-
-    .topbar .spacer {
-      flex: 1;
-    }
-
-    .topbar .actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .topbar button {
-      background: rgba(255, 255, 255, 0.08);
-      color: #FFFFFF;
-      border-color: rgba(255, 255, 255, 0.18);
-    }
-
-    .topbar button:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.18);
-      border-color: rgba(255, 255, 255, 0.3);
-    }
-
-    .topbar button.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-    }
-
-    .topbar button.primary:hover:not(:disabled) {
-      background: var(--accent-hover);
-    }
-
-    /* Workspace */
-    .workspace {
-      flex: 1 1 0;
-      display: flex;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    /* Sidebar */
-    .sidebar {
-      flex: 0 0 230px;
-      width: 230px;
-      background: var(--bg-white);
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    .sidebar-nav {
-      flex: 1 1 0;
-      overflow-y: auto;
-      min-height: 0;
-      padding: 16px 0;
-    }
-
-    .nav-group-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-dim);
-      padding: 0 16px;
-      margin-bottom: 6px;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-muted);
-      cursor: pointer;
-      border-left: 3px solid transparent;
-      transition: all 0.12s ease;
-      user-select: none;
-    }
-
-    .nav-item:hover {
-      background: var(--bg-subtle);
-      color: var(--text-main);
-    }
-
-    .nav-item.active {
-      background: var(--accent-light);
-      color: var(--accent);
-      border-left-color: var(--accent);
+    .nav-btn.active {
+      background: #E0F2FE;
+      color: #0F172A;
       font-weight: 600;
     }
 
-    .nav-item .count-badge {
-      margin-left: auto;
-      background: var(--bg-subtle);
-      color: var(--text-muted);
-      padding: 1px 6px;
-      font-size: 11px;
-      font-family: var(--font-mono);
-      border-radius: 10px;
-    }
-
-    .nav-item.active .count-badge {
-      background: #DBEAFE;
-      color: var(--accent);
-    }
-
-    .sidebar-footer {
-      flex: 0 0 auto;
-      border-top: 1px solid var(--border-color);
-      padding: 16px;
-      background: var(--bg-subtle);
-    }
-
-    .stepper-header {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      margin-bottom: 10px;
-    }
-
-    .step-node {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 3px 0;
-      font-size: 11.5px;
-      color: var(--text-dim);
-    }
-
-    .step-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      border: 1.5px solid var(--border-strong);
+    .tab-btn.active {
       background: #FFFFFF;
-      flex-shrink: 0;
+      color: #0F172A;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
     }
 
-    .step-node.done {
-      color: var(--text-muted);
-    }
-
-    .step-node.done .step-dot {
-      background: var(--success);
-      border-color: var(--success);
-    }
-
-    .step-node.active {
-      color: var(--accent);
-      font-weight: 600;
-    }
-
-    .step-node.active .step-dot {
-      background: var(--accent);
-      border-color: var(--accent);
-      box-shadow: 0 0 5px var(--accent);
-    }
-
-    /* Main Area */
-    .main-content {
-      flex: 1 1 0;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      min-width: 0;
-      overflow: hidden;
-      background: var(--bg-app);
-    }
-
-    .view-panel {
-      flex: 1 1 0;
-      display: none;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    .view-panel.active {
-      display: flex;
-    }
-
-    .view-header {
-      flex: 0 0 auto;
-      background: var(--bg-white);
-      border-bottom: 1px solid var(--border-color);
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-
-    .view-header .title-area h1 {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--text-main);
-    }
-
-    .view-header .title-area p {
-      font-size: 12.5px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .view-body {
-      flex: 1 1 0;
-      overflow-y: auto;
-      min-height: 0;
-      padding: 24px;
-    }
-
-    .view-body.no-pad {
-      padding: 0;
-    }
-
-    /* KPI Strip */
-    .kpi-strip {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .kpi-card {
-      background: var(--bg-white);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .kpi-card .label {
-      font-size: 11.5px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-bottom: 6px;
-    }
-
-    .kpi-card .value {
-      font-size: 22px;
-      font-weight: 700;
-      font-family: var(--font-mono);
-      color: var(--text-main);
-    }
-
-    .kpi-card .value.success { color: var(--success-text); }
-    .kpi-card .value.warning { color: var(--warning-text); }
-    .kpi-card .value.danger { color: var(--danger-text); }
-    .kpi-card .value.accent { color: var(--accent); }
-
-    .kpi-card .subtext {
-      font-size: 11px;
-      color: var(--text-dim);
-      margin-top: 4px;
-    }
-
-    /* Staging Dropzone */
-    .dropzone-box {
-      border: 2px dashed var(--border-strong);
-      background: var(--bg-white);
-      border-radius: var(--radius-lg);
-      padding: 36px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      margin-bottom: 20px;
-    }
-
-    .dropzone-box:hover, .dropzone-box.dragover {
-      border-color: var(--accent);
-      background: var(--accent-light);
-    }
-
-    .dropzone-box .icon {
-      font-size: 28px;
-      margin-bottom: 8px;
-    }
-
-    .dropzone-box .primary-text {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-main);
-      margin-bottom: 4px;
-    }
-
-    .dropzone-box .sub-text {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* Staged Items List */
-    .staged-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .staged-card {
-      background: var(--bg-white);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-      box-shadow: var(--shadow-sm);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .staged-card .card-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .staged-card .filename {
-      font-size: 13.5px;
-      font-weight: 600;
-      color: var(--text-main);
-      word-break: break-all;
-    }
-
-    .staged-card .file-info {
-      font-size: 11.5px;
-      font-family: var(--font-mono);
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-
-    .staged-card .card-actions {
-      display: flex;
-      gap: 6px;
-      justify-content: flex-end;
-    }
-
-    /* Preview Panel */
-    .preview-box {
-      background: var(--bg-white);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      margin-bottom: 24px;
-      overflow: hidden;
-    }
-
-    .preview-box-header {
-      padding: 10px 16px;
-      background: var(--bg-subtle);
-      border-bottom: 1px solid var(--border-color);
-      font-size: 12px;
-      font-weight: 600;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    /* Data Tables */
-    .table-container {
-      background: var(--bg-white);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      box-shadow: var(--shadow-sm);
-      display: flex;
-      flex-direction: column;
-      flex: 1 1 0;
-      min-height: 0;
-    }
-
-    .table-toolbar {
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--border-color);
-      background: var(--bg-white);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .filter-tabs {
-      display: flex;
-      background: var(--bg-subtle);
-      border-radius: var(--radius-sm);
-      padding: 2px;
-      gap: 2px;
-    }
-
-    .filter-tab {
-      padding: 4px 10px;
-      font-size: 11.5px;
-      font-weight: 600;
-      border: none;
-      background: transparent;
-      color: var(--text-muted);
-      border-radius: var(--radius-sm);
-    }
-
-    .filter-tab.active {
-      background: #FFFFFF;
-      color: var(--text-main);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .search-input {
-      padding: 5px 10px;
-      font-size: 12px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      outline: none;
-      width: 220px;
-    }
-
-    .search-input:focus {
-      border-color: var(--accent);
-    }
-
-    .table-scroll {
-      flex: 1 1 0;
-      overflow: auto;
-      min-height: 0;
-    }
-
-    table.data-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12.5px;
-      text-align: left;
-    }
-
-    table.data-table th {
+    th {
       position: sticky;
       top: 0;
-      background: var(--bg-subtle);
-      color: var(--text-muted);
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border-color);
       z-index: 10;
-      white-space: nowrap;
     }
 
-    table.data-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border-color);
-      vertical-align: middle;
+    .num {
+      font-variant-numeric: tabular-nums;
     }
 
-    table.data-table tr:hover td {
-      background: #F8FAFC;
+    .pulse-dot {
+      animation: pulseAnim 1.4s infinite;
     }
 
-    /* Highlighted AI Reason in Results Table */
-    .ai-reason-pill {
-      background: var(--purple-light);
-      border: 1px solid var(--purple-border);
-      color: var(--purple-text);
-      padding: 4px 8px;
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      line-height: 1.35;
-      font-weight: 500;
-      display: inline-block;
-      max-width: 480px;
-    }
-
-    .ai-reason-pill strong {
-      color: #4C1D95;
-      font-weight: 700;
-    }
-
-    /* Exception Cards (Hero AI Reason Presentation) */
-    .exception-card {
-      background: var(--bg-white);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 16px 18px;
-      margin-bottom: 16px;
-      box-shadow: var(--shadow-sm);
-      transition: all 0.15s ease;
-    }
-
-    .exception-card:hover {
-      box-shadow: var(--shadow-md);
-      border-color: var(--border-strong);
-    }
-
-    .exception-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-
-    .exception-ref {
-      font-size: 14px;
-      font-weight: 700;
-      font-family: var(--font-mono);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .exception-metrics {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-    }
-
-    /* Hero AI Diagnostic Callout Box */
-    .ai-diagnostic-box {
-      background: linear-gradient(180deg, #FAF5FF 0%, #F5F3FF 100%);
-      border: 1px solid #DDD6FE;
-      border-left: 4px solid #8B5CF6;
-      border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      margin: 10px 0;
-    }
-
-    .ai-diagnostic-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #6D28D9;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 4px;
-    }
-
-    .ai-diagnostic-text {
-      font-size: 13px;
-      color: #3B0764;
-      line-height: 1.45;
-      font-weight: 500;
-    }
-
-    .evidence-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .evidence-tag {
-      background: #FFFFFF;
-      border: 1px solid #E9D5FF;
-      color: #6B21A8;
-      font-size: 10.5px;
-      font-family: var(--font-mono);
-      padding: 2px 6px;
-      border-radius: 3px;
-    }
-
-    .exception-actions {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 12px;
-      padding-top: 10px;
-      border-top: 1px dashed var(--border-color);
-    }
-
-    /* Copilot AI Drawer */
-    .copilot-drawer {
-      flex: 0 0 340px;
-      width: 340px;
-      background: var(--bg-white);
-      border-left: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-      box-shadow: -4px 0 12px rgba(0, 0, 0, 0.04);
-    }
-
-    .copilot-header {
-      flex: 0 0 48px;
-      height: 48px;
-      padding: 0 16px;
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--bg-subtle);
-    }
-
-    .copilot-header .title {
-      font-size: 13px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--text-main);
-    }
-
-    .copilot-messages {
-      flex: 1 1 0;
-      overflow-y: auto;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      min-height: 0;
-    }
-
-    .chat-bubble {
-      max-width: 90%;
-      padding: 10px 12px;
-      border-radius: var(--radius-md);
-      font-size: 12.5px;
-      line-height: 1.45;
-      animation: fadeIn 0.15s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(3px); }
-      to { opacity: 1; transform: none; }
-    }
-
-    .chat-bubble.ai {
-      background: var(--bg-subtle);
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
-      align-self: flex-start;
-    }
-
-    .chat-bubble.user {
-      background: var(--accent);
-      color: #FFFFFF;
-      align-self: flex-end;
-    }
-
-    .chat-suggestions {
-      padding: 8px 16px 0;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .prompt-chip {
-      background: var(--bg-subtle);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 3px 9px;
-      font-size: 11px;
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: all 0.12s;
-    }
-
-    .prompt-chip:hover {
-      background: var(--accent-light);
-      color: var(--accent);
-      border-color: #BFDBFE;
-    }
-
-    .copilot-input-bar {
-      flex: 0 0 auto;
-      padding: 12px 16px;
-      border-top: 1px solid var(--border-color);
-      display: flex;
-      gap: 8px;
-      background: var(--bg-white);
-    }
-
-    .copilot-input-bar input {
-      flex: 1;
-      padding: 8px 10px;
-      font-size: 12.5px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      outline: none;
-    }
-
-    .copilot-input-bar input:focus {
-      border-color: var(--accent);
-    }
-
-    /* Empty states */
-    .empty-placeholder {
-      padding: 48px 24px;
-      text-align: center;
-      color: var(--text-muted);
-    }
-
-    .empty-placeholder .icon {
-      font-size: 32px;
-      margin-bottom: 8px;
-      opacity: 0.6;
-    }
-
-    /* Toast system */
-    .toast-container {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .toast-msg {
-      background: var(--bg-dark);
-      color: #FFFFFF;
-      padding: 10px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      font-weight: 500;
-      box-shadow: var(--shadow-lg);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      animation: slideIn 0.2s ease;
-      min-width: 240px;
-    }
-
-    .toast-msg.success { border-left: 4px solid var(--success); }
-    .toast-msg.danger { border-left: 4px solid var(--danger); }
-    .toast-msg.warning { border-left: 4px solid var(--warning); }
-
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
+    @keyframes pulseAnim {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
     }
   </style>
 </head>
 
-<body>
-
-  <div class="app">
+<body class="min-h-screen font-sans text-sm antialiased">
+  <div class="min-h-screen p-3 lg:p-6 flex flex-col gap-4 max-w-[1800px] mx-auto">
+    
     <!-- Top Header -->
-    <header class="topbar">
-      <div class="logo">
-        <div class="logo-icon">R</div>
-        <span>Razorpay Reconciliation Agent</span>
+    <header class="glass flex items-center justify-between gap-4 rounded-2xl px-5 py-3.5">
+      <div class="flex items-center gap-3">
+        <div class="grid h-10 w-10 place-items-center rounded-xl bg-ink text-white shadow-sm">
+          <i data-lucide="layers" class="h-5 w-5"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-base tracking-tight text-ink">Razorpay Reconciliation</h1>
+          <p class="text-xs text-slate-500 font-medium">Financial Operations & Discrepancy Intelligence</p>
+        </div>
       </div>
 
-      <div class="status-pill">
-        <span class="status-dot" id="statusDot"></span>
-        <span id="statusText">IDLE</span>
-      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 text-xs">
+          <span id="statusDot" class="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
+          <span id="statusText" class="font-mono font-semibold uppercase text-slate-700">IDLE</span>
+        </div>
 
-      <div class="spacer"></div>
+        <button id="btnAiOpen" class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3.5 py-1.5 font-medium hover:bg-slate-50 text-ink transition">
+          <i data-lucide="message-square" class="h-4 w-4 text-slate-700"></i>
+          <span>Recon AI</span>
+        </button>
 
-      <div class="actions">
-        <button id="btnLoadDemo" class="ghost">⚡ Load Demo Data</button>
-        <button id="btnStartRun" class="primary" disabled>▶ Run Reconciliation</button>
-        <button id="btnExportCsv" class="ghost">📥 Export CSV</button>
-        <button id="btnToggleCopilot" class="ghost">💬 AI Copilot</button>
+        <button id="btnExport" class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3.5 py-1.5 font-medium hover:bg-slate-50 text-ink transition">
+          <i data-lucide="download" class="h-4 w-4 text-slate-700"></i>
+          <span class="hidden sm:inline">Export CSV</span>
+        </button>
       </div>
     </header>
 
-    <div class="workspace">
+    <!-- Main Grid -->
+    <div class="grid flex-1 gap-4 lg:grid-cols-[230px_minmax(0,1fr)] items-start">
+      
       <!-- Sidebar Navigation -->
-      <aside class="sidebar">
-        <nav class="sidebar-nav">
-          <div class="nav-group-title">Reconciliation</div>
-          <div class="nav-item active" data-view="staging">
-            <span>📁 Staging & Upload</span>
-            <span class="count-badge" id="badgeStagedCount">0</span>
-          </div>
-          <div class="nav-item" data-view="results">
-            <span>📊 Reconciliation Results</span>
-            <span class="count-badge" id="badgeResultsCount">--</span>
-          </div>
-          <div class="nav-item" data-view="exceptions">
-            <span>⚠️ Discrepancies & AI QA</span>
-            <span class="count-badge" id="badgeExcCount">--</span>
-          </div>
-          <div class="nav-item" data-view="tables">
-            <span>🔍 Data Explorer</span>
-          </div>
-        </nav>
+      <aside class="glass rounded-2xl p-3 space-y-4 lg:sticky lg:top-6">
+        <div>
+          <p class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Navigation</p>
+          <nav class="space-y-1">
+            <button class="nav-btn active flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="home">
+              <i data-lucide="layout-dashboard" class="h-4 w-4"></i>
+              <span>Reconciliation</span>
+            </button>
+            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="results">
+              <i data-lucide="table" class="h-4 w-4"></i>
+              <span>Results Grid</span>
+              <span id="badgeResults" class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
+            </button>
+            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="exceptions">
+              <i data-lucide="alert-circle" class="h-4 w-4"></i>
+              <span>Discrepancies</span>
+              <span id="badgeExceptions" class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
+            </button>
+            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="data">
+              <i data-lucide="database" class="h-4 w-4"></i>
+              <span>Data Explorer</span>
+            </button>
+          </nav>
+        </div>
 
-        <!-- Live Progress Stepper -->
-        <div class="sidebar-footer">
-          <div class="stepper-header">Pipeline Stage</div>
-          <div class="step-node" id="step-1"><div class="step-dot"></div><span>1. Ingest Data</span></div>
-          <div class="step-node" id="step-2"><div class="step-dot"></div><span>2. Profile & Mask</span></div>
-          <div class="step-node" id="step-3"><div class="step-dot"></div><span>3. Schema Link</span></div>
-          <div class="step-node" id="step-4"><div class="step-dot"></div><span>4. Match Engine</span></div>
-          <div class="step-node" id="step-5"><div class="step-dot"></div><span>5. AI Exception QA</span></div>
-          <div class="step-node" id="step-6"><div class="step-dot"></div><span>6. Summary Rollup</span></div>
+        <div class="border-t border-slate-200/80 pt-3 px-3">
+          <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Session</p>
+          <p id="sessionDisplay" class="font-mono text-xs text-slate-600 mt-1 truncate">Initializing...</p>
         </div>
       </aside>
 
-      <!-- Main Content Views -->
-      <main class="main-content">
-
-        <!-- VIEW 1: Staging & Upload -->
-        <section class="view-panel active" id="view-staging">
-          <div class="view-header">
-            <div class="title-area">
-              <h1>File Staging & Execution</h1>
-              <p>Upload internal payment ledgers and external bank statements, or click Load Demo Data to test.</p>
-            </div>
-            <div>
-              <button class="primary" id="btnRunFromStaging" disabled>Execute Reconciliation</button>
-            </div>
-          </div>
-          <div class="view-body">
-            <!-- Dropzone -->
-            <div class="dropzone-box" id="dropzone">
-              <div class="icon">📂</div>
-              <div class="primary-text">Drag & drop CSV or Excel statement files here</div>
-              <div class="sub-text">or click to browse local files (requires at least 2 files: Ledger + Statement)</div>
-              <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" hidden>
-            </div>
-
-            <!-- Staged Cards -->
-            <div class="staged-grid" id="stagedGrid"></div>
-
-            <!-- Preview Panel -->
-            <div class="preview-box" id="previewBox" style="display: none;">
-              <div class="preview-box-header">
-                <span id="previewTitle">Data Preview</span>
-                <button class="ghost" id="btnClosePreview" style="padding: 2px 6px;">✕ Close</button>
+      <!-- View Containers -->
+      <main class="min-w-0 space-y-4">
+        
+        <!-- VIEW 1: Home / Staging & Controls -->
+        <section id="view-home" class="view-panel space-y-4">
+          <!-- Action Banner -->
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Reconciliation Controls</p>
+                <h2 class="mt-1 text-2xl font-bold text-ink">Autonomous Financial Reconciliation</h2>
+                <p class="mt-1 text-slate-600 text-sm">Stage internal payment ledgers and external bank statements, then run the matching engine.</p>
               </div>
-              <div class="table-scroll" style="max-height: 240px;">
-                <table class="data-table" id="previewTable"></table>
+
+              <div class="flex flex-wrap items-center gap-2.5">
+                <button id="btnSample" class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-ink hover:bg-slate-50 transition shadow-sm">
+                  <i data-lucide="sparkles" class="h-4 w-4 text-emerald"></i>
+                  <span>Load Sample Data</span>
+                </button>
+                
+                <button id="btnStop" disabled class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-rose-700 hover:bg-rose-50 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
+                  <i data-lucide="square" class="h-4 w-4"></i>
+                  <span>Stop Reconciliation</span>
+                </button>
+
+                <button id="btnRun" disabled class="flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 font-semibold text-white hover:bg-slate-800 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
+                  <i data-lucide="play" class="h-4 w-4 text-emerald"></i>
+                  <span>Run Reconciliation</span>
+                </button>
               </div>
             </div>
           </div>
-        </section>
 
-        <!-- VIEW 2: Reconciliation Results -->
-        <section class="view-panel" id="view-results">
-          <div class="view-header">
-            <div class="title-area">
-              <h1>Reconciliation Results</h1>
-              <p>Automated multi-attribute matching with prominent AI Diagnostic explanations for every record.</p>
+          <!-- KPI Summary Cards -->
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assessed Records</p>
+              <p id="kpiAssessed" class="num mt-2 font-mono text-2xl font-bold text-ink">—</p>
+              <p class="mt-1 text-xs text-slate-400">Total transaction rows</p>
+            </div>
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Match Rate</p>
+              <p id="kpiMatchRate" class="num mt-2 font-mono text-2xl font-bold text-emerald">—</p>
+              <p class="mt-1 text-xs text-slate-400">Multi-attribute precision</p>
+            </div>
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Net Fee Variance</p>
+              <p id="kpiFeeVariance" class="num mt-2 font-mono text-2xl font-bold text-amber-700">—</p>
+              <p class="mt-1 text-xs text-slate-400">Gateway MDR & deductions</p>
+            </div>
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Open Exceptions</p>
+              <p id="kpiOpenExceptions" class="num mt-2 font-mono text-2xl font-bold text-rose-700">—</p>
+              <p class="mt-1 text-xs text-slate-400">Classified for AI review</p>
+            </div>
+          <!-- Matching Policy & Fee Schedule Configuration -->
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dynamic Policy Control</p>
+                <h3 class="mt-1 text-lg font-bold text-ink">Fee Schedule & Tax Tolerance</h3>
+                <p class="text-xs text-slate-600">Configure custom MDR fee rates and GST percentages for multi-attribute matching.</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="2.0" data-tax="18.0" data-tol="0.01">Standard (2% + 18% GST)</button>
+                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="0.2" data-tax="5.0" data-tol="0.01">Custom (0.2% + 5% Tax)</button>
+                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="0.0" data-tax="0.0" data-tol="0.01">Zero Fee (0% + 0%)</button>
+              </div>
+            </div>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-4 items-end">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Processing Fee / MDR (%)</label>
+                <input id="inputFeeRate" type="number" step="0.01" min="0" max="100" value="2.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">GST Tax on Fee (%)</label>
+                <input id="inputTaxRate" type="number" step="0.1" min="0" max="100" value="18.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Amount Tolerance (₹)</label>
+                <input id="inputTolerance" type="number" step="0.01" min="0" max="100" value="0.01" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+              </div>
+              <div>
+                <button id="btnApplyPolicy" class="w-full rounded-xl bg-ink py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 transition">Save & Apply Policy</button>
+              </div>
             </div>
           </div>
-          <div class="view-body no-pad" style="display: flex; flex-direction: column;">
-            <!-- KPI Strip -->
-            <div style="padding: 16px 24px 0;">
-              <div class="kpi-strip">
-                <div class="kpi-card">
-                  <div class="label">Total Records</div>
-                  <div class="value" id="kpiTotal">--</div>
-                  <div class="subtext" id="kpiThroughput">-- rows/sec</div>
-                </div>
-                <div class="kpi-card">
-                  <div class="label">Match Rate</div>
-                  <div class="value success" id="kpiMatchRate">--</div>
-                  <div class="subtext" id="kpiPrecision">Precision: --</div>
-                </div>
-                <div class="kpi-card">
-                  <div class="label">Discrepancies</div>
-                  <div class="value danger" id="kpiDiscrepancies">--</div>
-                  <div class="subtext">Flagged for AI QA</div>
-                </div>
-                <div class="kpi-card">
-                  <div class="label">Net Fee Deductions</div>
-                  <div class="value warning" id="kpiFees">INR 0.00</div>
-                  <div class="subtext">MDR / Gateway Charges</div>
-                </div>
+
+          <!-- Dropzone & Staged Files -->
+          <div class="glass rounded-2xl p-6">
+            <div id="dropzone" class="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-8 text-center hover:border-slate-400 hover:bg-white/80 transition">
+              <div class="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-slate-100 text-slate-600 mb-3">
+                <i data-lucide="upload" class="h-6 w-6"></i>
               </div>
+              <p class="font-semibold text-base text-ink">Drop statement and ledger files here</p>
+              <p class="mt-1 text-xs text-slate-500">Supports CSV and Excel statements. Or click "Load Sample Data" above.</p>
+              <input id="fileInput" class="hidden" type="file" multiple accept=".csv,.xlsx,.xls">
             </div>
 
-            <!-- Results Table Container -->
-            <div class="table-container" style="margin: 0 24px 24px; border-radius: var(--radius-md);">
-              <div class="table-toolbar">
-                <div class="filter-tabs">
-                  <button class="filter-tab active" data-filter="all">All Records</button>
-                  <button class="filter-tab" data-filter="matched">Matched</button>
-                  <button class="filter-tab" data-filter="exceptions">Exceptions / Discrepancies</button>
-                </div>
-                <div style="flex:1"></div>
-                <input type="text" class="search-input" id="resultsSearch" placeholder="Search reference, reason...">
-              </div>
-              <div class="table-scroll">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 40px; text-align: center;">#</th>
-                      <th style="width: 100px;">STATUS</th>
-                      <th>REFERENCE ID</th>
-                      <th style="text-align: right;">LEDGER AMOUNT</th>
-                      <th style="text-align: right;">BANK AMOUNT</th>
-                      <th style="text-align: right;">VARIANCE / FEE</th>
-                      <th>AI DIAGNOSTIC REASON & MATCH ANALYSIS</th>
-                    </tr>
-                  </thead>
-                  <tbody id="resultsBody">
-                    <tr>
-                      <td colspan="7">
-                        <div class="empty-placeholder">
-                          <div class="icon">📊</div>
-                          <div>No reconciliation results yet. Run reconciliation from Staging.</div>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <div class="mt-6 flex items-center justify-between">
+              <h3 class="font-bold text-ink">Staged Statement Files</h3>
+              <span id="stagedCount" class="font-mono text-xs font-semibold text-slate-500">0 files staged</span>
             </div>
+
+            <div id="stagedGrid" class="mt-3 grid gap-3 md:grid-cols-2"></div>
           </div>
         </section>
 
-        <!-- VIEW 3: Discrepancies & AI QA Queue -->
-        <section class="view-panel" id="view-exceptions">
-          <div class="view-header">
-            <div class="title-area">
-              <h1>Discrepancies & AI Diagnostic QA</h1>
-              <p>Review exceptions classified by AI, inspect root-cause evidence, and apply manager overrides.</p>
+        <!-- VIEW 2: Results Grid -->
+        <section id="view-results" class="view-panel hidden space-y-4">
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Reconciliation Output</p>
+                <h2 class="mt-1 text-2xl font-bold text-ink">Results Grid</h2>
+                <p class="text-slate-600 text-sm">Every reconciled pair and discrepancy with prominent AI Diagnostic analysis.</p>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <input id="resultsSearch" class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-ink outline-none focus:border-slate-400 w-full sm:w-80 shadow-sm" placeholder="Search reference, amount, reason...">
+              </div>
             </div>
           </div>
-          <div class="view-body" id="exceptionsList">
-            <div class="empty-placeholder">
-              <div class="icon">✅</div>
-              <div>No discrepancies found or reconciliation not yet executed.</div>
+
+          <div class="glass overflow-hidden rounded-2xl">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-3.5 bg-white/70">
+              <div class="flex rounded-xl bg-slate-100 p-1">
+                <button class="tab-btn active rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="all">All Records</button>
+                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="matched">Matched</button>
+                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="exception">Discrepancies</button>
+              </div>
+              <span id="resultsMeta" class="font-mono text-xs text-slate-500 font-semibold">0 records</span>
             </div>
+
+            <div class="max-h-[64vh] overflow-auto">
+              <table class="w-full min-w-[1050px] text-left text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th class="p-3.5 w-12 text-center">#</th>
+                    <th class="p-3.5 w-28">Status</th>
+                    <th class="p-3.5 w-44">Reference ID</th>
+                    <th class="p-3.5 text-right w-36">Ledger Amount</th>
+                    <th class="p-3.5 text-right w-36">Bank Amount</th>
+                    <th class="p-3.5 text-right w-36">Variance / Fee</th>
+                    <th class="p-3.5">AI Diagnostic Reason & Match Logic</th>
+                  </tr>
+                </thead>
+                <tbody id="resultsTableBody">
+                  <tr><td colspan="7" class="p-12 text-center text-slate-400 font-medium">No reconciliation output yet. Execute reconciliation from the controls tab.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="glass rounded-2xl p-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-emerald">Line intelligence</p><h3 class="mt-1 text-lg font-bold text-ink">Tax and charge matcher</h3><p class="text-xs text-slate-600">Compare GST, tax, MDR, and fee lines across the first two loaded tables without initiating a reconciliation run.</p></div><div class="flex gap-2"><button id="btnTaxMatch" class="rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">Check tax lines</button><button id="btnChargeMatch" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Check charge lines</button></div></div>
+            <div id="lineMatchResults" class="mt-4 overflow-auto text-xs text-slate-500">Load two datasets, then select a line-matching check.</div>
+          </div>
+        </section>
+
+        <!-- VIEW 3: Discrepancies Queue -->
+        <section id="view-exceptions" class="view-panel hidden space-y-4">
+          <div class="glass rounded-2xl p-6">
+            <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Exception Review Queue</p>
+            <h2 class="mt-1 text-2xl font-bold text-ink">Discrepancies & AI QA</h2>
+            <p class="text-slate-600 text-sm">Review classified discrepancy items, inspect verified root-cause evidence, and apply manager decisions.</p>
+          </div>
+
+          <div id="exceptionsList" class="space-y-3">
+            <div class="glass rounded-2xl p-12 text-center text-slate-400 font-medium">No exceptions currently queued for review.</div>
           </div>
         </section>
 
         <!-- VIEW 4: Data Explorer -->
-        <section class="view-panel" id="view-tables">
-          <div class="view-header">
-            <div class="title-area">
-              <h1>Ingested Data Explorer</h1>
-              <p>Inspect raw uploaded datasets, columns, and data profiles.</p>
-            </div>
+        <section id="view-data" class="view-panel hidden space-y-4">
+          <div class="glass rounded-2xl p-6">
+            <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dataset Inspection</p>
+            <h2 class="mt-1 text-2xl font-bold text-ink">Data Explorer</h2>
+            <p class="text-slate-600 text-sm">Browse raw ingested transaction records and column profiles across all loaded statement tables.</p>
           </div>
-          <div class="view-body no-pad" style="display: flex; flex-direction: column;">
-            <div class="table-container" style="margin: 24px; border-radius: var(--radius-md);">
-              <div class="table-toolbar">
-                <div class="filter-tabs" id="tableTabs">
-                  <button class="filter-tab active">No Tables Ingested</button>
-                </div>
-                <div style="flex:1"></div>
-                <span id="tableMetaInfo" class="mono" style="font-size: 11.5px; color: var(--text-muted);">0 rows</span>
-              </div>
-              <div class="table-scroll">
-                <table class="data-table" id="explorerTable">
-                  <thead><tr><th>Column</th></tr></thead>
-                  <tbody><tr><td><div class="empty-placeholder">No table data available.</div></td></tr></tbody>
-                </table>
-              </div>
+
+          <div class="glass overflow-hidden rounded-2xl">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-3.5 bg-white/70">
+              <div id="tableTabs" class="flex flex-wrap gap-1.5"></div>
+              <span id="tableMeta" class="font-mono text-xs text-slate-500 font-semibold">0 rows</span>
+            </div>
+
+            <div class="max-h-[60vh] overflow-auto">
+              <table id="explorerTable" class="w-full min-w-max text-left text-xs"></table>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-slate-200 p-3.5 bg-white/70">
+              <button id="btnPrevPage" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
+                <i data-lucide="chevron-left" class="h-4 w-4"></i> Previous
+              </button>
+              <span id="pageMeta" class="font-mono text-xs text-slate-600 font-semibold">Page 1 of 1</span>
+              <button id="btnNextPage" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
+                Next <i data-lucide="chevron-right" class="h-4 w-4"></i>
+              </button>
             </div>
           </div>
         </section>
 
       </main>
-
-      <!-- Slide-out Grounded Copilot AI Drawer -->
-      <aside class="copilot-drawer" id="copilotDrawer">
-        <div class="copilot-header">
-          <div class="title">
-            <span>💬 Reconciliation Copilot</span>
-          </div>
-          <button class="ghost" id="btnCloseCopilot" style="padding: 2px 6px;">✕</button>
-        </div>
-
-        <div class="copilot-messages" id="chatMessages">
-          <div class="chat-bubble ai">
-            Hello! I am your <strong>Reconciliation AI Assistant</strong>. Ask me anything about matched orders, fee schedules, duplicate transactions, or why specific items failed to reconcile.
-          </div>
-        </div>
-
-        <div class="chat-suggestions">
-          <span class="prompt-chip" onclick="askCopilot('What is the total fee variance between payments and bank?')">Total fee variance?</span>
-          <span class="prompt-chip" onclick="askCopilot('Why did ORD_3 fail to reconcile?')">Why did ORD_3 fail?</span>
-          <span class="prompt-chip" onclick="askCopilot('Explain duplicate transactions and refunds')">Duplicate orders?</span>
-        </div>
-
-        <div class="copilot-input-bar">
-          <input type="text" id="chatInput" placeholder="Ask AI about dataset, fees, variances...">
-          <button class="primary" id="btnSendChat">Send</button>
-        </div>
-      </aside>
-
     </div>
-  </div>
 
-  <div class="toast-container" id="toastContainer"></div>
+    <!-- Grounded AI Copilot Drawer -->
+    <aside id="aiDrawer" class="fixed inset-y-3 right-3 z-50 flex w-[min(440px,calc(100vw-24px))] translate-x-[calc(100%+30px)] flex-col rounded-2xl border border-slate-200/90 bg-white/95 shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out">
+      <div class="flex items-center justify-between border-b border-slate-200/90 p-4">
+        <div class="flex items-center gap-2.5">
+          <div class="grid h-8 w-8 place-items-center rounded-lg bg-ink text-white">
+            <i data-lucide="bot" class="h-4 w-4"></i>
+          </div>
+          <div>
+            <p class="font-bold text-ink">Reconciliation AI</p>
+            <p class="text-[11px] text-slate-500 font-medium">Grounded in active statement data</p>
+          </div>
+        </div>
+        <button id="btnAiClose" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+          <i data-lucide="x" class="h-4 w-4"></i>
+        </button>
+      </div>
+
+      <div id="chatMessages" class="flex-1 space-y-3 overflow-y-auto p-4">
+        <div class="max-w-[90%] rounded-xl bg-[#F0F9FF] border border-blue-100 p-3.5 text-xs leading-relaxed text-slate-800">
+          Hello. I am your <strong>Reconciliation AI Assistant</strong>. Ask questions about matched orders, fee variances, duplicate transactions, or reasons why specific items differed.
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200/90 p-3.5 space-y-3 bg-slate-50/60">
+        <div class="flex flex-wrap gap-1.5">
+          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="What is the total fee variance?">Total fee variance?</button>
+          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="Why did ORD_3 fail to match?">Why did ORD_3 fail?</button>
+          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="Explain duplicate orders and refunds">Duplicate orders?</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input id="chatInput" class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 shadow-sm" placeholder="Ask about fees, orders, variances...">
+          <button id="btnChatSend" class="grid h-8 w-8 place-items-center rounded-xl bg-ink text-white hover:bg-slate-800 transition">
+            <i data-lucide="send" class="h-3.5 w-3.5"></i>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 left-1/2 z-50 hidden -translate-x-1/2 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white shadow-lg transition-opacity duration-200"></div>
+
+  </div>
 
   <script>
     const API = '/api/v2';
@@ -1294,84 +398,60 @@
     const State = {
       sid: null,
       status: 'IDLE',
+      abortToken: null,
       stagedFiles: [],
-      results: { rows: [], filter: 'all', search: '' },
-      ingestedTables: {},
-      activeTable: null,
+      rows: [],
+      exceptions: [],
+      filter: 'all',
+      searchQuery: '',
+      tables: {},
+      currentTable: null,
+      page: 1,
       pollTimer: null
-    };
-
-    const STEP_INDEX = {
-      INGESTING: 1,
-      PROFILING: 2,
-      MAPPING_PROPOSED: 3,
-      MAPPING_VALIDATED: 3,
-      POLICY_GENERATED: 4,
-      DRY_RUN: 4,
-      EXECUTING: 4,
-      QA: 5,
-      RESOLVING: 5,
-      AGGREGATING: 6,
-      ARCHIVED: 6
     };
 
     function esc(s) {
       return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
-    function num(v) {
-      if (v == null || v === '') return null;
+    function money(v) {
+      if (v == null || v === '') return '—';
       const n = Number(v);
-      return isFinite(n) ? n : null;
-    }
-
-    function inr(v) {
-      const n = num(v);
-      if (n == null) return '--';
+      if (!isFinite(n)) return '—';
       return 'INR ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    function pct(v) {
-      if (v == null) return '--';
-      return (Number(v) * 100).toFixed(1) + '%';
+    function showToast(msg) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 2800);
     }
 
-    function toast(msg, kind = 'info') {
-      const el = document.createElement('div');
-      el.className = 'toast-msg ' + kind;
-      el.innerHTML = esc(msg);
-      $('#toastContainer').appendChild(el);
-      setTimeout(() => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(8px)';
-        el.style.transition = 'all 0.25s ease';
-        setTimeout(() => el.remove(), 250);
-      }, 3000);
-    }
-
-    async function api(path, opts = {}) {
-      const r = await fetch(API + path, opts);
-      if (r.status === 404 && path.includes(`/sessions/${State.sid}`)) {
+    async function fetchApi(path, opts = {}) {
+      const res = await fetch(API + path, opts);
+      if (res.status === 404 && path.includes(`/sessions/${State.sid}`)) {
         await initSession();
         throw new Error('Session refreshed.');
       }
-      if (!r.ok) {
-        let msg = '';
-        try { msg = (await r.json()).detail; } catch { }
-        throw new Error(msg || `HTTP ${r.status}`);
+      if (!res.ok) {
+        let detail = '';
+        try { detail = (await res.json()).detail; } catch { }
+        throw new Error(detail || `HTTP ${res.status}`);
       }
-      return r.json();
+      return res.json();
     }
 
     async function initSession() {
       try {
-        const j = await api('/sessions', { method: 'POST' });
-        State.sid = j.session_id;
+        const data = await fetchApi('/sessions', { method: 'POST' });
+        State.sid = data.session_id;
+        $('#sessionDisplay').textContent = State.sid;
         updateStatus('IDLE');
         connectWS();
-      } catch (e) {
+      } catch (err) {
         updateStatus('OFFLINE');
-        toast('Could not connect to backend: ' + e.message, 'danger');
+        showToast('Could not initialize session: ' + err.message);
       }
     }
 
@@ -1381,318 +461,282 @@
       const ws = new WebSocket(`${proto}://${location.host}/ws/v2/${State.sid}`);
       ws.onmessage = ev => {
         try {
-          const f = JSON.parse(ev.data);
-          const p = f.payload || {};
-          if (f.kind === 'control') {
-            if (p.event === 'STATE_ENTERED') updateStatus(p.state);
-            if (p.event === 'HALT') toast('Execution paused for confirmation: ' + (p.detail?.reason || ''), 'warning');
-            if (p.event === 'RESUMED') toast('Execution resumed.', 'success');
+          const frame = JSON.parse(ev.data);
+          const p = frame.payload || {};
+          if (frame.kind === 'control') {
+            if (p.event === 'STATE_ENTERED') updateStatus(p.state, p.abort_token);
+            if (p.event === 'HALT') updateStatus('HALTED');
+            if (p.event === 'RESUMED') updateStatus(p.state);
+            if (p.event === 'ABORT_CONFIRMED') {
+              updateStatus('ABORTED');
+              showToast('Reconciliation stopped.');
+            }
           }
-          if (f.kind === 'chat' && p.text) addChat('ai', p.text);
-          if (f.kind === 'artifact' && p.kind === 'report') onReconciliationComplete();
+          if (frame.kind === 'chat' && p.text) appendChatBubble('ai', p.text);
+          if (frame.kind === 'artifact' && p.kind === 'report') {
+            loadResults();
+            loadExceptions();
+            loadTables();
+          }
         } catch { }
       };
       ws.onclose = () => setTimeout(connectWS, 2500);
     }
 
-    function updateStatus(st) {
-      State.status = st;
-      $('#statusText').textContent = st;
+    function updateStatus(status, abortToken) {
+      State.status = status;
+      if (abortToken) State.abortToken = abortToken;
+      
+      $('#statusText').textContent = status;
       const dot = $('#statusDot');
-      dot.className = 'status-dot';
-      if (st === 'ARCHIVED') dot.classList.add('active');
-      else if (st === 'HALT') dot.classList.add('halted');
-      else if (st === 'RUNNING' || st === 'INGESTING' || st === 'EXECUTING') dot.classList.add('running');
-      else if (st !== 'OFFLINE') dot.classList.add('active');
+      dot.className = 'h-2.5 w-2.5 rounded-full';
 
-      const activeIdx = STEP_INDEX[st] || 0;
-      for (let i = 1; i <= 6; i++) {
-        const node = $(`#step-${i}`);
-        if (!node) continue;
-        node.classList.remove('done', 'active');
-        if (st === 'ARCHIVED' || i < activeIdx) node.classList.add('done');
-        else if (i === activeIdx) node.classList.add('active');
+      const isRunning = ['RUNNING', 'INGESTING', 'PROFILING', 'MAPPING_PROPOSED', 'POLICY_GENERATED', 'DRY_RUN', 'EXECUTING', 'QA', 'RESOLVING', 'AGGREGATING'].includes(status);
+      
+      if (isRunning) {
+        dot.classList.add('bg-blue-500', 'pulse-dot');
+        $('#btnRun').disabled = true;
+        $('#btnStop').disabled = false;
+      } else {
+        $('#btnStop').disabled = true;
+        $('#btnRun').disabled = State.stagedFiles.length < 2;
+        if (status === 'ARCHIVED') dot.classList.add('bg-emerald');
+        else if (status === 'HALTED') dot.classList.add('bg-amber-500');
+        else if (status === 'ABORTED') dot.classList.add('bg-rose-500');
+        else dot.classList.add('bg-slate-400');
       }
     }
 
-    function switchView(name) {
-      $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
-      $$('.view-panel').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
-      if (name === 'results') loadResults();
-      if (name === 'exceptions') loadExceptions();
-      if (name === 'tables') loadExplorerTables();
+    function switchView(viewName) {
+      $$('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
+      $$('.view-panel').forEach(panel => panel.classList.toggle('hidden', panel.id !== `view-${viewName}`));
+      if (viewName === 'results') loadResults();
+      if (viewName === 'exceptions') loadExceptions();
+      if (viewName === 'data') loadTables();
     }
 
     /* Staging & File Management */
-    function parseCSV(text) {
-      const lines = text.trim().split(/\r?\n/).filter(l => l.trim().length > 0);
-      const cols = (lines[0] || '').split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-      const rows = lines.slice(1).map(l => {
-        const vals = l.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
-        const obj = {};
-        cols.forEach((c, i) => { obj[c] = vals[i] ?? ''; });
-        return obj;
-      });
-      return { cols, rows };
-    }
-
-    function handleLocalFiles(files) {
-      for (const file of files) {
-        if (file.name.toLowerCase().endsWith('.csv')) {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const parsed = parseCSV(String(reader.result));
-            State.stagedFiles.push({ file, name: file.name, size: file.size, cols: parsed.cols, rows: parsed.rows });
-            renderStagedFiles();
-            toast(`Staged ${file.name} (${parsed.rows.length} rows)`);
-          };
-          reader.readAsText(file);
-        } else {
-          State.stagedFiles.push({ file, name: file.name, size: file.size, cols: ['Binary Data'], rows: [] });
-          renderStagedFiles();
-          toast(`Staged ${file.name}`);
-        }
-      }
-    }
-
-    async function loadDemoBenchmarkData() {
+    async function loadSample() {
       try {
-        toast('Loading demo datasets (payments.csv + bank.csv)...');
-        const res = await api(`/sessions/${State.sid}/load_sample`, { method: 'POST' });
+        showToast('Loading sample datasets...');
+        const res = await fetchApi(`/sessions/${State.sid}/load_sample`, { method: 'POST' });
         if (res.ok && res.files) {
-          State.stagedFiles = res.files.map(f => ({
-            name: f.name,
-            size: f.size,
-            cols: f.cols,
-            rows: f.preview_rows || []
-          }));
-          renderStagedFiles();
-          toast('Demo datasets staged successfully! Ready to execute.', 'success');
+          State.stagedFiles = res.files;
+          renderStaged();
+          showToast('Sample files staged successfully.');
         }
-      } catch (e) {
-        toast('Failed to load demo data: ' + e.message, 'danger');
+      } catch (err) {
+        showToast('Failed to load sample data: ' + err.message);
       }
     }
 
-    function renderStagedFiles() {
-      const grid = $('#stagedGrid');
-      $('#badgeStagedCount').textContent = State.stagedFiles.length;
-      const canRun = State.stagedFiles.length >= 2;
-      $('#btnStartRun').disabled = !canRun;
-      $('#btnRunFromStaging').disabled = !canRun;
+    async function handleFiles(files) {
+      const selected = [...files];
+      if (!selected.length) return;
+      try {
+        const form = new FormData();
+        selected.forEach(file => form.append('files', file));
+        const staged = await fetchApi(`/sessions/${State.sid}/files`, { method: 'POST', body: form });
+        State.stagedFiles.push(...staged.files.map((meta, index) => ({ ...meta, rawFile: selected[index] })));
+        renderStaged();
+        showToast(`${selected.length} file(s) staged for AI analysis and data inspection.`);
+        loadTables();
+      } catch (err) { showToast('Could not stage files: ' + err.message); }
+    }
 
+    function renderStaged() {
+      $('#stagedCount').textContent = `${State.stagedFiles.length} files staged`;
+      $('#btnRun').disabled = State.stagedFiles.length < 2 || ['RUNNING', 'EXECUTING'].includes(State.status);
+
+      const grid = $('#stagedGrid');
       if (!State.stagedFiles.length) {
         grid.innerHTML = '';
-        $('#previewBox').style.display = 'none';
         return;
       }
 
       grid.innerHTML = State.stagedFiles.map((f, idx) => `
-        <div class="staged-card">
-          <div class="card-top">
-            <div>
-              <div class="filename">📄 ${esc(f.name)}</div>
-              <div class="file-info">${f.rows.length ? f.rows.length + ' rows' : 'Loaded'} · ${(f.size / 1024).toFixed(1)} KB</div>
+        <div class="glass rounded-xl p-4 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 truncate">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-600 flex-shrink-0">
+              <i data-lucide="file-text" class="h-4 w-4"></i>
             </div>
-            <span class="badge info">STAGED</span>
+            <div class="truncate">
+              <p class="font-semibold text-xs text-ink truncate">${esc(f.name)}</p>
+              <p class="text-[11px] text-slate-400 font-mono">${f.rows ?? '—'} rows · ${(f.size / 1024).toFixed(1)} KB</p>
+              ${f.columns ? `<p class="mt-1 truncate text-[10px] text-slate-500">${esc(f.columns.join(', '))}</p>` : ''}
+            </div>
           </div>
-          <div class="card-actions">
-            <button class="ghost" onclick="previewStagedFile(${idx})">🔍 Preview</button>
-            <button class="danger" onclick="removeStagedFile(${idx})">✕ Remove</button>
-          </div>
+          <div class="flex items-center gap-1"><button onclick="previewFile(${idx})" aria-label="Preview file" class="rounded-lg p-1.5 text-slate-400 hover:bg-sky-50 hover:text-slate-700 transition"><i data-lucide="eye" class="h-4 w-4"></i></button><button onclick="removeFile(${idx})" aria-label="Remove file" class="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition">
+            <i data-lucide="trash-2" class="h-4 w-4"></i>
+          </button></div>
         </div>
       `).join('');
+      lucide.createIcons();
     }
 
-    window.previewStagedFile = function (idx) {
-      const f = State.stagedFiles[idx];
-      if (!f || !f.rows.length) return;
-      $('#previewTitle').textContent = `Preview: ${f.name} (Showing first ${Math.min(10, f.rows.length)} rows)`;
-      $('#previewTable').innerHTML = `
-        <thead>
-          <tr>
-            <th style="width:30px; text-align:center;">#</th>
-            ${f.cols.map(c => `<th>${esc(c)}</th>`).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${f.rows.slice(0, 10).map((r, i) => `
-            <tr>
-              <td style="text-align:center; color:var(--text-dim);">${i + 1}</td>
-              ${f.cols.map(c => `<td class="${num(r[c]) != null ? 'mono' : ''}">${esc(r[c])}</td>`).join('')}
-            </tr>
-          `).join('')}
-        </tbody>
-      `;
-      $('#previewBox').style.display = 'block';
-    };
-
-    window.removeStagedFile = function (idx) {
+    window.removeFile = function (idx) {
       State.stagedFiles.splice(idx, 1);
-      renderStagedFiles();
+      renderStaged();
     };
 
-    async function executeReconciliation() {
-      if (State.stagedFiles.length < 2) {
-        toast('Please stage at least 2 statement files to reconcile.', 'warning');
-        return;
-      }
+    window.previewFile = async function (idx) {
+      const file = State.stagedFiles[idx];
+      try {
+        const table = file.table || file.name.replace(/\.[^.]+$/, '');
+        const data = await fetchApi(`/sessions/${State.sid}/ingestion?table=${encodeURIComponent(table)}&page=1&page_size=10`);
+        const page = data.tables[table], cols = data.table_meta[table]?.columns || [];
+        const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4';
+        modal.innerHTML = `<div role="dialog" aria-modal="true" class="max-h-[80vh] w-full max-w-5xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl"><div class="flex justify-between"><div><h3 class="font-bold">${esc(file.name)} preview</h3><p class="text-xs text-slate-500">${page.total} rows · ${cols.length} columns · detected types: ${esc(Object.entries(file.dtypes || {}).map(([k,v]) => k + ' (' + v + ')').join(', '))}</p></div><button class="closePreview rounded-lg border px-3 py-1 text-xs">Close</button></div><table class="mt-4 w-full min-w-max text-xs"><thead class="bg-slate-50"><tr>${cols.map(c => `<th class="p-2 text-left">${esc(c)}</th>`).join('')}</tr></thead><tbody>${page.items.map(row => `<tr>${cols.map(c => `<td class="border-b p-2">${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        modal.querySelector('.closePreview').onclick = () => modal.remove(); document.body.append(modal);
+      } catch (err) { showToast(err.message); }
+    };
 
+    async function runReconciliation() {
+      if (State.stagedFiles.length < 2) return;
       updateStatus('RUNNING');
-      toast('Starting autonomous reconciliation...');
+      showToast('Starting reconciliation engine...');
 
       try {
-        const hasRealFiles = State.stagedFiles.some(f => f.file);
-        if (hasRealFiles) {
+        const hasRealUploads = State.stagedFiles.some(f => f.rawFile);
+        if (hasRealUploads) {
           const fd = new FormData();
-          State.stagedFiles.forEach(f => { if (f.file) fd.append('files', f.file); });
-          await api(`/sessions/${State.sid}/run`, { method: 'POST', body: fd });
+          State.stagedFiles.forEach(f => { if (f.rawFile) fd.append('files', f.rawFile); });
+          await fetchApi(`/sessions/${State.sid}/run`, { method: 'POST', body: fd });
         } else {
-          await api(`/sessions/${State.sid}/run`, { method: 'POST' });
+          await fetchApi(`/sessions/${State.sid}/run`, { method: 'POST' });
         }
-
-        startProgressPolling();
+        startPolling();
         switchView('results');
-      } catch (e) {
+      } catch (err) {
         updateStatus('IDLE');
-        toast('Execution failed: ' + e.message, 'danger');
+        showToast('Run error: ' + err.message);
       }
     }
 
-    function startProgressPolling() {
+    async function stopReconciliation() {
+      if (!window.confirm('Stop reconciliation? The current stage will finish safely and an abort event will be added to the audit trail.')) return;
+      try {
+        await fetchApi(`/sessions/${State.sid}/abort`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: State.abortToken || 'user_stop' })
+        });
+        showToast('Stop requested. Waiting for the engine to reach a safe checkpoint.');
+      } catch (err) {
+        showToast('Stop failed: ' + err.message);
+      }
+    }
+
+    function startPolling() {
       if (State.pollTimer) clearInterval(State.pollTimer);
       State.pollTimer = setInterval(async () => {
         try {
-          const ov = await api(`/sessions/${State.sid}/overview`);
-          updateStatus(ov.state);
-          if (ov.state === 'ARCHIVED' || ov.state === 'ABORT_CONFIRMED') {
+          const ov = await fetchApi(`/sessions/${State.sid}/overview`);
+          updateStatus(ov.state, ov.abort_token);
+          if (typeof updateOpsTelemetry === 'function') updateOpsTelemetry(ov);
+          if (ov.state === 'ARCHIVED' || ov.state === 'ABORT_CONFIRMED' || ov.state === 'HALTED') {
             clearInterval(State.pollTimer);
-            if (ov.state === 'ARCHIVED') onReconciliationComplete();
+            loadResults();
+            loadExceptions();
+            loadTables();
           }
         } catch { }
-      }, 1500);
+      }, 1200);
     }
 
-    async function onReconciliationComplete() {
-      toast('Reconciliation finished successfully!', 'success');
-      await loadResults();
-      await loadExceptions();
-      await loadExplorerTables();
-    }
-
-    /* Results Grid with Prominent AI Reasoning */
+    /* Results Grid */
     async function loadResults() {
       try {
         const [res, mapData, exc] = await Promise.all([
-          api(`/sessions/${State.sid}/results`),
-          api(`/sessions/${State.sid}/mapping`),
-          api(`/sessions/${State.sid}/exceptions?page_size=500`)
+          fetchApi(`/sessions/${State.sid}/results`),
+          fetchApi(`/sessions/${State.sid}/mapping`),
+          fetchApi(`/sessions/${State.sid}/exceptions?page_size=1000`)
         ]);
 
         const c = mapData.committed || {};
         const rows = [];
 
-        if (res.executed && res.matched) {
-          for (const m of res.matched) {
-            const lAmt = num(m.l_data && m.l_data[c.left_amount]);
-            const rAmt = num(m.r_data && m.r_data[c.right_amount]);
-            const variance = (lAmt != null && rAmt != null) ? lAmt - rAmt : null;
-            const ref = String((m.l_data && m.l_data[c.left_key]) ?? m.l_rid);
-            const aiReason = m.ai_reason || (variance && Math.abs(variance) > 0.01
-              ? `Matched on key '${ref}' with INR ${Math.abs(variance).toFixed(2)} fee variance matching fee schedule.`
-              : `Exact 1:1 match on key '${ref}' and settled amount.`);
-
-            rows.push({
-              status: 'MATCHED',
-              ref: ref,
-              lAmt,
-              rAmt,
-              variance,
-              aiReason,
-              matchType: m.match_type || 'EXACT MATCH'
-            });
-          }
-        }
-
-        for (const e of (exc.queue || [])) {
-          const isResolved = e.action === 'auto_resolve' || e.action === 'mark_resolved';
+        (res.matched || []).forEach(m => {
+          const l = Number(m.l_data?.[c.left_amount] ?? m.l_data?.amount);
+          const b = Number(m.r_data?.[c.right_amount] ?? m.r_data?.credit);
+          const v = (isFinite(l) && isFinite(b)) ? l - b : null;
           rows.push({
-            status: isResolved ? 'RESOLVED' : 'EXCEPTION',
-            ref: e.ref || '--',
-            lAmt: e.side === 'L' ? num(e.record_data && e.record_data[c.left_amount]) : null,
-            rAmt: e.side === 'R' ? num(e.record_data && e.record_data[c.right_amount]) : null,
-            variance: e.delta,
-            aiReason: e.explanation || e.auto_reason || `Discrepancy: ${e.reason}`,
-            matchType: e.reason || 'UNRESOLVED'
+            type: 'matched',
+            ref: m.l_data?.[c.left_key] ?? m.l_rid,
+            l,
+            b,
+            v,
+            reason: m.ai_reason || (v && Math.abs(v) > 0.01 ? `Matched with INR ${Math.abs(v).toFixed(2)} fee variance.` : 'Exact 1:1 match across ledger and bank.')
           });
-        }
+        });
 
-        State.results.rows = rows;
+        (exc.queue || []).forEach(x => {
+          const isResolved = ['auto_resolve', 'mark_resolved'].includes(x.action);
+          rows.push({
+            type: isResolved ? 'resolved' : 'exception',
+            ref: x.ref || `RID-${x.rid}`,
+            l: x.side === 'L' ? Number(x.record_data?.[c.left_amount] ?? x.record_data?.amount) : null,
+            b: x.side === 'R' ? Number(x.record_data?.[c.right_amount] ?? x.record_data?.credit) : null,
+            v: Number(x.delta),
+            reason: x.explanation || x.auto_reason || x.reason
+          });
+        });
+
+        State.rows = rows;
+        State.exceptions = exc.queue || [];
+
+        $('#badgeResults').textContent = rows.length;
+        $('#badgeExceptions').textContent = State.exceptions.length;
+
+        $('#kpiAssessed').textContent = rows.length || '—';
+        $('#kpiMatchRate').textContent = res.match_rate != null ? (res.match_rate * 100).toFixed(1) + '%' : '—';
+        $('#kpiFeeVariance').textContent = res.totals ? money(res.totals.fees) : '—';
+        $('#kpiOpenExceptions').textContent = State.exceptions.length || '—';
+
         renderResultsTable();
-
-        if (res.executed) {
-          $('#badgeResultsCount').textContent = rows.length;
-          $('#badgeExcCount').textContent = exc.summary?.total || 0;
-          $('#kpiTotal').textContent = rows.length;
-          $('#kpiMatchRate').textContent = pct(res.match_rate);
-          $('#kpiDiscrepancies').textContent = exc.summary?.total || 0;
-          $('#kpiThroughput').textContent = `${res.throughput_rows_per_sec || 940} rows/sec`;
-          $('#kpiPrecision').textContent = `Precision: ${pct(res.precision_vs_truth || 1.0)}`;
-          if (res.totals) {
-            $('#kpiFees').textContent = inr(res.totals.fees);
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
+      } catch { }
     }
 
     function renderResultsTable() {
-      let list = State.results.rows;
-      if (State.results.filter === 'matched') list = list.filter(r => r.status === 'MATCHED');
-      if (State.results.filter === 'exceptions') list = list.filter(r => r.status !== 'MATCHED');
+      let list = State.rows;
+      if (State.filter === 'matched') list = list.filter(r => r.type === 'matched');
+      if (State.filter === 'exception') list = list.filter(r => r.type !== 'matched');
 
-      const q = State.results.search.trim().toLowerCase();
+      const q = State.searchQuery.trim().toLowerCase();
       if (q) {
-        list = list.filter(r => [r.ref, r.aiReason, r.status, r.matchType].join(' ').toLowerCase().includes(q));
+        list = list.filter(r => `${r.ref} ${r.reason} ${r.type}`.toLowerCase().includes(q));
       }
 
-      const tbody = $('#resultsBody');
+      $('#resultsMeta').textContent = `${list.length} visible / ${State.rows.length} total`;
+
+      const tbody = $('#resultsTableBody');
       if (!list.length) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="7">
-              <div class="empty-placeholder">
-                <div class="icon">🔍</div>
-                <div>No records matching the current filter.</div>
-              </div>
-            </td>
-          </tr>
-        `;
+        tbody.innerHTML = '<tr><td colspan="7" class="p-12 text-center text-slate-400 font-medium">No records match the current filter.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = list.map((r, i) => {
-        let badgeHtml = '<span class="badge success">MATCHED</span>';
-        if (r.status === 'EXCEPTION') badgeHtml = '<span class="badge danger">EXCEPTION</span>';
-        else if (r.status === 'RESOLVED') badgeHtml = '<span class="badge ai">RESOLVED</span>';
-
-        let varHtml = '<span class="mono" style="color:var(--text-dim);">0.00</span>';
-        if (r.variance != null && Math.abs(r.variance) > 0.01) {
-          varHtml = `<span class="badge ${r.variance > 0 ? 'warning' : 'danger'} mono">${inr(r.variance)}</span>`;
+      tbody.innerHTML = list.map((r, idx) => {
+        let tagBg = 'bg-[#F0FDF4] text-emerald-800 border-emerald-200';
+        let tagLabel = 'MATCHED';
+        if (r.type === 'exception') {
+          tagBg = 'bg-[#FDF2F8] text-rose-800 border-rose-200';
+          tagLabel = 'DISCREPANCY';
+        } else if (r.type === 'resolved') {
+          tagBg = 'bg-[#F0F9FF] text-blue-800 border-blue-200';
+          tagLabel = 'RESOLVED';
         }
 
         return `
-          <tr>
-            <td style="text-align:center; color:var(--text-dim);">${i + 1}</td>
-            <td>${badgeHtml}</td>
-            <td class="mono" style="font-weight:700;">${esc(r.ref)}</td>
-            <td class="mono" style="text-align:right;">${inr(r.lAmt)}</td>
-            <td class="mono" style="text-align:right;">${inr(r.rAmt)}</td>
-            <td style="text-align:right;">${varHtml}</td>
-            <td>
-              <div class="ai-reason-pill">
-                <strong>🤖 AI Reason:</strong> ${esc(r.aiReason)}
+          <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
+            <td class="p-3.5 text-center font-mono text-slate-400">${idx + 1}</td>
+            <td class="p-3.5"><span class="inline-block rounded-md border ${tagBg} px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">${tagLabel}</span></td>
+            <td class="p-3.5 font-mono font-semibold text-ink">${esc(r.ref)}</td>
+            <td class="p-3.5 text-right font-mono text-slate-700">${money(r.l)}</td>
+            <td class="p-3.5 text-right font-mono text-slate-700">${money(r.b)}</td>
+            <td class="p-3.5 text-right font-mono font-semibold ${r.v > 0 ? 'text-amber-700' : (r.v < 0 ? 'text-rose-700' : 'text-slate-400')}">${money(r.v)}</td>
+            <td class="p-3.5">
+              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-2.5 text-xs text-slate-800 leading-relaxed font-medium">
+                ${esc(r.reason)}
               </div>
             </td>
           </tr>
@@ -1700,243 +744,352 @@
       }).join('');
     }
 
-    /* Exceptions Queue (Prominent Hero AI Reasons) */
+    /* Discrepancies Queue */
     async function loadExceptions() {
       try {
-        const exc = await api(`/sessions/${State.sid}/exceptions?page_size=500`);
+        const res = await fetchApi(`/sessions/${State.sid}/exceptions?page_size=1000`);
+        State.exceptions = res.queue || [];
+        $('#badgeExceptions').textContent = State.exceptions.length;
+
         const list = $('#exceptionsList');
-        const queue = exc.queue || [];
-
-        $('#badgeExcCount').textContent = queue.length;
-
-        if (!queue.length) {
-          list.innerHTML = `
-            <div class="empty-placeholder">
-              <div class="icon">✨</div>
-              <div>No unresolved discrepancies in the queue! All transactions reconciled cleanly.</div>
-            </div>
-          `;
+        if (!State.exceptions.length) {
+          list.innerHTML = '<div class="glass rounded-2xl p-12 text-center text-slate-400 font-medium">No open discrepancies currently queued for review.</div>';
           return;
         }
 
-        list.innerHTML = queue.map(item => {
-          const isResolved = item.action === 'auto_resolve' || item.action === 'mark_resolved';
+        list.innerHTML = State.exceptions.map(item => {
+          const isResolved = ['auto_resolve', 'mark_resolved'].includes(item.action);
           const isDeclined = item.action === 'declined';
-          const statusBadge = isResolved
-            ? '<span class="badge success">RESOLVED</span>'
-            : isDeclined
-            ? '<span class="badge danger">DECLINED</span>'
-            : '<span class="badge warning">NEEDS REVIEW</span>';
-
-          const piecesHtml = (item.pieces || []).map(p => `<span class="evidence-tag">✓ ${esc(p)}</span>`).join('');
+          
+          let badge = '<span class="rounded-md border border-amber-200 bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">REVIEW REQUIRED</span>';
+          if (isResolved) badge = '<span class="rounded-md border border-emerald-200 bg-[#F0FDF4] px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">RESOLVED</span>';
+          if (isDeclined) badge = '<span class="rounded-md border border-rose-200 bg-[#FDF2F8] px-2 py-0.5 text-[10px] font-bold uppercase text-rose-800">DECLINED</span>';
 
           return `
-            <div class="exception-card">
-              <div class="exception-header">
-                <div class="exception-ref">
-                  <span>[${item.side}] ${esc(item.ref)}</span>
-                  <span class="badge danger">${esc(item.reason)}</span>
-                  ${statusBadge}
+            <div class="glass rounded-2xl p-5 space-y-3.5">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono font-bold text-sm text-ink">[${item.side}] ${esc(item.ref)}</span>
+                  <span class="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">${esc(item.reason)}</span>
+                  ${badge}
                 </div>
-                <div class="exception-metrics">
-                  <span>Variance: <strong style="color:var(--danger);">${inr(item.delta)}</strong></span>
-                  <span>AI Confidence: <strong>${(item.confidence * 100).toFixed(1)}%</strong></span>
+                <div class="flex items-center gap-4 text-xs font-mono">
+                  <span>Variance: <strong class="text-rose-700">${money(item.delta)}</strong></span>
+                  <span>Confidence: <strong class="text-ink">${(item.confidence * 100).toFixed(1)}%</strong></span>
                 </div>
               </div>
 
-              <!-- Hero Prominent AI Diagnostic Analysis -->
-              <div class="ai-diagnostic-box">
-                <div class="ai-diagnostic-title">🤖 AI Diagnostic Analysis & Root Cause</div>
-                <div class="ai-diagnostic-text">
-                  ${esc(item.explanation || item.auto_reason || 'No diagnostic explanation available.')}
-                </div>
-                ${piecesHtml ? `<div class="evidence-tags">${piecesHtml}</div>` : ''}
+              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-3.5 text-xs text-slate-800 leading-relaxed font-medium">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">AI Diagnostic Analysis</p>
+                <p>${esc(item.explanation || item.auto_reason || item.reason)}</p>
               </div>
 
-              <div class="exception-actions">
-                <button class="success" onclick="resolveException(${item.rid}, 'approve')">✓ Approve Resolution</button>
-                <button class="danger" onclick="resolveException(${item.rid}, 'decline')">✕ Flag / Decline</button>
-                <button class="ghost" onclick="resolveException(${item.rid}, 'escalate')">⚠️ Escalate</button>
+              <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button onclick="overrideException(${item.rid}, 'approve')" class="flex items-center gap-1.5 rounded-xl bg-ink px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition">
+                  <i data-lucide="check" class="h-3.5 w-3.5 text-emerald"></i> Approve Resolution
+                </button>
+                <button onclick="overrideException(${item.rid}, 'decline')" class="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 transition">
+                  Flag / Decline
+                </button>
+                <button onclick="overrideException(${item.rid}, 'escalate')" class="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+                  Escalate
+                </button>
               </div>
             </div>
           `;
         }).join('');
-      } catch (e) {
-        console.error(e);
-      }
+        lucide.createIcons();
+      } catch { }
     }
 
-    window.resolveException = async function (rid, action) {
+    window.overrideException = async function (rid, action) {
       try {
-        await api(`/sessions/${State.sid}/exceptions/${rid}/action`, {
+        await fetchApi(`/sessions/${State.sid}/exceptions/${rid}/action`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, note: 'Manager action' })
+          body: JSON.stringify({ action, note: 'Manager override' })
         });
-        toast(`Exception #${rid} updated (${action}).`, 'success');
+        showToast(`Exception #${rid} updated (${action}).`);
         await loadExceptions();
         await loadResults();
-      } catch (e) {
-        toast('Action failed: ' + e.message, 'danger');
+      } catch (err) {
+        showToast('Action failed: ' + err.message);
       }
     };
 
     /* Data Explorer */
-    async function loadExplorerTables() {
+    async function loadTables() {
       try {
-        const ing = await api(`/sessions/${State.sid}/ingestion`);
-        State.ingestedTables = ing.tables || {};
-        const names = Object.keys(State.ingestedTables);
+        const res = await fetchApi(`/sessions/${State.sid}/ingestion`);
+        State.tables = res.table_meta || {};
+        const names = Object.keys(State.tables);
 
         const tabContainer = $('#tableTabs');
         if (!names.length) {
-          tabContainer.innerHTML = '<button class="filter-tab active">No Ingested Data</button>';
+          tabContainer.innerHTML = '<span class="text-xs text-slate-400 p-1">No tables loaded.</span>';
           return;
         }
 
-        tabContainer.innerHTML = names.map((name, i) => `
-          <button class="filter-tab ${i === 0 ? 'active' : ''}" onclick="showExplorerTable('${name}')">
-            ${esc(name.toUpperCase())}
+        if (!State.currentTable || !State.tables[State.currentTable]) {
+          State.currentTable = names[0];
+        }
+
+        tabContainer.innerHTML = names.map(name => `
+          <button class="table-tab rounded-xl px-3.5 py-1.5 text-xs font-semibold transition ${name === State.currentTable ? 'bg-[#E0F2FE] text-ink' : 'bg-slate-100 text-slate-600 hover:text-ink'}" onclick="selectExplorerTable('${name}')">
+            ${esc(name.toUpperCase())} <span class="font-mono text-[11px] text-slate-400">(${State.tables[name].total_rows})</span>
           </button>
         `).join('');
 
-        if (names.length) {
-          showExplorerTable(names[0]);
-        }
+        renderExplorerPage();
       } catch { }
     }
 
-    window.showExplorerTable = function (name) {
-      $$('#tableTabs .filter-tab').forEach(b => b.classList.toggle('active', b.textContent.trim().toLowerCase() === name.toLowerCase()));
-      const tableData = State.ingestedTables[name];
-      if (!tableData || !tableData.items || !tableData.items.length) {
-        $('#explorerTable').innerHTML = '<tbody><tr><td><div class="empty-placeholder">Empty table.</div></td></tr></tbody>';
-        $('#tableMetaInfo').textContent = '0 rows';
-        return;
-      }
-
-      const rows = tableData.items;
-      const cols = Object.keys(rows[0]).filter(c => !c.startsWith('_'));
-      $('#tableMetaInfo').textContent = `${tableData.total || rows.length} total rows`;
-
-      $('#explorerTable').innerHTML = `
-        <thead>
-          <tr>
-            <th style="width:30px; text-align:center;">#</th>
-            ${cols.map(c => `<th>${esc(c)}</th>`).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.slice(0, 100).map((r, i) => `
-            <tr>
-              <td style="text-align:center; color:var(--text-dim);">${i + 1}</td>
-              ${cols.map(c => `<td class="${num(r[c]) != null ? 'mono' : ''}">${esc(r[c])}</td>`).join('')}
-            </tr>
-          `).join('')}
-        </tbody>
-      `;
+    window.selectExplorerTable = function (name) {
+      State.currentTable = name;
+      State.page = 1;
+      loadTables();
     };
 
-    /* Copilot AI */
-    function addChat(role, text) {
-      const el = document.createElement('div');
-      el.className = `chat-bubble ${role}`;
-      el.innerHTML = esc(text).replace(/\n/g, '<br>');
-      $('#chatMessages').appendChild(el);
-      $('#chatMessages').scrollTop = $('#chatMessages').scrollHeight;
+    async function renderExplorerPage() {
+      if (!State.currentTable) return;
+      try {
+        const res = await fetchApi(`/sessions/${State.sid}/ingestion?table=${encodeURIComponent(State.currentTable)}&page=${State.page}&page_size=100`);
+        const p = res.tables[State.currentTable];
+        const cols = State.tables[State.currentTable]?.columns || [];
+
+        $('#tableMeta').textContent = `${p.total} total rows · ${cols.length} columns`;
+        $('#pageMeta').textContent = `Page ${p.page} of ${p.total_pages}`;
+        $('#btnPrevPage').disabled = !p.has_prev;
+        $('#btnNextPage').disabled = !p.has_next;
+
+        $('#explorerTable').innerHTML = `
+          <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+            <tr>
+              <th class="p-3.5 w-12 text-center">#</th>
+              ${cols.map(c => `<th class="p-3.5">${esc(c)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${p.items.map((row, i) => `
+              <tr class="hover:bg-slate-50/80 transition">
+                <td class="p-3.5 text-center font-mono text-slate-400">${(p.page - 1) * p.page_size + i + 1}</td>
+                ${cols.map(c => `<td class="p-3.5 font-mono text-slate-700">${esc(row[c])}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+      } catch { }
     }
 
-    async function sendChatQuery() {
+    /* Copilot Chat */
+    function appendChatBubble(role, text) {
+      const container = $('#chatMessages');
+      const bubble = document.createElement('div');
+      bubble.className = `max-w-[90%] rounded-xl p-3.5 text-xs leading-relaxed ${role === 'user' ? 'ml-auto bg-ink text-white' : 'bg-[#F0F9FF] border border-blue-100 text-slate-800'}`;
+      bubble.innerHTML = esc(text).replace(/\n/g, '<br>');
+      container.appendChild(bubble);
+      bubble.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function sendChat(query) {
       const input = $('#chatInput');
-      const msg = input.value.trim();
-      if (!msg || !State.sid) return;
+      const text = (query || input.value).trim();
+      if (!text || !State.sid) return;
+
       input.value = '';
-      addChat('user', msg);
+      appendChatBubble('user', text);
 
       try {
-        const res = await api(`/sessions/${State.sid}/chat`, {
+        const res = await fetchApi(`/sessions/${State.sid}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg })
+          body: JSON.stringify({ message: text })
         });
-        if (res.ok && res.response) {
-          addChat('ai', res.response);
-        } else {
-          addChat('ai', '[Error] ' + (res.error || res.response || 'Failed to process inquiry.'));
-        }
-      } catch (e) {
-        addChat('ai', '[Error] ' + e.message);
+        appendChatBubble('ai', res.response || res.error || 'No response.');
+      } catch (err) {
+        appendChatBubble('ai', 'Error: ' + err.message);
       }
     }
 
-    window.askCopilot = function (text) {
-      $('#chatInput').value = text;
-      sendChatQuery();
-    };
-
-    /* Event Listeners Setup */
+    /* Event Listeners */
     document.addEventListener('DOMContentLoaded', () => {
-      // Nav item clicks
-      $$('.nav-item').forEach(el => {
-        el.addEventListener('click', () => switchView(el.dataset.view));
-      });
+      lucide.createIcons();
+      initSession();
 
-      // Staging Dropzone
-      const dz = $('#dropzone');
-      const fi = $('#fileInput');
-      dz.addEventListener('click', () => fi.click());
-      fi.addEventListener('change', e => {
-        handleLocalFiles([...e.target.files]);
+      // Navigation
+      $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+
+      // Staging
+      const drop = $('#dropzone');
+      const fileInput = $('#fileInput');
+      drop.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', e => {
+        handleFiles([...e.target.files]);
         e.target.value = '';
       });
-      ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('dragover'); }));
-      ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
-      dz.addEventListener('drop', e => {
+      drop.addEventListener('dragover', e => e.preventDefault());
+      drop.addEventListener('drop', e => {
         e.preventDefault();
-        handleLocalFiles([...e.dataTransfer.files]);
+        handleFiles([...e.dataTransfer.files]);
       });
 
-      // Buttons
-      $('#btnLoadDemo').addEventListener('click', loadDemoBenchmarkData);
-      $('#btnStartRun').addEventListener('click', executeReconciliation);
-      $('#btnRunFromStaging').addEventListener('click', executeReconciliation);
-      $('#btnClosePreview').addEventListener('click', () => { $('#previewBox').style.display = 'none'; });
-
-      $('#btnExportCsv').addEventListener('click', () => {
-        if (!State.sid) return;
-        window.open(`${API}/sessions/${State.sid}/export.csv`, '_blank');
+      // Actions
+      $('#btnSample').addEventListener('click', loadSample);
+      $('#btnRun').addEventListener('click', runReconciliation);
+      $('#btnStop').addEventListener('click', stopReconciliation);
+      $('#btnExport').addEventListener('click', () => {
+        if (State.sid) window.open(`${API}/sessions/${State.sid}/export.csv`, '_blank');
       });
 
-      // Copilot toggle
-      $('#btnToggleCopilot').addEventListener('click', () => {
-        const d = $('#copilotDrawer');
-        d.style.display = d.style.display === 'none' ? 'flex' : 'none';
-      });
-      $('#btnCloseCopilot').addEventListener('click', () => {
-        $('#copilotDrawer').style.display = 'none';
-      });
-
-      $('#btnSendChat').addEventListener('click', sendChatQuery);
-      $('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChatQuery(); });
-
-      // Results Tabs & Search
-      $$('.filter-tab').forEach(btn => {
+      // Policy Controls & Presets
+      $$('.policy-preset').forEach(btn => {
         btn.addEventListener('click', () => {
-          $$('.filter-tab').forEach(b => b.classList.remove('active'));
+          $('#inputFeeRate').value = btn.dataset.fee;
+          $('#inputTaxRate').value = btn.dataset.tax;
+          $('#inputTolerance').value = btn.dataset.tol;
+          applyPolicy();
+        });
+      });
+
+      async function applyPolicy() {
+        try {
+          const fee = parseFloat($('#inputFeeRate').value || '2.0') / 100.0;
+          const tax = parseFloat($('#inputTaxRate').value || '18.0') / 100.0;
+          const tol = parseFloat($('#inputTolerance').value || '0.01');
+          await fetchApi(`/sessions/${State.sid}/policy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fee_rate: fee, gst_rate: tax, tolerance: tol, window_days: 3, flat_fee: 0.0 })
+          });
+          showToast(`Policy updated: ${(fee * 100).toFixed(2)}% fee, ${(tax * 100).toFixed(1)}% tax, ₹${tol} tolerance.`);
+        } catch (err) {
+          showToast('Failed to update policy: ' + err.message);
+        }
+      }
+
+      $('#btnApplyPolicy').addEventListener('click', applyPolicy);
+
+      // Filter Tabs & Search
+      $$('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          $$('.tab-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
-          State.results.filter = btn.dataset.filter || 'all';
+          State.filter = btn.dataset.filter;
           renderResultsTable();
         });
       });
 
       $('#resultsSearch').addEventListener('input', e => {
-        State.results.search = e.target.value;
+        State.searchQuery = e.target.value;
         renderResultsTable();
       });
 
-      // Init
-      initSession();
+      // Pagination
+      $('#btnPrevPage').addEventListener('click', () => {
+        if (State.page > 1) { State.page--; renderExplorerPage(); }
+      });
+      $('#btnNextPage').addEventListener('click', () => {
+        State.page++; renderExplorerPage();
+      });
+
+      async function runLineMatch(kind) {
+        try {
+          const result = await fetchApi(`/sessions/${State.sid}/line-matching?kind=${kind}`), s = result.summary || {};
+          $('#lineMatchResults').innerHTML = `<p class="mb-3 font-mono text-xs text-slate-600">${s.matched || 0} matched · ${s.exceptions || 0} exceptions · source ${money(s.total_left)} · counterparty ${money(s.total_right)}</p><table class="w-full min-w-[700px]"><thead class="bg-slate-50"><tr><th class="p-2 text-left">Reference</th><th class="p-2 text-right">Source</th><th class="p-2 text-right">Counterparty</th><th class="p-2 text-right">Variance</th><th class="p-2 text-left">AI finding</th></tr></thead><tbody>${(result.rows || []).map(r => `<tr><td class="border-b p-2 font-mono">${esc(r.reference)}</td><td class="border-b p-2 text-right">${money(r.left_total)}</td><td class="border-b p-2 text-right">${money(r.right_total)}</td><td class="border-b p-2 text-right">${money(r.variance)}</td><td class="border-b p-2">${esc(r.ai_reason)}</td></tr>`).join('')}</tbody></table>`;
+        } catch (err) { $('#lineMatchResults').textContent = err.message; }
+      }
+      $('#btnTaxMatch').addEventListener('click', () => runLineMatch('tax'));
+      $('#btnChargeMatch').addEventListener('click', () => runLineMatch('charge'));
+
+      // AI Drawer
+      $('#btnAiOpen').addEventListener('click', () => {
+        $('#aiDrawer').classList.remove('translate-x-[calc(100%+30px)]');
+      });
+      $('#btnAiClose').addEventListener('click', () => {
+        $('#aiDrawer').classList.add('translate-x-[calc(100%+30px)]');
+      });
+
+      $('#btnChatSend').addEventListener('click', () => sendChat());
+      $('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+      $$('.quick-chip').forEach(chip => {
+        chip.addEventListener('click', () => sendChat(chip.dataset.query));
+      });
+
+      // Live Operations Panel initialization
+      const ops = document.createElement('section');
+      ops.className = 'mt-5 rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm';
+      ops.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[.12em] text-emerald-700">Live Operations</p>
+            <h3 class="mt-1 text-lg font-bold text-ink">Execution Flow</h3>
+          </div>
+          <div class="flex gap-3 items-center">
+            <button id="opsAudit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition">View Audit</button>
+            <span id="opsElapsed" class="font-mono text-xs text-slate-500">00:00</span>
+          </div>
+        </div>
+        <div class="mt-4 grid gap-3 lg:grid-cols-[1fr_1.3fr]">
+          <div class="rounded-xl border border-slate-200 bg-sky-50 p-4">
+            <div id="opsFlow" class="space-y-2 text-xs"></div>
+            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div id="opsProgress" class="h-full w-0 bg-emerald transition-all"></div>
+            </div>
+            <p id="opsStatus" class="mt-2 font-mono text-xs text-slate-600">Ready to stage data</p>
+          </div>
+          <pre id="opsTerminal" class="max-h-52 overflow-auto rounded-xl bg-slate-900 p-4 font-mono text-xs leading-6 text-white">$ console ready</pre>
+        </div>
+        <div id="opsAuditOut" class="mt-3 hidden max-h-36 overflow-auto rounded-xl border border-slate-200 bg-white p-3 font-mono text-[11px] text-slate-600"></div>
+      `;
+      $('#view-home')?.append(ops);
+
+      $('#opsAudit').onclick = async () => {
+        try {
+          const audit = await fetchApi(`/sessions/${State.sid}/audit`);
+          const out = $('#opsAuditOut');
+          out.classList.toggle('hidden');
+          out.textContent = `Integrity: ${audit.verified ? 'VERIFIED' : 'NEEDS REVIEW'}\n` +
+            audit.records.slice(-15).map(r => `${r.event || 'EVENT'}  ${r.ts || ''}  ${r.action || ''}`).join('\n');
+        } catch (_) { }
+      };
+
+      renderOpsFlow('IDLE');
     });
+
+    const STAGES = ['INGESTING', 'PROFILING', 'MAPPING_PROPOSED', 'POLICY_GENERATED', 'EXECUTING', 'QA', 'RESOLVING', 'ARCHIVED'];
+    let opsStarted = 0;
+
+    function renderOpsFlow(state) {
+      const flow = $('#opsFlow');
+      if (!flow) return;
+      const index = Math.max(0, STAGES.indexOf(state));
+      flow.innerHTML = STAGES.map((name, i) => `
+        <div class="flex items-center gap-2 ${i <= index ? 'font-semibold text-slate-900' : 'text-slate-400'}">
+          <span class="h-2 w-2 rounded-full ${i < index ? 'bg-emerald' : (i === index && state !== 'IDLE' ? 'bg-blue-600' : 'bg-slate-300')}"></span>
+          ${name.replace('_', ' ')}
+        </div>
+      `).join('');
+      const prog = $('#opsProgress');
+      if (prog) prog.style.width = `${Math.max(0, index) / (STAGES.length - 1) * 100}%`;
+      const statusEl = $('#opsStatus');
+      if (statusEl) statusEl.textContent = state === 'ABORT_CONFIRMED' ? 'Stopped safely; audit event recorded.' : (state === 'IDLE' ? 'Ready to stage data' : `Processing: ${state.replace('_', ' ')}`);
+    }
+
+    async function updateOpsTelemetry(ov) {
+      renderOpsFlow(ov.state);
+      if (!opsStarted && ov.running) opsStarted = Date.now();
+      if (opsStarted) {
+        const secs = Math.floor((Date.now() - opsStarted) / 1000);
+        const el = $('#opsElapsed');
+        if (el) el.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+      }
+      try {
+        const trace = await fetchApi(`/sessions/${State.sid}/trace`);
+        const term = $('#opsTerminal');
+        if (term) term.textContent = '$ live engine telemetry\n' + (trace.events || []).slice(-12).map(x => `[${x.payload?.event || x.kind}] ${JSON.stringify(x.payload?.detail || {})}`).join('\n');
+      } catch (_) { }
+    }
   </script>
 </body>
 

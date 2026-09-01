@@ -18,7 +18,7 @@ from app.core.channels import validate_and_route
 from app.core.constants import REG
 from app.core.contracts import EvidencePiece, MessageKind
 from app.core.dispatcher import dispatch_tool_call, ToolCall
-from app.engine.fee import compute_fee
+from app.engine.fee import compute_fee, compute_expected_net, compute_tax_component, compute_net_settlement
 
 
 class SemArgs(BaseModel):
@@ -181,7 +181,7 @@ def fee_explains(a: float, rv: float, schedule: Optional[Any], tol: float) -> bo
     if not schedule:
         return False
     raw = abs(a - rv)
-    net = abs((a - compute_fee(a, schedule)) - rv)
+    net = abs(compute_expected_net(a, schedule) - rv)
     return raw > tol and net <= tol
 
 
@@ -231,9 +231,13 @@ def score_pair(
         a, rv = float(l[cfg["left_amount"]]), float(r[cfg["right_amount"]])
         raw_delta = abs(a - rv)
         raw_matched = raw_delta <= tol
-        fee = compute_fee(a, schedule) if schedule else 0.0
-        net_delta = abs((a - fee) - rv)
+        net_expected = compute_expected_net(a, schedule) if schedule else a
+        net_delta = abs(net_expected - rv)
         net_matched = net_delta <= tol
+        # Strict schedules make a missing mandatory deduction an anomaly rather
+        # than accepting a gross match beside net-of-fee matches.
+        if schedule and schedule.params.get("strict_fee_policy", False):
+            raw_matched = raw_matched and abs(net_expected - a) <= tol
         fee_x = fee_explains(a, rv, schedule, tol)
         signed_delta = a - rv
         best = min(raw_delta, net_delta)
@@ -280,4 +284,3 @@ def score_pair(
         evidence.append(EvidencePiece.FEE_MODEL_MATCH)
 
     return value, comps, evidence, signed_delta
-

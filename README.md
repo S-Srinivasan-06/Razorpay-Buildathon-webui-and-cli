@@ -140,33 +140,32 @@ Pre-built demo datasets are provided in `recon_agent/sample_data/`:
 ### 1. `sample_data/payments.csv` (Source A: Internal Ledger)
 ```csv
 order_id,amount,date
-ORD_1,1000.00,2026-03-01
-ORD_2,2000.00,2026-03-01
-ORD_3,3000.00,2026-03-06
-ORD_4,500.00,2026-03-02
-ORD_4,500.00,2026-03-02
-ORD_6,400.00,2026-03-02
-ORD_7,700.00,2026-03-02
-MIS_800,900.00,2026-03-03
+ORD_1001,1000.00,2026-03-01
+ORD_1002,1500.00,2026-03-01
+ORD_1003,2000.00,2026-03-01
+ORD_1004,2500.00,2026-03-01
+ORD_1005,3000.00,2026-03-01
+ORD_1006,3500.00,2026-03-01
+ORD_1007,4000.00,2026-03-01
 ```
 
 ### 2. `sample_data/bank.csv` (Source B: Bank Statement)
 ```csv
 utr,credit,date
-ORD_1,1000.00,2026-03-02
-ORD_2,1952.80,2026-03-02
-ORD_3,3000.00,2026-03-13
-ORD_4,500.00,2026-03-03
-BATCH,1074.04,2026-03-03
-ORD_9,850.00,2026-03-05
-REFUND,-250.00,2026-03-05
+ORD_1001,976.40,2026-03-02
+ORD_1002,1464.60,2026-03-02
+ORD_1003,1952.80,2026-03-02
+ORD_1004,2441.00,2026-03-02
+ORD_1005,2929.20,2026-03-02
+ORD_1006,3417.40,2026-03-02
+ORD_1007,3905.60,2026-03-02
 ```
 
 ### 3. `sample_data/ground_truth.jsonl` (Benchmark Mapping)
 ```jsonl
-{"l_rid": 1, "r_rid": 1, "class": "exact"}
+{"l_rid": 1, "r_rid": 1, "class": "fee_deduction"}
 {"l_rid": 2, "r_rid": 2, "class": "fee_deduction"}
-{"l_rid": 4, "r_rid": 4, "class": "duplicate_first"}
+{"l_rid": 3, "r_rid": 3, "class": "fee_deduction"}
 ```
 
 ---

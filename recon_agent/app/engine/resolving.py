@@ -72,33 +72,20 @@ def decide_action(
     conf: float,
     evidence_count: int,
     category: Optional[HypothesisCategory] = None,
+    ctx: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Determine the automated action policy for an exception item.
+    """Determine the automated action policy for an exception item based on strict governance gates.
     
     Actions:
       - 'auto_resolve': Legitimate business variation (e.g. gateway fees, timing drift)
-                        that should be approved automatically without stopping the run.
-      - 'request_confirmation': Legitimate discrepancy or anomaly requiring operator review.
+                        that meets governance confidence (>= 0.85) and evidence (>= 2 pieces).
+      - 'request_confirmation': Discrepancy or anomaly requiring operator review.
       - 'mark_pending': Low-confidence unclassified discrepancy awaiting manual investigation.
-      
-    Args:
-        conf: Computed exception confidence score.
-        evidence_count: Count of supporting evidence pieces.
-        category: Optional classified HypothesisCategory.
-        
-    Returns:
-        Action string ('auto_resolve', 'request_confirmation', or 'mark_pending').
     """
-    # Non-error business variations that should be automatically approved
-    if category in (
-        HypothesisCategory.TEMPORAL_DRIFT,
-        HypothesisCategory.SPLIT,
-        HypothesisCategory.FEE_DEDUCTION,
-        HypothesisCategory.COUNTERPARTY_MISMATCH,
-    ):
-        return "auto_resolve"
+    min_conf = float(REG["exception_auto_resolve_confidence"])
+    min_ev = int(REG["exception_auto_resolve_evidence_min"])
 
-    # Strict errors / anomalies that require human escalation
+    # Anomaly categories that ALWAYS require operator confirmation
     if category in (
         HypothesisCategory.DUPLICATE,
         HypothesisCategory.REFUND_OFFSET,
@@ -106,13 +93,26 @@ def decide_action(
     ):
         return "request_confirmation"
 
-    # Threshold-based fallback policy evaluation
-    if (
-        conf >= REG["exception_auto_resolve_confidence"]
-        and evidence_count >= REG["exception_auto_resolve_evidence_min"]
+    # Ambiguous splits ALWAYS require operator confirmation
+    if category == HypothesisCategory.SPLIT and ctx and ctx.get("ambiguous_split"):
+        return "request_confirmation"
+
+    # Business variations qualify for auto_resolve ONLY if they satisfy governance thresholds
+    if category in (
+        HypothesisCategory.TEMPORAL_DRIFT,
+        HypothesisCategory.SPLIT,
+        HypothesisCategory.FEE_DEDUCTION,
+        HypothesisCategory.TAX_WITHHOLDING,
+        HypothesisCategory.COUNTERPARTY_MISMATCH,
     ):
+        if conf >= min_conf and evidence_count >= min_ev:
+            return "auto_resolve"
+        return "request_confirmation"
+
+    # Threshold-based fallback policy evaluation
+    if conf >= min_conf and evidence_count >= min_ev:
         return "auto_resolve"
-    if 0.40 <= conf < 0.85:
+    if conf >= 0.40:
         return "request_confirmation"
     return "mark_pending"
 
@@ -129,6 +129,7 @@ def generate_explanation(
         ctx: Context dictionary with candidate links, batch refs, and duplicate IDs.
         row_data: Optional raw row attributes from the source file.
         
+        
     Returns:
         Formatted diagnostic explanation string.
     """
@@ -142,6 +143,11 @@ def generate_explanation(
             "settlement deferred by bank holiday/clearing window."
         )
     elif cat == HypothesisCategory.SPLIT:
+        if ctx.get("ambiguous_split"):
+            return (
+                f"Requires Review [Ambiguous Match]: Multiple valid combinations of order legs sum exactly to the "
+                f"batch deposit '{ctx.get('split_batch_ref', 'N/A')}'. Operator must manually confirm the correct set."
+            )
         if side == "L":
             batch_ref = ctx.get("split_batch_ref", "bank batch settlement")
             return (
@@ -155,6 +161,10 @@ def generate_explanation(
         )
     elif cat == HypothesisCategory.FEE_DEDUCTION:
         return "Approved [No Error]: Net bank deposit variance matches standard payment gateway fee schedule."
+    elif cat == HypothesisCategory.TAX_WITHHOLDING:
+        return "Approved [No Error]: Variance matched standard tax withholding deduction (e.g. 1.0% TDS)."
+    elif cat == HypothesisCategory.CURRENCY_CONVERSION:
+        return "Approved [No Error]: Variance explained by expected FX/currency conversion spread."
     elif cat == HypothesisCategory.DUPLICATE:
         return f"Error in Source A (Ledger): Duplicate order reference '{ref}' recorded multiple times in payments ledger."
     elif cat == HypothesisCategory.REFUND_OFFSET:

@@ -40,6 +40,7 @@ from app.core.contracts import (
 from app.core.dispatcher import breaker_open, dispatch_tool_call, ToolCall
 from app.core.states import State, StateMachine
 from app.engine import match, qa, report, resolving
+from app.engine.fee import compute_deduction_breakdown, compute_expected_net, compute_fee, compute_tax_component, compute_net_settlement
 from app.engine.match import _sim, fee_explains
 
 
@@ -131,6 +132,29 @@ class Pipeline:
         self.exec_res: Optional[ExecutionResult] = None
         self.final: Optional[FinalReport] = None
         self.queue: List[Dict[str, Any]] = []
+
+    def set_policy(
+        self,
+        fee_rate: float = 0.02,
+        gst_rate: float = 0.18,
+        tolerance: float = 0.01,
+        window_days: int = 3,
+        flat_fee: float = 0.0,
+    ) -> None:
+        """Configure dynamic fee schedule, tax rate, and tolerance for reconciliation."""
+        import datetime
+        from app.core.contracts import FeeSchedule
+        self.schedule = FeeSchedule(
+            provider="custom_policy",
+            schedule_id=f"sched_{self.sid}",
+            version="1.0",
+            effective_from=datetime.date.today(),
+            model_type="flat_rate",
+            params={"rate": float(fee_rate), "flat": float(flat_fee)},
+            gst_rate=float(gst_rate),
+        )
+        self.cfg["tolerance"] = float(tolerance)
+        self.cfg["window_days"] = int(window_days)
 
     # ---------- Event bus helper methods ----------
     def _chat(self, text: str) -> None:
@@ -612,7 +636,21 @@ class Pipeline:
                 a = float(l[self.cfg["left_amount"]])
                 rv = float(cands[0][self.cfg["right_amount"]])
                 ctx["fee_match"] = fee_explains(a, rv, self.schedule, tol)
-                ctx["partial"] = rv < a and not ctx["fee_match"]
+                
+                # Composite policy: fee, GST, and configured TDS must be
+                # evaluated together; no independent deduction simulations.
+                deductions = compute_deduction_breakdown(a, self.schedule) if self.schedule else {"expected_net": a, "tds": 0}
+                ctx["tax_match"] = deductions["tds"] > 0 and abs(deductions["expected_net"] - rv) <= tol
+                ctx["fee_match"] = abs(deductions["expected_net"] - rv) <= tol
+                
+                # Currency conversion / FX rate match (e.g. USD to INR conversion corridor)
+                if a > 0 and rv > 0:
+                    ratio = rv / a
+                    fx_min = self.schedule.fx_corridor_min if self.schedule else 0.010
+                    fx_max = self.schedule.fx_corridor_max if self.schedule else 0.015
+                    ctx["fx_match"] = (1.0 / fx_max <= ratio <= 1.0 / fx_min) or (fx_min <= ratio <= fx_max)
+
+                ctx["partial"] = rv < a and not ctx["fee_match"] and not ctx["tax_match"]
                 if self.cfg.get("left_date"):
                     dd = match._busdays(
                         match._d(l[self.cfg["left_date"]]),
@@ -653,7 +691,7 @@ class Pipeline:
             unmatched_l = [x for x in rows_l if x["_rid"] not in used_l]
             for x in unmatched_l:
                 a = float(x.get(self.cfg["left_amount"], 0))
-                nets.append((x["_rid"], a - (match.compute_fee(a, self.schedule) if self.schedule else 0)))
+                nets.append((x["_rid"], compute_expected_net(a, self.schedule) if self.schedule else a))
             # Bounded pool search for combinatorial split subsets
             valid_nets = [x for x in nets if 0 < x[1] <= rv + tol]
             pool = valid_nets[:40]
@@ -697,8 +735,10 @@ class Pipeline:
         for x in rows_l:
             if x["_rid"] not in used_l and x["_rid"] not in temporal_or_direct_l:
                 a = float(x.get(self.cfg["left_amount"], 0))
-                net = a - (match.compute_fee(a, self.schedule) if self.schedule else 0)
+                net = compute_expected_net(a, self.schedule) if self.schedule else a
                 left_nets.append((x["_rid"], net))
+
+        ambiguous_splits: Set[int] = set()
 
         for rec, r_cand, ev, sd in unmatched_r_items:
             r = next(x for x in rows_r if x["_rid"] == rec.rid)
@@ -707,18 +747,22 @@ class Pipeline:
                 continue
 
             avail = [x for x in left_nets if x[0] not in allocated_split_l and 0 < x[1] <= rv + tol]
-            found_combo = None
+            matching_combos = []
             for k in (2, 3):
                 for combo in itertools.combinations(avail, k):
                     if abs(sum(v for _, v in combo) - rv) <= tol:
-                        found_combo = [i for i, _ in combo]
-                        break
-                if found_combo:
+                        matching_combos.append([i for i, _ in combo])
+                        if len(matching_combos) >= 2:
+                            break
+                if len(matching_combos) >= 2:
                     break
 
-            if found_combo:
+            if matching_combos:
+                found_combo = matching_combos[0]
                 right_splits[rec.rid] = found_combo
                 allocated_split_l.update(found_combo)
+                if len(matching_combos) > 1:
+                    ambiguous_splits.add(rec.rid)
 
         # 2. Second pass: construct exception queue with accurate classification
         self.queue = []
@@ -737,6 +781,9 @@ class Pipeline:
                     rec.reason = qa.H.SPLIT
                     ctx["split_batch_ref"] = left_split_map[rec.rid]
                     ctx["split_targets"] = [rec.rid]
+                    r_rid = next((k for k,v in right_splits.items() if rec.rid in v), None)
+                    if r_rid in ambiguous_splits:
+                        ctx["ambiguous_split"] = True
                     ev = [EvidencePiece.FEE_MODEL_MATCH, EvidencePiece.KEY_MATCH]
                 else:
                     rec.reason = qa.classify(rec, ctx)
@@ -747,6 +794,8 @@ class Pipeline:
                 ctx = self._ctx("R", None, r, rows_l, rows_r, sd, used_l=used_l)
                 if rec.rid in right_splits:
                     ctx["split_targets"] = right_splits[rec.rid]
+                    if rec.rid in ambiguous_splits:
+                        ctx["ambiguous_split"] = True
                     rec.reason = qa.H.SPLIT
                     ev = [EvidencePiece.FEE_MODEL_MATCH, EvidencePiece.KEY_MATCH]
                 else:
@@ -761,7 +810,7 @@ class Pipeline:
         for item in self.queue:
             rec, pieces, ctx = item["rec"], item["pieces"], item.get("ctx", {})
             conf = resolving.exception_confidence(len(pieces), rec.reason, None)
-            action = resolving.decide_action(conf, len(pieces), rec.reason)
+            action = resolving.decide_action(conf, len(pieces), rec.reason, ctx)
             explanation = resolving.generate_explanation(rec, ctx)
             rec.explanation = explanation
             item["action"], item["conf"], item["explanation"] = action, conf, explanation
@@ -873,4 +922,3 @@ class Pipeline:
             )
 
         return self.final
-

@@ -149,6 +149,9 @@ class FeeSchedule(BaseModel):
     params: Dict[str, Any]
     gst_rate: float = 0.0
     currency: str = "INR"
+    tds_rate: float = 0.01
+    fx_corridor_min: float = 0.010
+    fx_corridor_max: float = 0.015
 
 
 class ConfidenceScore(BaseModel):

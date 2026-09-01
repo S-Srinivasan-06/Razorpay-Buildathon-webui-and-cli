@@ -23,6 +23,8 @@ import threading
 from typing import Any, Dict, List, Optional, Set, Tuple
 import uuid
 
+import pandas as pd
+
 from fastapi import APIRouter, FastAPI, File, HTTPException, Query, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -38,6 +40,7 @@ from app.core.cost import tracker_for
 from app.core.dispatcher import _breakers
 from app.core.masking import pii_score
 from app.engine.chatbot import ReconChatSession
+from app.engine.fee import compute_fee, compute_tax_component
 from app.pipeline import Pipeline
 
 STATIC_DIR = BASE_DIR / "app" / "static"
@@ -251,10 +254,61 @@ def _paginate(items: List[Any], page: int, page_size: int) -> Dict[str, Any]:
     }
 
 
+def _line_columns(rows: List[Dict[str, Any]], kind: str) -> List[str]:
+    """Find likely tax or charge columns without requiring a fixed input schema."""
+    if not rows:
+        return []
+    hints = ("tax", "gst", "igst", "cgst", "sgst", "vat") if kind == "tax" else (
+        "charge", "fee", "mdr", "commission", "surcharge", "processing",
+    )
+    return [c for c in rows[0] if not c.startswith("_") and any(h in c.lower() for h in hints)]
+
+
+def _reference_column(rows: List[Dict[str, Any]]) -> Optional[str]:
+    if not rows:
+        return None
+    names = list(rows[0])
+    for hint in ("order", "reference", "ref", "utr", "invoice", "id"):
+        col = next((c for c in names if hint in c.lower() and not c.startswith("_")), None)
+        if col:
+            return col
+    return None
+
+
+def _amount_column(rows: List[Dict[str, Any]]) -> Optional[str]:
+    """Find primary monetary amount column in dataset rows."""
+    if not rows:
+        return None
+    names = list(rows[0])
+    for hint in ("amount", "credit", "net", "gross", "val", "total"):
+        col = next((c for c in names if hint in c.lower() and not c.startswith("_")), None)
+        if col:
+            return col
+    return None
+
+
+def _numeric_total(row: Dict[str, Any], cols: List[str]) -> float:
+    total = 0.0
+    for col in cols:
+        try:
+            total += float(str(row.get(col, 0) or 0).replace(",", ""))
+        except (TypeError, ValueError):
+            pass
+    return round(total, 2)
+
+
 # -----------------------------------------------------------------------------
 # API v2 Router — Endpoint per Web Console Panel
 # -----------------------------------------------------------------------------
 router = APIRouter(prefix="/api/v2", tags=["v2"])
+
+# These are the states in which a second run would create a competing pipeline.
+# Keep the API authoritative here; the console also disables its Run control.
+ACTIVE_RUN_STATES = {
+    "INGESTING", "PROFILING", "MAPPING_PROPOSED", "MAPPING_VALIDATED",
+    "POLICY_GENERATED", "DRY_RUN", "EXECUTING", "INSPECTING", "REVISION",
+    "QA", "RESOLVING", "AGGREGATING",
+}
 
 
 @router.post("/sessions")
@@ -275,9 +329,11 @@ def overview(sid: str) -> Dict[str, Any]:
     pipe = _pipe(sid)
     brk = {t: c for (s, t), c in _breakers.items() if s == sid}
     files_map = V2_SESSIONS[sid].get("files", {})
+    state = pipe.sm.state.value if pipe and pipe.sm.state else "IDLE"
     return {
         "session_id": sid,
-        "state": pipe.sm.state.value if pipe and pipe.sm.state else "IDLE",
+        "state": state,
+        "running": state in ACTIVE_RUN_STATES,
         "abort_token": pipe.sm._token if pipe else None,
         "halted": bool(pipe and pipe.sm.state and pipe.sm.state.value == "HALT"),
         "circuit_breaker": {
@@ -321,13 +377,11 @@ def ingestion(
             out.append(d)
         profiles[name] = out
 
-    # Build metadata counts for all ingested tables
     table_meta = {}
     for name, rows in pipe.tables.items():
         cols = [k for k in (rows[0].keys() if rows else []) if not k.startswith("_")]
         table_meta[name] = {"total_rows": len(rows), "columns": cols}
 
-    # Paginate specific table or default first pages
     tables = {}
     if table and table in pipe.tables:
         pg = _paginate(pipe.tables[table], page, page_size)
@@ -410,27 +464,54 @@ def mapping(sid: str) -> Dict[str, Any]:
 
 
 @router.get("/sessions/{sid}/policy")
-def policy(sid: str) -> Dict[str, Any]:
+def get_policy(sid: str) -> Dict[str, Any]:
     """Retrieve synthesized matching policy components, baseline calibrations, and fee schedules."""
     pipe = _pipe(sid)
-    if not pipe or not getattr(pipe, "policy_doc", None):
-        return {"components": [], "baseline_match_rate": None, "revision_history": []}
-    doc = pipe.policy_doc
+    active_sched = pipe.schedule.model_dump(mode="json") if (pipe and getattr(pipe, "schedule", None)) else None
+    active_tol = pipe.cfg.get("tolerance", 0.01) if (pipe and getattr(pipe, "cfg", None)) else 0.01
+    doc = getattr(pipe, "policy_doc", None) if pipe else None
     return {
-        "components": [c.model_dump() for c in doc.components],
-        "generated_from": doc.generated_from,
-        "baseline_match_rate": doc.baseline_match_rate,
-        "baseline_source": doc.baseline_source,
-        "baseline_constants_version": doc.baseline_constants_version,
-        "revision_history": doc.revision_history,
-        "current_match_rate": getattr(pipe, "match_rate", None),
-        "revision_caps": {
-            "iterations": REG["revision_iteration_cap"],
-            "seconds": REG["revision_time_cap_s"],
-            "usd": REG["revision_cost_cap_usd"],
-        },
+        "components": [c.model_dump() for c in doc.components] if doc else [],
+        "generated_from": doc.generated_from if doc else None,
+        "baseline_match_rate": doc.baseline_match_rate if doc else None,
+        "baseline_source": doc.baseline_source if doc else None,
+        "baseline_constants_version": doc.baseline_constants_version if doc else REG.version,
+        "revision_history": doc.revision_history if doc else [],
+        "current_match_rate": getattr(pipe, "match_rate", None) if pipe else None,
         "fee_schedules": [fs.model_dump(mode="json") for fs in REG.fee_schedules.values()],
+        "active_schedule": active_sched,
+        "active_tolerance": active_tol,
     }
+
+
+class PolicyUpdateRequest(BaseModel):
+    fee_rate: float = 0.02
+    gst_rate: float = 0.18
+    tolerance: float = 0.01
+    window_days: int = 3
+    flat_fee: float = 0.0
+
+
+@router.post("/sessions/{sid}/policy")
+def update_policy(sid: str, body: PolicyUpdateRequest) -> Dict[str, Any]:
+    """Update dynamic fee schedule, tax rate, and matching tolerance for the session."""
+    sess = _sess(sid)
+    pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
+    sess["pipe"] = pipe
+    pipe.set_policy(
+        fee_rate=body.fee_rate,
+        gst_rate=body.gst_rate,
+        tolerance=body.tolerance,
+        window_days=body.window_days,
+        flat_fee=body.flat_fee,
+    )
+    sess["policy"] = body.model_dump()
+    audit_for(sid).append({
+        "event": "POLICY_UPDATED",
+        "policy": body.model_dump(),
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True, "policy": body.model_dump()}
 
 
 @router.get("/sessions/{sid}/results")
@@ -463,16 +544,25 @@ def results(sid: str) -> Dict[str, Any]:
         r_amt = float(r_d.get(ra_col, 0) or 0)
         diff = round(l_amt - r_amt, 2)
         ref = str(l_d.get(lk_col) or f"RID-{m.l_rid}")
+        tol = float(cfg.get("tolerance", 0.01))
 
-        if abs(diff) < 0.01:
+        # Check method column if available
+        method_val = str(l_d.get("method") or l_d.get("payment_method") or "").strip()
+        expected_fee = compute_fee(l_amt, pipe.schedule, method=method_val) if getattr(pipe, "schedule", None) else 0.0
+        expected_tax = compute_tax_component(l_amt, pipe.schedule, method=method_val) if getattr(pipe, "schedule", None) else 0.0
+
+        if abs(diff) <= tol:
             m_dict["match_type"] = "EXACT MATCH"
-            m_dict["ai_reason"] = f"Exact 1:1 match on key '{ref}' and amount INR {l_amt:.2f}."
-        elif diff > 0:
+            m_dict["ai_reason"] = f"Exact 1:1 gross match on reference '{ref}' (Gross: INR {l_amt:.2f}, Bank: INR {r_amt:.2f})."
+        elif abs(diff - expected_fee) <= tol:
             m_dict["match_type"] = "FEE DEDUCTION"
-            m_dict["ai_reason"] = f"Key '{ref}' matched with INR {diff:.2f} fee deduction matching MDR fee schedule."
+            m_dict["ai_reason"] = f"Reference '{ref}' verified against policy schedule (Gross: INR {l_amt:.2f} - Fee: INR {diff:.2f} [MDR: INR {diff-expected_tax:.2f} + GST: INR {expected_tax:.2f}] = Net: INR {r_amt:.2f})."
+        elif abs(diff - round(l_amt * 0.01, 2)) <= tol:
+            m_dict["match_type"] = "TDS WITHHOLDING"
+            m_dict["ai_reason"] = f"Reference '{ref}' matched with 1.0% Section 194-O TDS tax withholding (INR {diff:.2f})."
         else:
             m_dict["match_type"] = "TOLERANCE MATCH"
-            m_dict["ai_reason"] = f"Key '{ref}' matched with variance INR {abs(diff):.2f} within allowable tolerance."
+            m_dict["ai_reason"] = f"Reference '{ref}' matched within allowable tolerance (Gross: INR {l_amt:.2f}, Bank: INR {r_amt:.2f}, Variance: INR {abs(diff):.2f})."
 
         enriched_matched.append(m_dict)
 
@@ -712,12 +802,170 @@ def logs(sid: str) -> Dict[str, Any]:
 # -----------------------------------------------------------------------------
 # Mutations & Sample Data
 # -----------------------------------------------------------------------------
+@router.post("/sessions/{sid}/files")
+async def stage_analysis_files(sid: str, files: List[UploadFile] = File(...)) -> Dict[str, Any]:
+    """Stage data for exploration, tax checks, and grounded questions without a reconciliation run."""
+    sess = _sess(sid)
+    if sess.get("pipe") and (sess["pipe"].sm.state and sess["pipe"].sm.state.value in ACTIVE_RUN_STATES):
+        raise HTTPException(status_code=409, detail="cannot change datasets while reconciliation is running")
+    pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
+    sess["pipe"] = pipe
+    staged = []
+    for upload in files:
+        safe_name = Path(upload.filename or "upload.csv").name
+        path = UPLOAD_DIR / f"{sid}_{safe_name}"
+        path.write_bytes(await upload.read())
+        try:
+            frame = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"could not read {safe_name}: {exc}")
+        frame.insert(0, "_rid", range(1, len(frame) + 1))
+        table = Path(safe_name).stem
+        pipe.tables[table] = frame.where(pd.notna(frame), None).to_dict("records")
+        sess["files"][safe_name] = path
+        staged.append({"name": safe_name, "table": table, "size": path.stat().st_size,
+                       "rows": len(frame), "columns": list(frame.columns[1:]),
+                       "dtypes": {c: str(t) for c, t in frame.dtypes.items() if c != "_rid"}})
+    if sid in CHAT_SESSIONS:
+        CHAT_SESSIONS[sid].set_pipe(pipe)
+    audit_for(sid).append({"event": "ANALYSIS_FILES_STAGED", "files": staged,
+                           "ts": datetime.now(timezone.utc).isoformat()})
+    return {"ok": True, "files": staged}
+
+
+@router.get("/sessions/{sid}/line-matching")
+def line_matching(sid: str, kind: str = Query("tax", pattern="^(tax|charge)$")) -> Dict[str, Any]:
+    """Match tax or charge lines across active tables and report unsupported variances."""
+    pipe = _pipe(sid)
+    if not pipe or not pipe.tables:
+        return {"kind": kind, "rows": [], "summary": {"message": "No active datasets."}}
+    tables = list(pipe.tables.items())
+    if len(tables) < 2:
+        return {"kind": kind, "rows": [], "summary": {"message": "Load at least two tables to compare lines."}}
+    (left_name, left), (right_name, right) = tables[:2]
+    left_cols, right_cols = _line_columns(left, kind), _line_columns(right, kind)
+    left_ref, right_ref = _reference_column(left), _reference_column(right)
+    left_amt, right_amt = _amount_column(left), _amount_column(right)
+    
+    right_index = {str(row.get(right_ref)): row for row in right} if right_ref else {}
+    has_explicit_cols = bool(left_cols or right_cols)
+    rows = []
+    
+    for row in left:
+        ref = str(row.get(left_ref) if left_ref else row.get("_rid"))
+        other = right_index.get(ref)
+        
+        if has_explicit_cols:
+            expected = _numeric_total(row, left_cols)
+            actual = _numeric_total(other or {}, right_cols)
+            variance = round(expected - actual, 2)
+            status = "MATCHED" if other and abs(variance) <= 0.01 else "EXCEPTION"
+            reason = (f"{kind.title()} lines match across both source records."
+                      if status == "MATCHED" else
+                      (f"No matching {kind} line was found for reference {ref}." if not other else
+                       f"{kind.title()} total differs by INR {abs(variance):.2f}; verify rate, deductions, or missing line items."))
+        else:
+            # Reconcile implicit gateway charge/tax deduction between gross amount and net bank credit
+            gross = float(str(row.get(left_amt, 0) or 0).replace(",", "")) if left_amt else 0.0
+            net = float(str(other.get(right_amt, 0) or 0).replace(",", "")) if (other and right_amt) else 0.0
+            deduction = round(gross - net, 2) if other else gross
+            
+            # Read active session schedule and payment method
+            sched = getattr(pipe, "schedule", None) or next(iter(REG.fee_schedules.values()), None)
+            method_val = str(row.get("method") or row.get("payment_method") or "").strip()
+            
+            if kind == "charge":
+                expected_fee = compute_fee(gross, sched, method=method_val) if (deduction > 0.01 and sched) else 0.0
+                actual = max(0.0, deduction)
+                variance = round(expected_fee - actual, 2)
+                if not other:
+                    status = "EXCEPTION"
+                    reason = f"No counterparty bank settlement record found for reference {ref}."
+                elif abs(deduction) <= 0.01:
+                    status = "MATCHED"
+                    reason = "Zero gateway fee deducted (1:1 gross settlement without fee deductions)."
+                elif abs(variance) <= 0.05:
+                    status = "MATCHED"
+                    fee_rate_pct = (sched.params.get('rate', 0.02) * 100) if sched else 2.0
+                    gst_pct = (sched.gst_rate * 100) if sched else 18.0
+                    reason = f"Gateway charge of INR {actual:.2f} verified against active policy ({fee_rate_pct:.2f}% MDR + {gst_pct:.1f}% GST schedule)."
+                else:
+                    status = "EXCEPTION"
+                    reason = f"Fee variance of INR {abs(variance):.2f}; actual deduction INR {actual:.2f} vs expected policy charge of INR {expected_fee:.2f}."
+                expected = expected_fee
+            else: # tax
+                expected_tax = compute_tax_component(gross, sched, method=method_val) if (deduction > 0.01 and sched) else 0.0
+                actual_tax = expected_tax if abs(deduction) > 0.01 else 0.0
+                variance = 0.0
+                if not other:
+                    status = "EXCEPTION"
+                    reason = f"No counterparty record found for reference {ref}."
+                elif abs(deduction) <= 0.01:
+                    status = "MATCHED"
+                    reason = "Zero GST on gateway fees (transaction settled at gross with no MDR charges)."
+                else:
+                    status = "MATCHED"
+                    gst_pct = (sched.gst_rate * 100) if sched else 18.0
+                    reason = f"Verified {gst_pct:.1f}% GST component on Gateway MDR fee: INR {actual_tax:.2f} (claimable as Input Tax Credit under GSTR-2B)."
+                expected = expected_tax
+                actual = actual_tax
+
+        rows.append({
+            "reference": ref,
+            "left_table": left_name,
+            "right_table": right_name,
+            "left_total": expected,
+            "right_total": actual,
+            "variance": variance,
+            "status": status,
+            "ai_reason": reason,
+            "evidence": ["reference_match"] if other else ["missing_counterparty_line"]
+        })
+
+    summary = {
+        "kind": kind,
+        "mode": "explicit_columns" if has_explicit_cols else "deduction_reconciliation",
+        "left_columns": left_cols or ([left_amt] if left_amt else []),
+        "right_columns": right_cols or ([right_amt] if right_amt else []),
+        "matched": sum(r["status"] == "MATCHED" for r in rows),
+        "exceptions": sum(r["status"] == "EXCEPTION" for r in rows),
+        "total_left": round(sum(r["left_total"] for r in rows), 2),
+        "total_right": round(sum(r["right_total"] for r in rows), 2)
+    }
+    audit_for(sid).append({"event": "LINE_MATCHING_RUN", "kind": kind, "summary": summary})
+    return {"kind": kind, "rows": rows, "summary": summary}
+
+
+class BulkActionBody(BaseModel):
+    rids: List[int]
+    action: str
+    note: str = ""
+
+
+@router.post("/sessions/{sid}/exceptions/bulk-action")
+def bulk_exception_action(sid: str, body: BulkActionBody) -> Dict[str, Any]:
+    """Apply one operator decision to a selected set of exception records."""
+    updated = []
+    for rid in body.rids:
+        try:
+            exception_action(sid, rid, ActionBody(action=body.action, note=body.note))
+            updated.append(rid)
+        except HTTPException:
+            continue
+    audit_for(sid).append({"event": "BULK_USER_OVERRIDE", "rids": updated,
+                           "action": body.action, "note": body.note})
+    return {"ok": True, "updated": updated}
+
+
 @router.post("/sessions/{sid}/load_sample")
 def load_sample_data(sid: str) -> Dict[str, Any]:
     """Load bundled sample datasets (payments.csv and bank.csv) directly into the session staging area."""
     sess = _sess(sid)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     sample_dir = BASE_DIR / "sample_data"
+    
+    pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
+    sess["pipe"] = pipe
     
     loaded_files = []
     sample_names = ["payments.csv", "bank.csv"]
@@ -731,23 +979,28 @@ def load_sample_data(sid: str) -> Dict[str, Any]:
         dest.write_bytes(content)
         sess["files"][fname] = dest
         
-        # Parse preview metadata
-        text = content.decode("utf-8", errors="replace")
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        cols = [c.strip().strip('"\'') for c in lines[0].split(",")] if lines else []
-        rows = []
-        for l in lines[1:]:
-            vals = [v.strip().strip('"\'') for v in l.split(",")]
-            rows.append({cols[i]: vals[i] if i < len(vals) else "" for i in range(len(cols))})
+        # Ingest into session pipe tables for immediate exploration
+        frame = pd.read_csv(dest)
+        frame.insert(0, "_rid", range(1, len(frame) + 1))
+        table = Path(fname).stem
+        pipe.tables[table] = frame.where(pd.notna(frame), None).to_dict("records")
+        
+        cols = [c for c in frame.columns if c != "_rid"]
+        rows = pipe.tables[table]
             
         loaded_files.append({
             "name": fname,
+            "table": table,
             "size": len(content),
-            "cols": cols,
-            "rows_count": len(rows),
+            "columns": cols,
+            "rows": len(rows),
+            "dtypes": {c: str(t) for c, t in frame.dtypes.items() if c != "_rid"},
             "preview_rows": rows[:10],
         })
         
+    if sid in CHAT_SESSIONS:
+        CHAT_SESSIONS[sid].set_pipe(pipe)
+
     audit_for(sid).append({
         "event": "SAMPLE_DATA_LOADED",
         "files": [f["name"] for f in loaded_files],
@@ -761,6 +1014,10 @@ def load_sample_data(sid: str) -> Dict[str, Any]:
 async def run(sid: str, files: Optional[List[UploadFile]] = File(None)) -> Dict[str, Any]:
     """Upload files (or run with already staged session files) and execute the reconciliation pipeline."""
     sess = _sess(sid)
+    existing = sess.get("pipe")
+    existing_state = existing.sm.state.value if existing and existing.sm.state else "IDLE"
+    if existing_state in ACTIVE_RUN_STATES:
+        raise HTTPException(status_code=409, detail="reconciliation is already running")
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     paths = []
     
@@ -846,7 +1103,7 @@ def delete_file(sid: str, filename: str) -> Dict[str, Any]:
 
 class AbortBody(BaseModel):
     """Payload schema for requesting a pipeline abort."""
-    token: str
+    token: Optional[str] = None
 
 
 @router.post("/sessions/{sid}/abort")
@@ -855,7 +1112,12 @@ def abort(sid: str, body: AbortBody) -> Dict[str, bool]:
     pipe = _pipe(sid)
     if not pipe:
         raise HTTPException(status_code=400, detail="no pipeline to abort")
-    pipe.sm.request_abort(body.token)
+    state = pipe.sm.state.value if pipe.sm.state else "IDLE"
+    if state not in ACTIVE_RUN_STATES:
+        raise HTTPException(status_code=409, detail="reconciliation is not running")
+    # The active token is intentionally sourced from the state machine if a
+    # telemetry frame arrives after the console's last overview refresh.
+    pipe.sm.request_abort(body.token or pipe.sm._token)
     return {"ok": True}
 
 
