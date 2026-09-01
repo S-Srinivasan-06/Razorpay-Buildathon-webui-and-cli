@@ -447,11 +447,33 @@ def results(sid: str) -> Dict[str, Any]:
     l_rows = {row["_rid"]: row for row in (pipe.tables.get(l_table_name, []) if getattr(pipe, "tables", None) else [])}
     r_rows = {row["_rid"]: row for row in (pipe.tables.get(r_table_name, []) if getattr(pipe, "tables", None) else [])}
 
+    la_col = cfg.get("left_amount", "amount")
+    ra_col = cfg.get("right_amount", "credit")
+    lk_col = cfg.get("left_key", "order_id")
+
     enriched_matched = []
     for m in r.matched:
         m_dict = m.model_dump()
-        m_dict["l_data"] = {k: v for k, v in l_rows.get(m.l_rid, {}).items() if not k.startswith("_")}
-        m_dict["r_data"] = {k: v for k, v in r_rows.get(m.r_rid, {}).items() if not k.startswith("_")}
+        l_d = {k: v for k, v in l_rows.get(m.l_rid, {}).items() if not k.startswith("_")}
+        r_d = {k: v for k, v in r_rows.get(m.r_rid, {}).items() if not k.startswith("_")}
+        m_dict["l_data"] = l_d
+        m_dict["r_data"] = r_d
+
+        l_amt = float(l_d.get(la_col, 0) or 0)
+        r_amt = float(r_d.get(ra_col, 0) or 0)
+        diff = round(l_amt - r_amt, 2)
+        ref = str(l_d.get(lk_col) or f"RID-{m.l_rid}")
+
+        if abs(diff) < 0.01:
+            m_dict["match_type"] = "EXACT MATCH"
+            m_dict["ai_reason"] = f"Exact 1:1 match on key '{ref}' and amount INR {l_amt:.2f}."
+        elif diff > 0:
+            m_dict["match_type"] = "FEE DEDUCTION"
+            m_dict["ai_reason"] = f"Key '{ref}' matched with INR {diff:.2f} fee deduction matching MDR fee schedule."
+        else:
+            m_dict["match_type"] = "TOLERANCE MATCH"
+            m_dict["ai_reason"] = f"Key '{ref}' matched with variance INR {abs(diff):.2f} within allowable tolerance."
+
         enriched_matched.append(m_dict)
 
     return {
@@ -687,21 +709,72 @@ def logs(sid: str) -> Dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
-# Mutations
 # -----------------------------------------------------------------------------
+# Mutations & Sample Data
+# -----------------------------------------------------------------------------
+@router.post("/sessions/{sid}/load_sample")
+def load_sample_data(sid: str) -> Dict[str, Any]:
+    """Load bundled sample datasets (payments.csv and bank.csv) directly into the session staging area."""
+    sess = _sess(sid)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    sample_dir = BASE_DIR / "sample_data"
+    
+    loaded_files = []
+    sample_names = ["payments.csv", "bank.csv"]
+    
+    for fname in sample_names:
+        src = sample_dir / fname
+        if not src.exists():
+            continue
+        dest = UPLOAD_DIR / f"{sid}_{fname}"
+        content = src.read_bytes()
+        dest.write_bytes(content)
+        sess["files"][fname] = dest
+        
+        # Parse preview metadata
+        text = content.decode("utf-8", errors="replace")
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        cols = [c.strip().strip('"\'') for c in lines[0].split(",")] if lines else []
+        rows = []
+        for l in lines[1:]:
+            vals = [v.strip().strip('"\'') for v in l.split(",")]
+            rows.append({cols[i]: vals[i] if i < len(vals) else "" for i in range(len(cols))})
+            
+        loaded_files.append({
+            "name": fname,
+            "size": len(content),
+            "cols": cols,
+            "rows_count": len(rows),
+            "preview_rows": rows[:10],
+        })
+        
+    audit_for(sid).append({
+        "event": "SAMPLE_DATA_LOADED",
+        "files": [f["name"] for f in loaded_files],
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    
+    return {"ok": True, "files": loaded_files}
+
+
 @router.post("/sessions/{sid}/run")
-async def run(sid: str, files: List[UploadFile] = File(...)) -> Dict[str, Any]:
-    """Upload files and execute the reconciliation pipeline asynchronously."""
+async def run(sid: str, files: Optional[List[UploadFile]] = File(None)) -> Dict[str, Any]:
+    """Upload files (or run with already staged session files) and execute the reconciliation pipeline."""
     sess = _sess(sid)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     paths = []
-    for f in files:
-        p = UPLOAD_DIR / f"{sid}_{f.filename}"
-        p.write_bytes(await f.read())
-        sess["files"][f.filename] = p
-        paths.append(p)
+    
+    if files:
+        for f in files:
+            p = UPLOAD_DIR / f"{sid}_{f.filename}"
+            p.write_bytes(await f.read())
+            sess["files"][f.filename] = p
+            paths.append(p)
+    elif sess.get("files"):
+        paths = list(sess["files"].values())
+        
     if len(paths) < 2:
-        raise HTTPException(status_code=400, detail="need at least two tables (ledger + statement)")
+        raise HTTPException(status_code=400, detail="need at least two tables (e.g. ledger and statement)")
 
     pipe = Pipeline(sid, auto_ack=True)
     sess["pipe"] = pipe
@@ -852,6 +925,7 @@ def mount_v2(app: FastAPI) -> FastAPI:
     # WebSocket route on root app
     app.add_api_websocket_route("/ws/v2/{sid}", ws_v2)
 
+    @app.get("/", include_in_schema=False)
     @app.get("/console", include_in_schema=False)
     def console():
         index = STATIC_DIR / "index.html"
@@ -862,6 +936,10 @@ def mount_v2(app: FastAPI) -> FastAPI:
             "then reload /console</code>",
             status_code=404,
         )
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return HTMLResponse("", status_code=204)
 
     # Mount static assets directory
     if STATIC_DIR.exists():

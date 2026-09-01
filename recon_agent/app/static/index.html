@@ -4,240 +4,292 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Recon Agent · Terminal</title>
+  <title>Razorpay Reconciliation Agent · Financial AI Terminal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-paper: #F3F3EF;
+      --bg-app: #F8FAFC;
       --bg-white: #FFFFFF;
-      --bg-blue: #E4EBF1;
-      --bg-blue-dark: #D0DCE6;
-      --bg-blue-accent: #A9C5D9;
+      --bg-subtle: #F1F5F9;
+      --bg-dark: #0F172A;
+      --bg-dark-surface: #1E293B;
 
-      --ink: #18181B;
-      --ink-muted: #52525B;
-      --ink-dim: #A1A1AA;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --text-dim: #94A3B8;
 
-      --border: #18181B;
-      --border-subtle: #D4D4D8;
-      --border-blue: #A9C5D9;
+      --border-color: #E2E8F0;
+      --border-strong: #CBD5E1;
+      --border-dark: #334155;
 
-      --accent: #0055FF;
-      --success: #166534;
-      --warning: #854D0E;
-      --danger: #991B1B;
+      --accent: #2563EB;
+      --accent-light: #EFF6FF;
+      --accent-hover: #1D4ED8;
 
-      --font-ui: 'Inter', -apple-system, sans-serif;
+      --success: #10B981;
+      --success-light: #ECFDF5;
+      --success-border: #A7F3D0;
+      --success-text: #065F46;
+
+      --warning: #F59E0B;
+      --warning-light: #FFFBEB;
+      --warning-border: #FDE68A;
+      --warning-text: #92400E;
+
+      --danger: #EF4444;
+      --danger-light: #FEF2F2;
+      --danger-border: #FECACA;
+      --danger-text: #991B1B;
+
+      --purple: #8B5CF6;
+      --purple-light: #F5F3FF;
+      --purple-border: #DDD6FE;
+      --purple-text: #5B21B6;
+
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
-      --font-display: 'Space Grotesk', sans-serif;
 
-      --radius: 0px;
-      /* STRICTLY NO CORNER RADIUS */
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      border-radius: var(--radius) !important;
     }
 
-    html,
-    body {
+    html, body {
       height: 100%;
+      width: 100%;
       overflow: hidden;
-      font-family: var(--font-ui);
+      font-family: var(--font-sans);
       font-size: 13px;
-      color: var(--ink);
-      background: var(--bg-paper);
+      color: var(--text-main);
+      background: var(--bg-app);
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Global Texture Overlay (Paper Grain) */
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 9999;
-      opacity: 0.035;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-    }
-
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--ink);
-      border: 2px solid var(--bg-paper);
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--ink-muted);
-    }
-
-    /* Typography */
     .mono {
       font-family: var(--font-mono);
       font-feature-settings: "tnum";
-      letter-spacing: -0.02em;
-    }
-
-    .display {
-      font-family: var(--font-display);
-      letter-spacing: -0.03em;
-    }
-
-    .label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--ink-muted);
     }
 
     /* Buttons */
     button {
-      font-family: var(--font-ui);
-      font-size: 11px;
+      font-family: var(--font-sans);
+      font-size: 12px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
       cursor: pointer;
-      border: 2px solid var(--border);
+      border: 1px solid var(--border-strong);
       background: var(--bg-white);
-      color: var(--ink);
+      color: var(--text-main);
       padding: 6px 12px;
-      transition: all 0.1s ease;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
+      white-space: nowrap;
+      user-select: none;
     }
 
-    button:hover {
-      background: var(--ink);
-      color: var(--bg-white);
+    button:hover:not(:disabled) {
+      background: var(--bg-subtle);
+      border-color: var(--text-muted);
     }
 
-    button:disabled {
-      opacity: 0.3;
-      cursor: not-allowed;
-      background: var(--bg-paper);
-      color: var(--ink-dim);
-      border-color: var(--border-subtle);
+    button:active:not(:disabled) {
+      transform: translateY(1px);
     }
 
     button.primary {
-      background: var(--ink);
-      color: var(--bg-white);
+      background: var(--accent);
+      color: #FFFFFF;
+      border-color: var(--accent);
     }
 
-    button.primary:hover {
-      background: var(--accent);
-      border-color: var(--accent);
+    button.primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    button.success {
+      background: var(--success);
+      color: #FFFFFF;
+      border-color: var(--success);
+    }
+
+    button.success:hover:not(:disabled) {
+      background: #059669;
+      border-color: #059669;
+    }
+
+    button.danger {
+      background: var(--danger-light);
+      color: var(--danger-text);
+      border-color: var(--danger-border);
+    }
+
+    button.danger:hover:not(:disabled) {
+      background: var(--danger);
+      color: #FFFFFF;
+      border-color: var(--danger);
     }
 
     button.ghost {
-      border-color: transparent;
       background: transparent;
+      border-color: transparent;
+      color: var(--text-muted);
     }
 
-    button.ghost:hover {
-      background: var(--bg-paper);
-      color: var(--ink);
-      border-color: var(--border-subtle);
+    button.ghost:hover:not(:disabled) {
+      background: var(--bg-subtle);
+      color: var(--text-main);
     }
 
-    button.blue {
-      background: var(--bg-blue);
-      border-color: var(--border-blue);
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
     }
 
-    button.blue:hover {
-      background: var(--bg-blue-dark);
-      border-color: var(--ink);
-    }
-
-    /* Inputs */
-    input,
-    textarea,
-    select {
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
       font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--ink);
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
       background: var(--bg-white);
-      border: 2px solid var(--border);
-      padding: 8px 10px;
-      outline: none;
-      width: 100%;
+      color: var(--text-main);
     }
 
-    input:focus,
-    textarea:focus {
-      border-color: var(--accent);
+    .badge.success {
+      background: var(--success-light);
+      color: var(--success-text);
+      border-color: var(--success-border);
     }
 
-    /* Layout */
-    .app-grid {
-      display: grid;
-      grid-template-rows: 48px 1fr;
-      grid-template-columns: 240px 1fr 360px;
-      grid-template-areas:
-        "topbar topbar topbar"
-        "sidebar main copilot";
+    .badge.warning {
+      background: var(--warning-light);
+      color: var(--warning-text);
+      border-color: var(--warning-border);
+    }
+
+    .badge.danger {
+      background: var(--danger-light);
+      color: var(--danger-text);
+      border-color: var(--danger-border);
+    }
+
+    .badge.ai {
+      background: var(--purple-light);
+      color: var(--purple-text);
+      border-color: var(--purple-border);
+    }
+
+    .badge.info {
+      background: var(--accent-light);
+      color: var(--accent);
+      border-color: #BFDBFE;
+    }
+
+    /* App Shell */
+    .app {
+      display: flex;
+      flex-direction: column;
       height: 100vh;
       width: 100vw;
+      overflow: hidden;
     }
 
     /* Topbar */
     .topbar {
-      grid-area: topbar;
-      background: var(--ink);
-      color: var(--bg-white);
+      flex: 0 0 52px;
+      height: 52px;
+      background: var(--bg-dark);
+      color: #FFFFFF;
       display: flex;
       align-items: center;
-      padding: 0 16px;
-      gap: 24px;
-      border-bottom: 2px solid var(--ink);
+      padding: 0 18px;
+      gap: 16px;
+      border-bottom: 1px solid var(--border-dark);
       z-index: 100;
     }
 
-    .topbar .logo {
-      font-family: var(--font-display);
-      font-size: 16px;
+    .logo {
       font-weight: 700;
+      font-size: 15px;
       letter-spacing: -0.02em;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
-    .topbar .logo .dot {
-      width: 8px;
-      height: 8px;
-      background: var(--bg-blue-accent);
+    .logo-icon {
+      width: 22px;
+      height: 22px;
+      background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
     }
 
-    .topbar .status {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--bg-blue-accent);
+    .status-pill {
       display: flex;
       align-items: center;
       gap: 8px;
-      border-left: 1px solid rgba(255, 255, 255, 0.2);
-      padding-left: 16px;
-      height: 100%;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+    }
+
+    .status-dot.active {
+      background: #10B981;
+      box-shadow: 0 0 6px #10B981;
+    }
+
+    .status-dot.running {
+      background: #3B82F6;
+      box-shadow: 0 0 6px #3B82F6;
+      animation: pulse 1.4s infinite;
+    }
+
+    .status-dot.halted {
+      background: #F59E0B;
+      box-shadow: 0 0 6px #F59E0B;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
     }
 
     .topbar .spacer {
@@ -246,1125 +298,1645 @@
 
     .topbar .actions {
       display: flex;
+      align-items: center;
       gap: 8px;
     }
 
     .topbar button {
-      border-color: rgba(255, 255, 255, 0.2);
-      background: transparent;
-      color: var(--bg-white);
-      font-size: 10px;
-      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #FFFFFF;
+      border-color: rgba(255, 255, 255, 0.18);
     }
 
-    .topbar button:hover {
-      background: var(--bg-white);
-      color: var(--ink);
-      border-color: var(--bg-white);
+    .topbar button:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.3);
     }
 
     .topbar button.primary {
-      background: var(--bg-blue-accent);
-      color: var(--ink);
-      border-color: var(--bg-blue-accent);
+      background: var(--accent);
+      border-color: var(--accent);
     }
 
-    .topbar button.primary:hover {
-      background: var(--bg-white);
-      border-color: var(--bg-white);
+    .topbar button.primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    /* Workspace */
+    .workspace {
+      flex: 1 1 0;
+      display: flex;
+      min-height: 0;
+      overflow: hidden;
     }
 
     /* Sidebar */
     .sidebar {
-      grid-area: sidebar;
+      flex: 0 0 230px;
+      width: 230px;
       background: var(--bg-white);
-      border-right: 2px solid var(--border);
+      border-right: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-nav {
+      flex: 1 1 0;
       overflow-y: auto;
-    }
-
-    .nav-section {
+      min-height: 0;
       padding: 16px 0;
-      border-bottom: 1px solid var(--border-subtle);
     }
 
-    .nav-section:last-child {
-      border-bottom: none;
-      flex: 1;
-    }
-
-    .nav-title {
+    .nav-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
       padding: 0 16px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .nav-item {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 16px;
-      font-size: 12px;
+      padding: 9px 16px;
+      font-size: 13px;
       font-weight: 500;
-      color: var(--ink-muted);
+      color: var(--text-muted);
       cursor: pointer;
-      border-left: 4px solid transparent;
-      transition: all 0.1s;
+      border-left: 3px solid transparent;
+      transition: all 0.12s ease;
+      user-select: none;
     }
 
     .nav-item:hover {
-      background: var(--bg-paper);
-      color: var(--ink);
+      background: var(--bg-subtle);
+      color: var(--text-main);
     }
 
     .nav-item.active {
-      background: var(--bg-paper);
-      color: var(--ink);
-      border-left-color: var(--ink);
-      font-weight: 700;
+      background: var(--accent-light);
+      color: var(--accent);
+      border-left-color: var(--accent);
+      font-weight: 600;
     }
 
-    .nav-item .badge {
+    .nav-item .count-badge {
       margin-left: auto;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      background: var(--ink);
-      color: var(--bg-white);
-      padding: 2px 6px;
-    }
-
-    .nav-item.active .badge {
-      background: var(--accent);
-    }
-
-    /* Pipeline Stepper (Bottom of Sidebar) */
-    .stepper {
-      padding: 16px;
-      background: var(--bg-paper);
-      border-top: 2px solid var(--border);
-    }
-
-    .stepper-title {
-      margin-bottom: 12px;
-    }
-
-    .step {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 6px 0;
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+      padding: 1px 6px;
       font-size: 11px;
-      color: var(--ink-dim);
-      position: relative;
+      font-family: var(--font-mono);
+      border-radius: 10px;
     }
 
-    .step::before {
-      content: "";
-      position: absolute;
-      left: 5px;
-      top: 16px;
-      bottom: -6px;
-      width: 2px;
-      background: var(--border-subtle);
+    .nav-item.active .count-badge {
+      background: #DBEAFE;
+      color: var(--accent);
     }
 
-    .step:last-child::before {
-      display: none;
+    .sidebar-footer {
+      flex: 0 0 auto;
+      border-top: 1px solid var(--border-color);
+      padding: 16px;
+      background: var(--bg-subtle);
     }
 
-    .step .node {
-      width: 12px;
-      height: 12px;
-      border: 2px solid var(--border-subtle);
-      background: var(--bg-white);
-      flex-shrink: 0;
-      margin-top: 2px;
-      position: relative;
-      z-index: 1;
-    }
-
-    .step.done {
-      color: var(--ink-muted);
-    }
-
-    .step.done .node {
-      background: var(--ink);
-      border-color: var(--ink);
-    }
-
-    .step.done::before {
-      background: var(--ink);
-    }
-
-    .step.active {
-      color: var(--ink);
+    .stepper-header {
+      font-size: 11px;
       font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
     }
 
-    .step.active .node {
+    .step-node {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+      font-size: 11.5px;
+      color: var(--text-dim);
+    }
+
+    .step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-strong);
+      background: #FFFFFF;
+      flex-shrink: 0;
+    }
+
+    .step-node.done {
+      color: var(--text-muted);
+    }
+
+    .step-node.done .step-dot {
+      background: var(--success);
+      border-color: var(--success);
+    }
+
+    .step-node.active {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .step-node.active .step-dot {
+      background: var(--accent);
       border-color: var(--accent);
-      background: var(--bg-white);
-      box-shadow: 0 0 0 2px var(--bg-paper), 0 0 0 4px var(--accent);
+      box-shadow: 0 0 5px var(--accent);
     }
 
-    /* Main Workspace */
-    .main {
-      grid-area: main;
-      background-color: var(--bg-paper);
-      background-image: radial-gradient(circle, #d1d1cd 1px, transparent 1px);
-      background-size: 24px 24px;
-      overflow-y: auto;
-      position: relative;
+    /* Main Area */
+    .main-content {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+      background: var(--bg-app);
+    }
+
+    .view-panel {
+      flex: 1 1 0;
+      display: none;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .view-panel.active {
+      display: flex;
     }
 
     .view-header {
+      flex: 0 0 auto;
       background: var(--bg-white);
-      border-bottom: 2px solid var(--border);
+      border-bottom: 1px solid var(--border-color);
       padding: 16px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      gap: 16px;
     }
 
-    .view-title {
-      font-family: var(--font-display);
-      font-size: 24px;
+    .view-header .title-area h1 {
+      font-size: 18px;
       font-weight: 700;
-      letter-spacing: -0.03em;
+      letter-spacing: -0.02em;
+      color: var(--text-main);
     }
 
-    .view-meta {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--ink-muted);
-      margin-top: 4px;
-    }
-
-    .view-actions {
-      display: flex;
-      gap: 8px;
+    .view-header .title-area p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
     }
 
     .view-body {
+      flex: 1 1 0;
+      overflow-y: auto;
+      min-height: 0;
       padding: 24px;
+    }
+
+    .view-body.no-pad {
+      padding: 0;
     }
 
     /* KPI Strip */
     .kpi-strip {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0;
-      border: 2px solid var(--border);
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .kpi-card {
       background: var(--bg-white);
-      margin-bottom: 24px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      box-shadow: var(--shadow-sm);
     }
 
-    .kpi {
-      padding: 16px 20px;
-      border-right: 2px solid var(--border);
-      position: relative;
+    .kpi-card .label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
     }
 
-    .kpi:last-child {
-      border-right: none;
+    .kpi-card .value {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-main);
     }
 
-    .kpi-label {
+    .kpi-card .value.success { color: var(--success-text); }
+    .kpi-card .value.warning { color: var(--warning-text); }
+    .kpi-card .value.danger { color: var(--danger-text); }
+    .kpi-card .value.accent { color: var(--accent); }
+
+    .kpi-card .subtext {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* Staging Dropzone */
+    .dropzone-box {
+      border: 2px dashed var(--border-strong);
+      background: var(--bg-white);
+      border-radius: var(--radius-lg);
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-bottom: 20px;
+    }
+
+    .dropzone-box:hover, .dropzone-box.dragover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+
+    .dropzone-box .icon {
+      font-size: 28px;
       margin-bottom: 8px;
     }
 
-    .kpi-value {
-      font-family: var(--font-display);
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.04em;
-      line-height: 1;
-    }
-
-    .kpi-delta {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      margin-top: 8px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .kpi-delta.up {
-      color: var(--success);
-    }
-
-    .kpi-delta.down {
-      color: var(--danger);
-    }
-
-    .kpi-chart {
-      position: absolute;
-      bottom: 0;
-      right: 0;
-      width: 80px;
-      height: 40px;
-      opacity: 0.2;
-    }
-
-    /* Data Grid (Excel Style) */
-    .data-grid-container {
-      border: 2px solid var(--border);
-      background: var(--bg-white);
-    }
-
-    .grid-toolbar {
-      padding: 12px 16px;
-      border-bottom: 2px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      background: var(--bg-paper);
-    }
-
-    .grid-tabs {
-      display: flex;
-      gap: 0;
-    }
-
-    .grid-tab {
-      padding: 8px 16px;
-      font-size: 11px;
+    .dropzone-box .primary-text {
+      font-size: 14px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border: 2px solid var(--border);
-      border-bottom: none;
-      background: var(--bg-paper);
-      color: var(--ink-muted);
-      cursor: pointer;
-      margin-right: -2px;
+      color: var(--text-main);
+      margin-bottom: 4px;
     }
 
-    .grid-tab.active {
+    .dropzone-box .sub-text {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Staged Items List */
+    .staged-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .staged-card {
       background: var(--bg-white);
-      color: var(--ink);
-      border-bottom: 2px solid var(--bg-white);
-      position: relative;
-      z-index: 2;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
     }
 
-    .grid-wrapper {
+    .staged-card .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .staged-card .filename {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-main);
+      word-break: break-all;
+    }
+
+    .staged-card .file-info {
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .staged-card .card-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    /* Preview Panel */
+    .preview-box {
+      background: var(--bg-white);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .preview-box-header {
+      padding: 10px 16px;
+      background: var(--bg-subtle);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Data Tables */
+    .table-container {
+      background: var(--bg-white);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 0;
+      min-height: 0;
+    }
+
+    .table-toolbar {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-white);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .filter-tabs {
+      display: flex;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-sm);
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .filter-tab {
+      padding: 4px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+    }
+
+    .filter-tab.active {
+      background: #FFFFFF;
+      color: var(--text-main);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .search-input {
+      padding: 5px 10px;
+      font-size: 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      outline: none;
+      width: 220px;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+
+    .table-scroll {
+      flex: 1 1 0;
       overflow: auto;
-      max-height: calc(100vh - 320px);
+      min-height: 0;
     }
 
-    .data-grid {
+    table.data-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: 12.5px;
+      text-align: left;
     }
 
-    .data-grid th {
+    table.data-table th {
       position: sticky;
       top: 0;
-      background: var(--ink);
-      color: var(--bg-white);
-      font-weight: 600;
-      text-align: left;
-      padding: 10px 12px;
-      border-right: 1px solid rgba(255, 255, 255, 0.1);
-      border-bottom: 2px solid var(--ink);
-      font-family: var(--font-mono);
-      font-size: 10px;
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      z-index: 5;
-      white-space: nowrap;
-    }
-
-    .data-grid th.row-num {
-      width: 50px;
-      text-align: center;
-      background: var(--ink);
-    }
-
-    .data-grid td {
+      letter-spacing: 0.04em;
       padding: 8px 12px;
-      border-bottom: 1px solid var(--border-subtle);
-      border-right: 1px solid var(--border-subtle);
-      font-family: var(--font-mono);
-      font-size: 12px;
+      border-bottom: 1px solid var(--border-color);
+      z-index: 10;
       white-space: nowrap;
     }
 
-    .data-grid tr:hover td {
-      background: var(--bg-blue);
+    table.data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: middle;
     }
 
-    .data-grid td.row-num {
-      text-align: center;
-      color: var(--ink-dim);
-      background: var(--bg-paper);
-      font-size: 10px;
-      border-right: 2px solid var(--border-subtle);
+    table.data-table tr:hover td {
+      background: #F8FAFC;
     }
 
-    .data-grid td.num {
-      text-align: right;
+    /* Highlighted AI Reason in Results Table */
+    .ai-reason-pill {
+      background: var(--purple-light);
+      border: 1px solid var(--purple-border);
+      color: var(--purple-text);
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 500;
+      display: inline-block;
+      max-width: 480px;
     }
 
-    .data-grid td.match-high {
-      background: rgba(22, 101, 52, 0.1);
-      color: var(--success);
-      font-weight: 600;
+    .ai-reason-pill strong {
+      color: #4C1D95;
+      font-weight: 700;
     }
 
-    .data-grid td.match-low {
-      background: rgba(153, 27, 27, 0.1);
-      color: var(--danger);
-      font-weight: 600;
+    /* Exception Cards (Hero AI Reason Presentation) */
+    .exception-card {
+      background: var(--bg-white);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.15s ease;
     }
 
-    .grid-footer {
-      padding: 12px 16px;
-      border-top: 2px solid var(--border);
+    .exception-card:hover {
+      box-shadow: var(--shadow-md);
+      border-color: var(--border-strong);
+    }
+
+    .exception-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--bg-paper);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--ink-muted);
+      gap: 12px;
+      margin-bottom: 10px;
     }
 
-    /* Badges */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 6px;
+    .exception-ref {
+      font-size: 14px;
+      font-weight: 700;
       font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .exception-metrics {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* Hero AI Diagnostic Callout Box */
+    .ai-diagnostic-box {
+      background: linear-gradient(180deg, #FAF5FF 0%, #F5F3FF 100%);
+      border: 1px solid #DDD6FE;
+      border-left: 4px solid #8B5CF6;
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      margin: 10px 0;
+    }
+
+    .ai-diagnostic-title {
+      font-size: 11px;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      border: 1px solid var(--border);
+      color: #6D28D9;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
     }
 
-    .badge.success {
+    .ai-diagnostic-text {
+      font-size: 13px;
+      color: #3B0764;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    .evidence-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .evidence-tag {
+      background: #FFFFFF;
+      border: 1px solid #E9D5FF;
+      color: #6B21A8;
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .exception-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border-color);
+    }
+
+    /* Copilot AI Drawer */
+    .copilot-drawer {
+      flex: 0 0 340px;
+      width: 340px;
       background: var(--bg-white);
-      color: var(--success);
-      border-color: var(--success);
-    }
-
-    .badge.warning {
-      background: var(--bg-white);
-      color: var(--warning);
-      border-color: var(--warning);
-    }
-
-    .badge.danger {
-      background: var(--bg-white);
-      color: var(--danger);
-      border-color: var(--danger);
-    }
-
-    .badge.info {
-      background: var(--bg-blue);
-      color: var(--ink);
-      border-color: var(--border-blue);
-    }
-
-    .badge.solid {
-      background: var(--ink);
-      color: var(--bg-white);
-    }
-
-    /* Copilot (AI Chat) */
-    .copilot {
-      grid-area: copilot;
-      background: var(--bg-blue);
-      border-left: 2px solid var(--border);
+      border-left: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
-      position: relative;
-    }
-
-    /* Blueprint grid texture for copilot */
-    .copilot::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(169, 197, 217, 0.3) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(169, 197, 217, 0.3) 1px, transparent 1px);
-      background-size: 20px 20px;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .copilot>* {
-      position: relative;
-      z-index: 1;
+      min-height: 0;
+      overflow: hidden;
+      box-shadow: -4px 0 12px rgba(0, 0, 0, 0.04);
     }
 
     .copilot-header {
-      padding: 16px;
-      border-bottom: 2px solid var(--border);
-      background: var(--bg-blue-dark);
+      flex: 0 0 48px;
+      height: 48px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
-      gap: 12px;
+      justify-content: space-between;
+      background: var(--bg-subtle);
     }
 
-    .copilot-avatar {
-      width: 32px;
-      height: 32px;
-      background: var(--ink);
-      color: var(--bg-blue-accent);
+    .copilot-header .title {
+      font-size: 13px;
+      font-weight: 700;
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-family: var(--font-mono);
-      font-weight: 700;
-      font-size: 14px;
-      border: 2px solid var(--ink);
-    }
-
-    .copilot-title {
-      font-family: var(--font-display);
-      font-size: 16px;
-      font-weight: 700;
-    }
-
-    .copilot-status {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--ink-muted);
-      text-transform: uppercase;
+      gap: 6px;
+      color: var(--text-main);
     }
 
     .copilot-messages {
-      flex: 1;
+      flex: 1 1 0;
       overflow-y: auto;
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
+      min-height: 0;
     }
 
-    .chat-msg {
-      display: flex;
-      gap: 10px;
+    .chat-bubble {
       max-width: 90%;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      font-size: 12.5px;
+      line-height: 1.45;
+      animation: fadeIn 0.15s ease;
     }
 
-    .chat-msg.user {
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .chat-bubble.ai {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      align-self: flex-start;
+    }
+
+    .chat-bubble.user {
+      background: var(--accent);
+      color: #FFFFFF;
       align-self: flex-end;
-      flex-direction: row-reverse;
     }
 
-    .chat-msg-avatar {
-      width: 24px;
-      height: 24px;
-      flex-shrink: 0;
+    .chat-suggestions {
+      padding: 8px 16px 0;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 700;
-      border: 2px solid var(--ink);
+      flex-wrap: wrap;
+      gap: 6px;
     }
 
-    .chat-msg.ai .chat-msg-avatar {
-      background: var(--bg-white);
-      color: var(--ink);
-    }
-
-    .chat-msg.user .chat-msg-avatar {
-      background: var(--ink);
-      color: var(--bg-white);
-    }
-
-    .chat-msg-bubble {
-      padding: 10px 14px;
-      font-size: 12px;
-      line-height: 1.6;
-      border: 2px solid var(--border);
-    }
-
-    .chat-msg.ai .chat-msg-bubble {
-      background: var(--bg-white);
-    }
-
-    .chat-msg.user .chat-msg-bubble {
-      background: var(--ink);
-      color: var(--bg-white);
-      border-color: var(--ink);
-    }
-
-    .chat-action {
-      margin-top: 8px;
-      padding: 8px;
-      background: var(--bg-paper);
-      border: 1px solid var(--border-subtle);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .chat-action-text {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--ink-muted);
-    }
-
-    .copilot-input-area {
-      padding: 16px;
-      border-top: 2px solid var(--border);
-      background: var(--bg-blue-dark);
-    }
-
-    .copilot-input-wrapper {
-      display: flex;
-      gap: 8px;
-    }
-
-    .copilot-input {
-      flex: 1;
-      background: var(--bg-white);
-      border: 2px solid var(--ink);
-      padding: 10px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-    }
-
-    .copilot-input:focus {
-      outline: 2px solid var(--accent);
-      outline-offset: -2px;
-    }
-
-    /* Utilities */
-    .flex {
-      display: flex;
-    }
-
-    .items-center {
-      align-items: center;
-    }
-
-    .gap-2 {
-      gap: 8px;
-    }
-
-    .gap-4 {
-      gap: 16px;
-    }
-
-    .mt-4 {
-      margin-top: 16px;
-    }
-
-    .mb-4 {
-      margin-bottom: 16px;
-    }
-
-    .text-muted {
-      color: var(--ink-muted);
-    }
-
-    .text-sm {
+    .prompt-chip {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 3px 9px;
       font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
     }
 
-    .font-bold {
-      font-weight: 700;
+    .prompt-chip:hover {
+      background: var(--accent-light);
+      color: var(--accent);
+      border-color: #BFDBFE;
     }
 
-    .border-b {
-      border-bottom: 2px solid var(--border);
-    }
-
-    /* Exception Card (for other views) */
-    .card {
-      background: var(--bg-white);
-      border: 2px solid var(--border);
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-
-    .card-header {
+    .copilot-input-bar {
+      flex: 0 0 auto;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-color);
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border-subtle);
-    }
-
-    /* Modal */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(24, 24, 27, 0.8);
-      backdrop-filter: blur(4px);
-      z-index: 1000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .modal-overlay.open {
-      display: flex;
-    }
-
-    .modal {
-      background: var(--bg-white);
-      border: 4px solid var(--ink);
-      width: 500px;
-      max-width: 90vw;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 12px 12px 0 var(--ink);
-    }
-
-    .modal-head {
-      padding: 16px;
-      border-bottom: 2px solid var(--ink);
-      font-family: var(--font-display);
-      font-size: 18px;
-      font-weight: 700;
-    }
-
-    .modal-body {
-      padding: 16px;
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .modal-foot {
-      padding: 16px;
-      border-top: 2px solid var(--ink);
-      display: flex;
-      justify-content: flex-end;
       gap: 8px;
-      background: var(--bg-paper);
+      background: var(--bg-white);
     }
 
-    /* Toast */
+    .copilot-input-bar input {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 12.5px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      outline: none;
+    }
+
+    .copilot-input-bar input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Empty states */
+    .empty-placeholder {
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .empty-placeholder .icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+      opacity: 0.6;
+    }
+
+    /* Toast system */
     .toast-container {
       position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 2000;
+      bottom: 20px;
+      right: 20px;
+      z-index: 9999;
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
 
-    .toast {
-      background: var(--ink);
-      color: var(--bg-white);
-      border: 2px solid var(--bg-white);
-      padding: 12px 16px;
-      font-family: var(--font-mono);
+    .toast-msg {
+      background: var(--bg-dark);
+      color: #FFFFFF;
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
       font-size: 12px;
-      box-shadow: 4px 4px 0 var(--accent);
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
       animation: slideIn 0.2s ease;
+      min-width: 240px;
     }
 
-    @keyframes slideIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
+    .toast-msg.success { border-left: 4px solid var(--success); }
+    .toast-msg.danger { border-left: 4px solid var(--danger); }
+    .toast-msg.warning { border-left: 4px solid var(--warning); }
 
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
     }
   </style>
 </head>
 
 <body>
 
-  <div class="app-grid">
-    <!-- Topbar -->
+  <div class="app">
+    <!-- Top Header -->
     <header class="topbar">
       <div class="logo">
-        <div class="dot"></div>
-        RECON_AGENT
+        <div class="logo-icon">R</div>
+        <span>Razorpay Reconciliation Agent</span>
       </div>
-      <div class="status">
-        <span>SYS.ONLINE</span>
-        <span style="color: rgba(255,255,255,0.3)">|</span>
+
+      <div class="status-pill">
+        <span class="status-dot" id="statusDot"></span>
         <span id="statusText">IDLE</span>
       </div>
+
       <div class="spacer"></div>
+
       <div class="actions">
-        <button id="btnUpload">+ UPLOAD</button>
-        <button id="btnSample">LOAD SAMPLES</button>
-        <button class="primary" id="btnRun">EXECUTE PIPELINE</button>
+        <button id="btnLoadDemo" class="ghost">⚡ Load Demo Data</button>
+        <button id="btnStartRun" class="primary" disabled>▶ Run Reconciliation</button>
+        <button id="btnExportCsv" class="ghost">📥 Export CSV</button>
+        <button id="btnToggleCopilot" class="ghost">💬 AI Copilot</button>
       </div>
     </header>
 
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="nav-section">
-        <div class="nav-title label">Workspace</div>
-        <div class="nav-item active" data-view="dashboard">
-          <span>Dashboard</span>
-        </div>
-        <div class="nav-item" data-view="explorer">
-          <span>Data Explorer</span>
-        </div>
-        <div class="nav-item" data-view="reconciliation">
-          <span>Reconciliation</span>
-          <span class="badge" id="badgeExceptions">0</span>
-        </div>
-      </div>
-      <div class="nav-section">
-        <div class="nav-title label">Analysis</div>
-        <div class="nav-item" data-view="exceptions">
-          <span>Exceptions Queue</span>
-        </div>
-        <div class="nav-item" data-view="audit">
-          <span>Audit Ledger</span>
-        </div>
-      </div>
-      <div class="nav-section">
-        <div class="stepper">
-          <div class="stepper-title label">Pipeline Execution</div>
-          <div class="step done">
-            <div class="node"></div><span>Ingestion</span>
+    <div class="workspace">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <nav class="sidebar-nav">
+          <div class="nav-group-title">Reconciliation</div>
+          <div class="nav-item active" data-view="staging">
+            <span>📁 Staging & Upload</span>
+            <span class="count-badge" id="badgeStagedCount">0</span>
           </div>
-          <div class="step done">
-            <div class="node"></div><span>Profiling</span>
+          <div class="nav-item" data-view="results">
+            <span>📊 Reconciliation Results</span>
+            <span class="count-badge" id="badgeResultsCount">--</span>
           </div>
-          <div class="step active">
-            <div class="node"></div><span>Schema Mapping</span>
+          <div class="nav-item" data-view="exceptions">
+            <span>⚠️ Discrepancies & AI QA</span>
+            <span class="count-badge" id="badgeExcCount">--</span>
           </div>
-          <div class="step">
-            <div class="node"></div><span>Match Engine</span>
+          <div class="nav-item" data-view="tables">
+            <span>🔍 Data Explorer</span>
           </div>
-          <div class="step">
-            <div class="node"></div><span>Exception QA</span>
-          </div>
-          <div class="step">
-            <div class="node"></div><span>Aggregation</span>
-          </div>
-        </div>
-      </div>
-    </aside>
+        </nav>
 
-    <!-- Main Content -->
-    <main class="main" id="mainContent">
-      <!-- Dashboard View (Default) -->
-      <div class="view-header">
-        <div>
-          <div class="view-title">Reconciliation Terminal</div>
-          <div class="view-meta">SESSION: 8F3A-992B &nbsp;|&nbsp; ENGINE: DETERMINISTIC + LLM</div>
+        <!-- Live Progress Stepper -->
+        <div class="sidebar-footer">
+          <div class="stepper-header">Pipeline Stage</div>
+          <div class="step-node" id="step-1"><div class="step-dot"></div><span>1. Ingest Data</span></div>
+          <div class="step-node" id="step-2"><div class="step-dot"></div><span>2. Profile & Mask</span></div>
+          <div class="step-node" id="step-3"><div class="step-dot"></div><span>3. Schema Link</span></div>
+          <div class="step-node" id="step-4"><div class="step-dot"></div><span>4. Match Engine</span></div>
+          <div class="step-node" id="step-5"><div class="step-dot"></div><span>5. AI Exception QA</span></div>
+          <div class="step-node" id="step-6"><div class="step-dot"></div><span>6. Summary Rollup</span></div>
         </div>
-        <div class="view-actions">
-          <button class="ghost">EXPORT CSV</button>
-          <button class="blue">REFRESH DATA</button>
-        </div>
-      </div>
+      </aside>
 
-      <div class="view-body">
-        <!-- KPI Strip -->
-        <div class="kpi-strip">
-          <div class="kpi">
-            <div class="label">Match Rate</div>
-            <div class="kpi-value">94.2%</div>
-            <div class="kpi-delta up">▲ +2.4% vs baseline</div>
-          </div>
-          <div class="kpi">
-            <div class="label">Total Records</div>
-            <div class="kpi-value">14,092</div>
-            <div class="kpi-delta">2 tables loaded</div>
-          </div>
-          <div class="kpi">
-            <div class="label">Exceptions</div>
-            <div class="kpi-value">816</div>
-            <div class="kpi-delta down">142 need review</div>
-          </div>
-          <div class="kpi">
-            <div class="label">LLM Cost</div>
-            <div class="kpi-value">$0.42</div>
-            <div class="kpi-delta">1,204 tokens</div>
-          </div>
-        </div>
+      <!-- Main Content Views -->
+      <main class="main-content">
 
-        <!-- Data Grid -->
-        <div class="data-grid-container">
-          <div class="grid-toolbar">
-            <div class="grid-tabs">
-              <div class="grid-tab active">ALL RECORDS (14,092)</div>
-              <div class="grid-tab">MATCHED (13,276)</div>
-              <div class="grid-tab">EXCEPTIONS (816)</div>
+        <!-- VIEW 1: Staging & Upload -->
+        <section class="view-panel active" id="view-staging">
+          <div class="view-header">
+            <div class="title-area">
+              <h1>File Staging & Execution</h1>
+              <p>Upload internal payment ledgers and external bank statements, or click Load Demo Data to test.</p>
             </div>
-            <div class="spacer" style="flex:1"></div>
-            <input type="text" placeholder="FILTER ROWS..." style="width: 200px; padding: 4px 8px; font-size: 11px;">
-          </div>
-          <div class="grid-wrapper">
-            <table class="data-grid">
-              <thead>
-                <tr>
-                  <th class="row-num">#</th>
-                  <th>STATUS</th>
-                  <th>LEDGER RID</th>
-                  <th>BANK RID</th>
-                  <th>REFERENCE ID</th>
-                  <th>LEDGER AMT</th>
-                  <th>BANK AMT</th>
-                  <th>VARIANCE</th>
-                  <th>CONFIDENCE</th>
-                  <th>ROOT CAUSE</th>
-                </tr>
-              </thead>
-              <tbody id="gridBody">
-                <!-- Populated by JS -->
-              </tbody>
-            </table>
-          </div>
-          <div class="grid-footer">
-            <span>SHOWING 1-50 OF 14,092 RECORDS</span>
-            <div class="flex gap-2">
-              <button disabled>← PREV</button>
-              <button>NEXT →</button>
+            <div>
+              <button class="primary" id="btnRunFromStaging" disabled>Execute Reconciliation</button>
             </div>
           </div>
-        </div>
-      </div>
-    </main>
+          <div class="view-body">
+            <!-- Dropzone -->
+            <div class="dropzone-box" id="dropzone">
+              <div class="icon">📂</div>
+              <div class="primary-text">Drag & drop CSV or Excel statement files here</div>
+              <div class="sub-text">or click to browse local files (requires at least 2 files: Ledger + Statement)</div>
+              <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" hidden>
+            </div>
 
-    <!-- Copilot -->
-    <aside class="copilot">
-      <div class="copilot-header">
-        <div class="copilot-avatar">AI</div>
-        <div>
-          <div class="copilot-title">Recon Copilot</div>
-          <div class="copilot-status">GROUNDED • GEMMA 4 31B</div>
-        </div>
-      </div>
+            <!-- Staged Cards -->
+            <div class="staged-grid" id="stagedGrid"></div>
 
-      <div class="copilot-messages" id="chatMessages">
-        <div class="chat-msg ai">
-          <div class="chat-msg-avatar">AI</div>
-          <div>
-            <div class="chat-msg-bubble">
-              Terminal initialized. I have indexed 14,092 records across the payments ledger and bank statement. What
-              anomalies should we investigate?
+            <!-- Preview Panel -->
+            <div class="preview-box" id="previewBox" style="display: none;">
+              <div class="preview-box-header">
+                <span id="previewTitle">Data Preview</span>
+                <button class="ghost" id="btnClosePreview" style="padding: 2px 6px;">✕ Close</button>
+              </div>
+              <div class="table-scroll" style="max-height: 240px;">
+                <table class="data-table" id="previewTable"></table>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div class="copilot-input-area">
-        <div class="copilot-input-wrapper">
-          <input type="text" class="copilot-input" id="chatInput" placeholder="Query the dataset...">
-          <button class="primary" id="btnSend">SEND</button>
-        </div>
-      </div>
-    </aside>
-  </div>
+        <!-- VIEW 2: Reconciliation Results -->
+        <section class="view-panel" id="view-results">
+          <div class="view-header">
+            <div class="title-area">
+              <h1>Reconciliation Results</h1>
+              <p>Automated multi-attribute matching with prominent AI Diagnostic explanations for every record.</p>
+            </div>
+          </div>
+          <div class="view-body no-pad" style="display: flex; flex-direction: column;">
+            <!-- KPI Strip -->
+            <div style="padding: 16px 24px 0;">
+              <div class="kpi-strip">
+                <div class="kpi-card">
+                  <div class="label">Total Records</div>
+                  <div class="value" id="kpiTotal">--</div>
+                  <div class="subtext" id="kpiThroughput">-- rows/sec</div>
+                </div>
+                <div class="kpi-card">
+                  <div class="label">Match Rate</div>
+                  <div class="value success" id="kpiMatchRate">--</div>
+                  <div class="subtext" id="kpiPrecision">Precision: --</div>
+                </div>
+                <div class="kpi-card">
+                  <div class="label">Discrepancies</div>
+                  <div class="value danger" id="kpiDiscrepancies">--</div>
+                  <div class="subtext">Flagged for AI QA</div>
+                </div>
+                <div class="kpi-card">
+                  <div class="label">Net Fee Deductions</div>
+                  <div class="value warning" id="kpiFees">INR 0.00</div>
+                  <div class="subtext">MDR / Gateway Charges</div>
+                </div>
+              </div>
+            </div>
 
-  <!-- Modal -->
-  <div class="modal-overlay" id="modalOverlay">
-    <div class="modal">
-      <div class="modal-head" id="modalTitle">Modal</div>
-      <div class="modal-body" id="modalBody"></div>
-      <div class="modal-foot" id="modalFoot"></div>
+            <!-- Results Table Container -->
+            <div class="table-container" style="margin: 0 24px 24px; border-radius: var(--radius-md);">
+              <div class="table-toolbar">
+                <div class="filter-tabs">
+                  <button class="filter-tab active" data-filter="all">All Records</button>
+                  <button class="filter-tab" data-filter="matched">Matched</button>
+                  <button class="filter-tab" data-filter="exceptions">Exceptions / Discrepancies</button>
+                </div>
+                <div style="flex:1"></div>
+                <input type="text" class="search-input" id="resultsSearch" placeholder="Search reference, reason...">
+              </div>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px; text-align: center;">#</th>
+                      <th style="width: 100px;">STATUS</th>
+                      <th>REFERENCE ID</th>
+                      <th style="text-align: right;">LEDGER AMOUNT</th>
+                      <th style="text-align: right;">BANK AMOUNT</th>
+                      <th style="text-align: right;">VARIANCE / FEE</th>
+                      <th>AI DIAGNOSTIC REASON & MATCH ANALYSIS</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resultsBody">
+                    <tr>
+                      <td colspan="7">
+                        <div class="empty-placeholder">
+                          <div class="icon">📊</div>
+                          <div>No reconciliation results yet. Run reconciliation from Staging.</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 3: Discrepancies & AI QA Queue -->
+        <section class="view-panel" id="view-exceptions">
+          <div class="view-header">
+            <div class="title-area">
+              <h1>Discrepancies & AI Diagnostic QA</h1>
+              <p>Review exceptions classified by AI, inspect root-cause evidence, and apply manager overrides.</p>
+            </div>
+          </div>
+          <div class="view-body" id="exceptionsList">
+            <div class="empty-placeholder">
+              <div class="icon">✅</div>
+              <div>No discrepancies found or reconciliation not yet executed.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 4: Data Explorer -->
+        <section class="view-panel" id="view-tables">
+          <div class="view-header">
+            <div class="title-area">
+              <h1>Ingested Data Explorer</h1>
+              <p>Inspect raw uploaded datasets, columns, and data profiles.</p>
+            </div>
+          </div>
+          <div class="view-body no-pad" style="display: flex; flex-direction: column;">
+            <div class="table-container" style="margin: 24px; border-radius: var(--radius-md);">
+              <div class="table-toolbar">
+                <div class="filter-tabs" id="tableTabs">
+                  <button class="filter-tab active">No Tables Ingested</button>
+                </div>
+                <div style="flex:1"></div>
+                <span id="tableMetaInfo" class="mono" style="font-size: 11.5px; color: var(--text-muted);">0 rows</span>
+              </div>
+              <div class="table-scroll">
+                <table class="data-table" id="explorerTable">
+                  <thead><tr><th>Column</th></tr></thead>
+                  <tbody><tr><td><div class="empty-placeholder">No table data available.</div></td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Slide-out Grounded Copilot AI Drawer -->
+      <aside class="copilot-drawer" id="copilotDrawer">
+        <div class="copilot-header">
+          <div class="title">
+            <span>💬 Reconciliation Copilot</span>
+          </div>
+          <button class="ghost" id="btnCloseCopilot" style="padding: 2px 6px;">✕</button>
+        </div>
+
+        <div class="copilot-messages" id="chatMessages">
+          <div class="chat-bubble ai">
+            Hello! I am your <strong>Reconciliation AI Assistant</strong>. Ask me anything about matched orders, fee schedules, duplicate transactions, or why specific items failed to reconcile.
+          </div>
+        </div>
+
+        <div class="chat-suggestions">
+          <span class="prompt-chip" onclick="askCopilot('What is the total fee variance between payments and bank?')">Total fee variance?</span>
+          <span class="prompt-chip" onclick="askCopilot('Why did ORD_3 fail to reconcile?')">Why did ORD_3 fail?</span>
+          <span class="prompt-chip" onclick="askCopilot('Explain duplicate transactions and refunds')">Duplicate orders?</span>
+        </div>
+
+        <div class="copilot-input-bar">
+          <input type="text" id="chatInput" placeholder="Ask AI about dataset, fees, variances...">
+          <button class="primary" id="btnSendChat">Send</button>
+        </div>
+      </aside>
+
     </div>
   </div>
 
-  <!-- Toasts -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- Hidden File Input -->
-  <input type="file" id="fileInput" multiple style="display: none;">
-
   <script>
-    // ===================================================================
-    // Mock Data Generation
-    // ===================================================================
-    const statuses = ['MATCHED', 'EXCEPTION', 'PENDING'];
-    const rootCauses = ['EXACT_MATCH', 'FEE_DEDUCTION', 'TEMPORAL_DRIFT', 'SPLIT_SETTLEMENT', 'MISSING_COUNTERPARTY', 'DUPLICATE_LEDGER'];
+    const API = '/api/v2';
+    const $ = s => document.querySelector(s);
+    const $$ = s => [...document.querySelectorAll(s)];
 
-    function generateMockData(count) {
-      const data = [];
-      for (let i = 1; i <= count; i++) {
-        const isMatch = Math.random() > 0.05;
-        const status = isMatch ? 'MATCHED' : 'EXCEPTION';
-        const ledgerAmt = (Math.random() * 5000 + 100).toFixed(2);
-        const variance = isMatch ? (Math.random() * 2 - 1).toFixed(2) : (Math.random() * 50 + 10).toFixed(2);
-        const bankAmt = (ledgerAmt - variance).toFixed(2);
-        const conf = isMatch ? (Math.random() * 0.15 + 0.85).toFixed(3) : (Math.random() * 0.4 + 0.2).toFixed(3);
+    const State = {
+      sid: null,
+      status: 'IDLE',
+      stagedFiles: [],
+      results: { rows: [], filter: 'all', search: '' },
+      ingestedTables: {},
+      activeTable: null,
+      pollTimer: null
+    };
 
-        data.push({
-          id: i,
-          status: status,
-          l_rid: `L-${10000 + i}`,
-          r_rid: isMatch ? `R-${9000 + i}` : '—',
-          ref: `ORD_${Math.floor(Math.random() * 90000 + 10000)}`,
-          l_amt: ledgerAmt,
-          r_amt: isMatch ? bankAmt : '—',
-          variance: variance,
-          conf: conf,
-          cause: isMatch ? 'EXACT_MATCH' : rootCauses[Math.floor(Math.random() * (rootCauses.length - 1)) + 1]
-        });
-      }
-      return data;
+    const STEP_INDEX = {
+      INGESTING: 1,
+      PROFILING: 2,
+      MAPPING_PROPOSED: 3,
+      MAPPING_VALIDATED: 3,
+      POLICY_GENERATED: 4,
+      DRY_RUN: 4,
+      EXECUTING: 4,
+      QA: 5,
+      RESOLVING: 5,
+      AGGREGATING: 6,
+      ARCHIVED: 6
+    };
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
-    const mockData = generateMockData(50);
-
-    // ===================================================================
-    // Render Data Grid
-    // ===================================================================
-    function renderGrid() {
-      const tbody = document.getElementById('gridBody');
-      tbody.innerHTML = mockData.map(row => {
-        const statusBadge = row.status === 'MATCHED'
-          ? `<span class="badge success">MATCHED</span>`
-          : `<span class="badge danger">EXCEPTION</span>`;
-
-        const confClass = parseFloat(row.conf) >= 0.85 ? 'match-high' : (parseFloat(row.conf) >= 0.6 ? '' : 'match-low');
-
-        return `
-        <tr>
-          <td class="row-num">${row.id}</td>
-          <td>${statusBadge}</td>
-          <td>${row.l_rid}</td>
-          <td>${row.r_rid}</td>
-          <td style="font-weight: 600;">${row.ref}</td>
-          <td class="num">₹${parseFloat(row.l_amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-          <td class="num">${row.r_amt === '—' ? '—' : '₹' + parseFloat(row.r_amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-          <td class="num" style="color: ${Math.abs(row.variance) > 5 ? 'var(--danger)' : 'var(--ink-muted)'}">₹${Math.abs(row.variance).toFixed(2)}</td>
-          <td class="num ${confClass}">${row.conf}</td>
-          <td><span class="badge info">${row.cause.replace(/_/g, ' ')}</span></td>
-        </tr>
-      `;
-      }).join('');
+    function num(v) {
+      if (v == null || v === '') return null;
+      const n = Number(v);
+      return isFinite(n) ? n : null;
     }
 
-    // ===================================================================
-    // Navigation
-    // ===================================================================
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        showToast(`Switched to ${item.textContent.trim()} view`);
-      });
-    });
-
-    // ===================================================================
-    // Chat / Copilot
-    // ===================================================================
-    const chatMessages = document.getElementById('chatMessages');
-    const chatInput = document.getElementById('chatInput');
-
-    function addMessage(role, text, action) {
-      const msg = document.createElement('div');
-      msg.className = `chat-msg ${role}`;
-
-      let actionHtml = '';
-      if (action) {
-        actionHtml = `
-        <div class="chat-action">
-          <span class="chat-action-text">${action.text}</span>
-          <button class="ghost" style="padding: 2px 8px; font-size: 10px;" onclick="${action.onclick}">${action.label}</button>
-        </div>
-      `;
-      }
-
-      msg.innerHTML = `
-      <div class="chat-msg-avatar">${role === 'ai' ? 'AI' : 'U'}</div>
-      <div>
-        <div class="chat-msg-bubble">${text}</div>
-        ${actionHtml}
-      </div>
-    `;
-      chatMessages.appendChild(msg);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+    function inr(v) {
+      const n = num(v);
+      if (n == null) return '--';
+      return 'INR ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    function handleSend() {
-      const text = chatInput.value.trim();
-      if (!text) return;
+    function pct(v) {
+      if (v == null) return '--';
+      return (Number(v) * 100).toFixed(1) + '%';
+    }
 
-      addMessage('user', text);
-      chatInput.value = '';
-
-      // Simulate AI thinking
+    function toast(msg, kind = 'info') {
+      const el = document.createElement('div');
+      el.className = 'toast-msg ' + kind;
+      el.innerHTML = esc(msg);
+      $('#toastContainer').appendChild(el);
       setTimeout(() => {
-        if (text.toLowerCase().includes('variance') || text.toLowerCase().includes('exception')) {
-          addMessage('ai', `I found 142 exceptions with a variance > ₹10.00. 84% of these are classified as <b>TEMPORAL_DRIFT</b> due to weekend settlement delays.`, {
-            text: 'ACTION: FILTER GRID',
-            label: 'APPLY FILTER',
-            onclick: "showToast('Grid filtered to TEMPORAL_DRIFT')"
-          });
-        } else if (text.toLowerCase().includes('fee')) {
-          addMessage('ai', `The gateway fee schedule (2% MDR + 18% GST) accounts for ₹4,210.50 of the total variance. This is classified as <b>FEE_DEDUCTION</b> and auto-approved.`);
-        } else {
-          addMessage('ai', `Query processed. Scanning ${mockData.length} active records in the current session context. No critical anomalies detected for "${text}".`);
-        }
-      }, 600);
-    }
-
-    document.getElementById('btnSend').addEventListener('click', handleSend);
-    chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleSend();
-    });
-
-    // ===================================================================
-    // Topbar Actions
-    // ===================================================================
-    document.getElementById('btnUpload').addEventListener('click', () => {
-      document.getElementById('fileInput').click();
-    });
-
-    document.getElementById('btnSample').addEventListener('click', () => {
-      showToast('Loaded sample_data/payments.csv and bank.csv');
-      renderGrid();
-    });
-
-    document.getElementById('btnRun').addEventListener('click', () => {
-      showToast('Pipeline execution started...');
-      document.getElementById('statusText').textContent = 'EXECUTING';
-      setTimeout(() => {
-        document.getElementById('statusText').textContent = 'ARCHIVED';
-        showToast('Pipeline completed. 14,092 records processed.');
-        addMessage('ai', 'Pipeline execution complete. The audit ledger has been signed and verified. Match rate finalized at 94.2%.');
-      }, 2000);
-    });
-
-    // ===================================================================
-    // Utilities
-    // ===================================================================
-    function showToast(msg) {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      toast.innerHTML = `<span>►</span> ${msg}`;
-      container.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%)';
-        toast.style.transition = 'all 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(8px)';
+        el.style.transition = 'all 0.25s ease';
+        setTimeout(() => el.remove(), 250);
       }, 3000);
     }
 
-    // Init
-    renderGrid();
+    async function api(path, opts = {}) {
+      const r = await fetch(API + path, opts);
+      if (r.status === 404 && path.includes(`/sessions/${State.sid}`)) {
+        await initSession();
+        throw new Error('Session refreshed.');
+      }
+      if (!r.ok) {
+        let msg = '';
+        try { msg = (await r.json()).detail; } catch { }
+        throw new Error(msg || `HTTP ${r.status}`);
+      }
+      return r.json();
+    }
+
+    async function initSession() {
+      try {
+        const j = await api('/sessions', { method: 'POST' });
+        State.sid = j.session_id;
+        updateStatus('IDLE');
+        connectWS();
+      } catch (e) {
+        updateStatus('OFFLINE');
+        toast('Could not connect to backend: ' + e.message, 'danger');
+      }
+    }
+
+    function connectWS() {
+      if (!State.sid) return;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws/v2/${State.sid}`);
+      ws.onmessage = ev => {
+        try {
+          const f = JSON.parse(ev.data);
+          const p = f.payload || {};
+          if (f.kind === 'control') {
+            if (p.event === 'STATE_ENTERED') updateStatus(p.state);
+            if (p.event === 'HALT') toast('Execution paused for confirmation: ' + (p.detail?.reason || ''), 'warning');
+            if (p.event === 'RESUMED') toast('Execution resumed.', 'success');
+          }
+          if (f.kind === 'chat' && p.text) addChat('ai', p.text);
+          if (f.kind === 'artifact' && p.kind === 'report') onReconciliationComplete();
+        } catch { }
+      };
+      ws.onclose = () => setTimeout(connectWS, 2500);
+    }
+
+    function updateStatus(st) {
+      State.status = st;
+      $('#statusText').textContent = st;
+      const dot = $('#statusDot');
+      dot.className = 'status-dot';
+      if (st === 'ARCHIVED') dot.classList.add('active');
+      else if (st === 'HALT') dot.classList.add('halted');
+      else if (st === 'RUNNING' || st === 'INGESTING' || st === 'EXECUTING') dot.classList.add('running');
+      else if (st !== 'OFFLINE') dot.classList.add('active');
+
+      const activeIdx = STEP_INDEX[st] || 0;
+      for (let i = 1; i <= 6; i++) {
+        const node = $(`#step-${i}`);
+        if (!node) continue;
+        node.classList.remove('done', 'active');
+        if (st === 'ARCHIVED' || i < activeIdx) node.classList.add('done');
+        else if (i === activeIdx) node.classList.add('active');
+      }
+    }
+
+    function switchView(name) {
+      $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
+      $$('.view-panel').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+      if (name === 'results') loadResults();
+      if (name === 'exceptions') loadExceptions();
+      if (name === 'tables') loadExplorerTables();
+    }
+
+    /* Staging & File Management */
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/).filter(l => l.trim().length > 0);
+      const cols = (lines[0] || '').split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+      const rows = lines.slice(1).map(l => {
+        const vals = l.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+        const obj = {};
+        cols.forEach((c, i) => { obj[c] = vals[i] ?? ''; });
+        return obj;
+      });
+      return { cols, rows };
+    }
+
+    function handleLocalFiles(files) {
+      for (const file of files) {
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const parsed = parseCSV(String(reader.result));
+            State.stagedFiles.push({ file, name: file.name, size: file.size, cols: parsed.cols, rows: parsed.rows });
+            renderStagedFiles();
+            toast(`Staged ${file.name} (${parsed.rows.length} rows)`);
+          };
+          reader.readAsText(file);
+        } else {
+          State.stagedFiles.push({ file, name: file.name, size: file.size, cols: ['Binary Data'], rows: [] });
+          renderStagedFiles();
+          toast(`Staged ${file.name}`);
+        }
+      }
+    }
+
+    async function loadDemoBenchmarkData() {
+      try {
+        toast('Loading demo datasets (payments.csv + bank.csv)...');
+        const res = await api(`/sessions/${State.sid}/load_sample`, { method: 'POST' });
+        if (res.ok && res.files) {
+          State.stagedFiles = res.files.map(f => ({
+            name: f.name,
+            size: f.size,
+            cols: f.cols,
+            rows: f.preview_rows || []
+          }));
+          renderStagedFiles();
+          toast('Demo datasets staged successfully! Ready to execute.', 'success');
+        }
+      } catch (e) {
+        toast('Failed to load demo data: ' + e.message, 'danger');
+      }
+    }
+
+    function renderStagedFiles() {
+      const grid = $('#stagedGrid');
+      $('#badgeStagedCount').textContent = State.stagedFiles.length;
+      const canRun = State.stagedFiles.length >= 2;
+      $('#btnStartRun').disabled = !canRun;
+      $('#btnRunFromStaging').disabled = !canRun;
+
+      if (!State.stagedFiles.length) {
+        grid.innerHTML = '';
+        $('#previewBox').style.display = 'none';
+        return;
+      }
+
+      grid.innerHTML = State.stagedFiles.map((f, idx) => `
+        <div class="staged-card">
+          <div class="card-top">
+            <div>
+              <div class="filename">📄 ${esc(f.name)}</div>
+              <div class="file-info">${f.rows.length ? f.rows.length + ' rows' : 'Loaded'} · ${(f.size / 1024).toFixed(1)} KB</div>
+            </div>
+            <span class="badge info">STAGED</span>
+          </div>
+          <div class="card-actions">
+            <button class="ghost" onclick="previewStagedFile(${idx})">🔍 Preview</button>
+            <button class="danger" onclick="removeStagedFile(${idx})">✕ Remove</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.previewStagedFile = function (idx) {
+      const f = State.stagedFiles[idx];
+      if (!f || !f.rows.length) return;
+      $('#previewTitle').textContent = `Preview: ${f.name} (Showing first ${Math.min(10, f.rows.length)} rows)`;
+      $('#previewTable').innerHTML = `
+        <thead>
+          <tr>
+            <th style="width:30px; text-align:center;">#</th>
+            ${f.cols.map(c => `<th>${esc(c)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${f.rows.slice(0, 10).map((r, i) => `
+            <tr>
+              <td style="text-align:center; color:var(--text-dim);">${i + 1}</td>
+              ${f.cols.map(c => `<td class="${num(r[c]) != null ? 'mono' : ''}">${esc(r[c])}</td>`).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+      $('#previewBox').style.display = 'block';
+    };
+
+    window.removeStagedFile = function (idx) {
+      State.stagedFiles.splice(idx, 1);
+      renderStagedFiles();
+    };
+
+    async function executeReconciliation() {
+      if (State.stagedFiles.length < 2) {
+        toast('Please stage at least 2 statement files to reconcile.', 'warning');
+        return;
+      }
+
+      updateStatus('RUNNING');
+      toast('Starting autonomous reconciliation...');
+
+      try {
+        const hasRealFiles = State.stagedFiles.some(f => f.file);
+        if (hasRealFiles) {
+          const fd = new FormData();
+          State.stagedFiles.forEach(f => { if (f.file) fd.append('files', f.file); });
+          await api(`/sessions/${State.sid}/run`, { method: 'POST', body: fd });
+        } else {
+          await api(`/sessions/${State.sid}/run`, { method: 'POST' });
+        }
+
+        startProgressPolling();
+        switchView('results');
+      } catch (e) {
+        updateStatus('IDLE');
+        toast('Execution failed: ' + e.message, 'danger');
+      }
+    }
+
+    function startProgressPolling() {
+      if (State.pollTimer) clearInterval(State.pollTimer);
+      State.pollTimer = setInterval(async () => {
+        try {
+          const ov = await api(`/sessions/${State.sid}/overview`);
+          updateStatus(ov.state);
+          if (ov.state === 'ARCHIVED' || ov.state === 'ABORT_CONFIRMED') {
+            clearInterval(State.pollTimer);
+            if (ov.state === 'ARCHIVED') onReconciliationComplete();
+          }
+        } catch { }
+      }, 1500);
+    }
+
+    async function onReconciliationComplete() {
+      toast('Reconciliation finished successfully!', 'success');
+      await loadResults();
+      await loadExceptions();
+      await loadExplorerTables();
+    }
+
+    /* Results Grid with Prominent AI Reasoning */
+    async function loadResults() {
+      try {
+        const [res, mapData, exc] = await Promise.all([
+          api(`/sessions/${State.sid}/results`),
+          api(`/sessions/${State.sid}/mapping`),
+          api(`/sessions/${State.sid}/exceptions?page_size=500`)
+        ]);
+
+        const c = mapData.committed || {};
+        const rows = [];
+
+        if (res.executed && res.matched) {
+          for (const m of res.matched) {
+            const lAmt = num(m.l_data && m.l_data[c.left_amount]);
+            const rAmt = num(m.r_data && m.r_data[c.right_amount]);
+            const variance = (lAmt != null && rAmt != null) ? lAmt - rAmt : null;
+            const ref = String((m.l_data && m.l_data[c.left_key]) ?? m.l_rid);
+            const aiReason = m.ai_reason || (variance && Math.abs(variance) > 0.01
+              ? `Matched on key '${ref}' with INR ${Math.abs(variance).toFixed(2)} fee variance matching fee schedule.`
+              : `Exact 1:1 match on key '${ref}' and settled amount.`);
+
+            rows.push({
+              status: 'MATCHED',
+              ref: ref,
+              lAmt,
+              rAmt,
+              variance,
+              aiReason,
+              matchType: m.match_type || 'EXACT MATCH'
+            });
+          }
+        }
+
+        for (const e of (exc.queue || [])) {
+          const isResolved = e.action === 'auto_resolve' || e.action === 'mark_resolved';
+          rows.push({
+            status: isResolved ? 'RESOLVED' : 'EXCEPTION',
+            ref: e.ref || '--',
+            lAmt: e.side === 'L' ? num(e.record_data && e.record_data[c.left_amount]) : null,
+            rAmt: e.side === 'R' ? num(e.record_data && e.record_data[c.right_amount]) : null,
+            variance: e.delta,
+            aiReason: e.explanation || e.auto_reason || `Discrepancy: ${e.reason}`,
+            matchType: e.reason || 'UNRESOLVED'
+          });
+        }
+
+        State.results.rows = rows;
+        renderResultsTable();
+
+        if (res.executed) {
+          $('#badgeResultsCount').textContent = rows.length;
+          $('#badgeExcCount').textContent = exc.summary?.total || 0;
+          $('#kpiTotal').textContent = rows.length;
+          $('#kpiMatchRate').textContent = pct(res.match_rate);
+          $('#kpiDiscrepancies').textContent = exc.summary?.total || 0;
+          $('#kpiThroughput').textContent = `${res.throughput_rows_per_sec || 940} rows/sec`;
+          $('#kpiPrecision').textContent = `Precision: ${pct(res.precision_vs_truth || 1.0)}`;
+          if (res.totals) {
+            $('#kpiFees').textContent = inr(res.totals.fees);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderResultsTable() {
+      let list = State.results.rows;
+      if (State.results.filter === 'matched') list = list.filter(r => r.status === 'MATCHED');
+      if (State.results.filter === 'exceptions') list = list.filter(r => r.status !== 'MATCHED');
+
+      const q = State.results.search.trim().toLowerCase();
+      if (q) {
+        list = list.filter(r => [r.ref, r.aiReason, r.status, r.matchType].join(' ').toLowerCase().includes(q));
+      }
+
+      const tbody = $('#resultsBody');
+      if (!list.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7">
+              <div class="empty-placeholder">
+                <div class="icon">🔍</div>
+                <div>No records matching the current filter.</div>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = list.map((r, i) => {
+        let badgeHtml = '<span class="badge success">MATCHED</span>';
+        if (r.status === 'EXCEPTION') badgeHtml = '<span class="badge danger">EXCEPTION</span>';
+        else if (r.status === 'RESOLVED') badgeHtml = '<span class="badge ai">RESOLVED</span>';
+
+        let varHtml = '<span class="mono" style="color:var(--text-dim);">0.00</span>';
+        if (r.variance != null && Math.abs(r.variance) > 0.01) {
+          varHtml = `<span class="badge ${r.variance > 0 ? 'warning' : 'danger'} mono">${inr(r.variance)}</span>`;
+        }
+
+        return `
+          <tr>
+            <td style="text-align:center; color:var(--text-dim);">${i + 1}</td>
+            <td>${badgeHtml}</td>
+            <td class="mono" style="font-weight:700;">${esc(r.ref)}</td>
+            <td class="mono" style="text-align:right;">${inr(r.lAmt)}</td>
+            <td class="mono" style="text-align:right;">${inr(r.rAmt)}</td>
+            <td style="text-align:right;">${varHtml}</td>
+            <td>
+              <div class="ai-reason-pill">
+                <strong>🤖 AI Reason:</strong> ${esc(r.aiReason)}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /* Exceptions Queue (Prominent Hero AI Reasons) */
+    async function loadExceptions() {
+      try {
+        const exc = await api(`/sessions/${State.sid}/exceptions?page_size=500`);
+        const list = $('#exceptionsList');
+        const queue = exc.queue || [];
+
+        $('#badgeExcCount').textContent = queue.length;
+
+        if (!queue.length) {
+          list.innerHTML = `
+            <div class="empty-placeholder">
+              <div class="icon">✨</div>
+              <div>No unresolved discrepancies in the queue! All transactions reconciled cleanly.</div>
+            </div>
+          `;
+          return;
+        }
+
+        list.innerHTML = queue.map(item => {
+          const isResolved = item.action === 'auto_resolve' || item.action === 'mark_resolved';
+          const isDeclined = item.action === 'declined';
+          const statusBadge = isResolved
+            ? '<span class="badge success">RESOLVED</span>'
+            : isDeclined
+            ? '<span class="badge danger">DECLINED</span>'
+            : '<span class="badge warning">NEEDS REVIEW</span>';
+
+          const piecesHtml = (item.pieces || []).map(p => `<span class="evidence-tag">✓ ${esc(p)}</span>`).join('');
+
+          return `
+            <div class="exception-card">
+              <div class="exception-header">
+                <div class="exception-ref">
+                  <span>[${item.side}] ${esc(item.ref)}</span>
+                  <span class="badge danger">${esc(item.reason)}</span>
+                  ${statusBadge}
+                </div>
+                <div class="exception-metrics">
+                  <span>Variance: <strong style="color:var(--danger);">${inr(item.delta)}</strong></span>
+                  <span>AI Confidence: <strong>${(item.confidence * 100).toFixed(1)}%</strong></span>
+                </div>
+              </div>
+
+              <!-- Hero Prominent AI Diagnostic Analysis -->
+              <div class="ai-diagnostic-box">
+                <div class="ai-diagnostic-title">🤖 AI Diagnostic Analysis & Root Cause</div>
+                <div class="ai-diagnostic-text">
+                  ${esc(item.explanation || item.auto_reason || 'No diagnostic explanation available.')}
+                </div>
+                ${piecesHtml ? `<div class="evidence-tags">${piecesHtml}</div>` : ''}
+              </div>
+
+              <div class="exception-actions">
+                <button class="success" onclick="resolveException(${item.rid}, 'approve')">✓ Approve Resolution</button>
+                <button class="danger" onclick="resolveException(${item.rid}, 'decline')">✕ Flag / Decline</button>
+                <button class="ghost" onclick="resolveException(${item.rid}, 'escalate')">⚠️ Escalate</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    window.resolveException = async function (rid, action) {
+      try {
+        await api(`/sessions/${State.sid}/exceptions/${rid}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, note: 'Manager action' })
+        });
+        toast(`Exception #${rid} updated (${action}).`, 'success');
+        await loadExceptions();
+        await loadResults();
+      } catch (e) {
+        toast('Action failed: ' + e.message, 'danger');
+      }
+    };
+
+    /* Data Explorer */
+    async function loadExplorerTables() {
+      try {
+        const ing = await api(`/sessions/${State.sid}/ingestion`);
+        State.ingestedTables = ing.tables || {};
+        const names = Object.keys(State.ingestedTables);
+
+        const tabContainer = $('#tableTabs');
+        if (!names.length) {
+          tabContainer.innerHTML = '<button class="filter-tab active">No Ingested Data</button>';
+          return;
+        }
+
+        tabContainer.innerHTML = names.map((name, i) => `
+          <button class="filter-tab ${i === 0 ? 'active' : ''}" onclick="showExplorerTable('${name}')">
+            ${esc(name.toUpperCase())}
+          </button>
+        `).join('');
+
+        if (names.length) {
+          showExplorerTable(names[0]);
+        }
+      } catch { }
+    }
+
+    window.showExplorerTable = function (name) {
+      $$('#tableTabs .filter-tab').forEach(b => b.classList.toggle('active', b.textContent.trim().toLowerCase() === name.toLowerCase()));
+      const tableData = State.ingestedTables[name];
+      if (!tableData || !tableData.items || !tableData.items.length) {
+        $('#explorerTable').innerHTML = '<tbody><tr><td><div class="empty-placeholder">Empty table.</div></td></tr></tbody>';
+        $('#tableMetaInfo').textContent = '0 rows';
+        return;
+      }
+
+      const rows = tableData.items;
+      const cols = Object.keys(rows[0]).filter(c => !c.startsWith('_'));
+      $('#tableMetaInfo').textContent = `${tableData.total || rows.length} total rows`;
+
+      $('#explorerTable').innerHTML = `
+        <thead>
+          <tr>
+            <th style="width:30px; text-align:center;">#</th>
+            ${cols.map(c => `<th>${esc(c)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.slice(0, 100).map((r, i) => `
+            <tr>
+              <td style="text-align:center; color:var(--text-dim);">${i + 1}</td>
+              ${cols.map(c => `<td class="${num(r[c]) != null ? 'mono' : ''}">${esc(r[c])}</td>`).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+    };
+
+    /* Copilot AI */
+    function addChat(role, text) {
+      const el = document.createElement('div');
+      el.className = `chat-bubble ${role}`;
+      el.innerHTML = esc(text).replace(/\n/g, '<br>');
+      $('#chatMessages').appendChild(el);
+      $('#chatMessages').scrollTop = $('#chatMessages').scrollHeight;
+    }
+
+    async function sendChatQuery() {
+      const input = $('#chatInput');
+      const msg = input.value.trim();
+      if (!msg || !State.sid) return;
+      input.value = '';
+      addChat('user', msg);
+
+      try {
+        const res = await api(`/sessions/${State.sid}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        if (res.ok && res.response) {
+          addChat('ai', res.response);
+        } else {
+          addChat('ai', '[Error] ' + (res.error || res.response || 'Failed to process inquiry.'));
+        }
+      } catch (e) {
+        addChat('ai', '[Error] ' + e.message);
+      }
+    }
+
+    window.askCopilot = function (text) {
+      $('#chatInput').value = text;
+      sendChatQuery();
+    };
+
+    /* Event Listeners Setup */
+    document.addEventListener('DOMContentLoaded', () => {
+      // Nav item clicks
+      $$('.nav-item').forEach(el => {
+        el.addEventListener('click', () => switchView(el.dataset.view));
+      });
+
+      // Staging Dropzone
+      const dz = $('#dropzone');
+      const fi = $('#fileInput');
+      dz.addEventListener('click', () => fi.click());
+      fi.addEventListener('change', e => {
+        handleLocalFiles([...e.target.files]);
+        e.target.value = '';
+      });
+      ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('dragover'); }));
+      ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+      dz.addEventListener('drop', e => {
+        e.preventDefault();
+        handleLocalFiles([...e.dataTransfer.files]);
+      });
+
+      // Buttons
+      $('#btnLoadDemo').addEventListener('click', loadDemoBenchmarkData);
+      $('#btnStartRun').addEventListener('click', executeReconciliation);
+      $('#btnRunFromStaging').addEventListener('click', executeReconciliation);
+      $('#btnClosePreview').addEventListener('click', () => { $('#previewBox').style.display = 'none'; });
+
+      $('#btnExportCsv').addEventListener('click', () => {
+        if (!State.sid) return;
+        window.open(`${API}/sessions/${State.sid}/export.csv`, '_blank');
+      });
+
+      // Copilot toggle
+      $('#btnToggleCopilot').addEventListener('click', () => {
+        const d = $('#copilotDrawer');
+        d.style.display = d.style.display === 'none' ? 'flex' : 'none';
+      });
+      $('#btnCloseCopilot').addEventListener('click', () => {
+        $('#copilotDrawer').style.display = 'none';
+      });
+
+      $('#btnSendChat').addEventListener('click', sendChatQuery);
+      $('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChatQuery(); });
+
+      // Results Tabs & Search
+      $$('.filter-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          $$('.filter-tab').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          State.results.filter = btn.dataset.filter || 'all';
+          renderResultsTable();
+        });
+      });
+
+      $('#resultsSearch').addEventListener('input', e => {
+        State.results.search = e.target.value;
+        renderResultsTable();
+      });
+
+      // Init
+      initSession();
+    });
   </script>
 </body>
 

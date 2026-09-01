@@ -205,9 +205,9 @@ def conversational_chat(
             "parts": [{
                 "text": (
                     system_instruction
-                    + "\n\nCRITICAL INSTRUCTION: Reply directly to the user as the assistant. "
-                    "Do NOT output internal thoughts, reasoning steps, or notes analyzing the prompt. "
-                    "Provide ONLY the final, polished response directly to the user."
+                    + "\n\nCRITICAL INSTRUCTION: Reply directly to the user as a financial reconciliation assistant. "
+                    "Do NOT output internal thoughts, 'Context:', 'Data Analysis:', planning bullets ('* Explain...'), or notes analyzing the prompt. "
+                    "Provide ONLY the final, direct, conversational markdown answer."
                 )
             }]
         },
@@ -227,6 +227,27 @@ def conversational_chat(
         d = json.loads(r.read())
 
     raw_reply = d["candidates"][0]["content"]["parts"][0]["text"].strip()
+    
+    # Clean any internal scratchpad or planning prefixes
+    raw_reply = re.sub(r"<thought>[\s\S]*?</thought>", "", raw_reply, flags=re.IGNORECASE)
+    raw_reply = re.sub(r"<scratchpad>[\s\S]*?</scratchpad>", "", raw_reply, flags=re.IGNORECASE)
+    
+    lines = raw_reply.splitlines()
+    cleaned_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r"^(User Question:|Question:|\* Context:|\* Plan:|\* Draft:|\* Scratchpad:|\* Thinking:)", stripped, re.IGNORECASE):
+            continue
+        if re.match(r"^\*\s*(Identify|Explain|Mention|Describe|State|Outline|Summarize)\s+(the|that|how|why|these)\b", stripped, re.IGNORECASE):
+            continue
+        if re.match(r"^\*\s*(Data Analysis|Context|Prompt Analysis|Task Decomposition):", stripped, re.IGNORECASE):
+            continue
+        cleaned_lines.append(line)
+    
+    cleaned_reply = "\n".join(cleaned_lines).strip()
+    if cleaned_reply:
+        raw_reply = cleaned_reply
+
     u = d.get("usageMetadata", {})
     t_in = u.get("promptTokenCount", sum(len(m.get("content", "")) for m in messages) // 4)
     t_out = u.get("candidatesTokenCount", len(raw_reply) // 4)
