@@ -30,6 +30,7 @@ def test_end_to_end_classifications_and_evidence(tmp_path: Path) -> None:
     """Verify end-to-end classification taxonomy, evidence exclusivity, and 100% benchmark precision/recall."""
     generate(tmp_path)
     p = Pipeline("test-session", auto_ack=True)
+    p.set_policy(fee_rate=0.02, gst_rate=0.18, tolerance=0.01)
     final = p.run(
         [tmp_path / "payments.csv", tmp_path / "bank.csv"],
         tmp_path / "ground_truth.jsonl",

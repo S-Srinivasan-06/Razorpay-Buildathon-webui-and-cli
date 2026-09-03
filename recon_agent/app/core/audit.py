@@ -49,6 +49,24 @@ class AuditLog:
 
         self._fh = open(self.path, "a", encoding="utf-8")
 
+    def close(self) -> None:
+        """Close the underlying file descriptor cleanly."""
+        with self._lock:
+            if getattr(self, "_fh", None) and not self._fh.closed:
+                self._fh.close()
+
+    def __enter__(self) -> "AuditLog":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def append(self, payload: Dict[str, Any]) -> None:
         """Append a new record to the audit chain with SHA-256 signing and disk fsync.
         

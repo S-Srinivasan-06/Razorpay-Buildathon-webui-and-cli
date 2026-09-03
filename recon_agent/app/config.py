@@ -13,12 +13,14 @@ DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 LOGS_DIR = DATA_DIR / "logs"
 AUDIT_DIR = DATA_DIR / "audit"
+OUTPUT_DIR = DATA_DIR / "outputs"
 
 # Ensure all working directories exist upon module import
 DATA_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
 AUDIT_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 def _load_env_file() -> None:

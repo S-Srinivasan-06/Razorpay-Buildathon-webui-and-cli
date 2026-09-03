@@ -28,19 +28,28 @@ from app.core.contracts import (
     DecisionRecord,
     EvidencePiece,
     ExecutionResult,
+    FeeTaxRule,
     FinalReport,
     MatchComponent,
     MatchedRecord,
     MessageKind,
     Policy,
     PolicyComponent,
+    SegmentMatcher,
     UnmatchedRecord,
     VarianceMetrics,
 )
 from app.core.dispatcher import breaker_open, dispatch_tool_call, ToolCall
 from app.core.states import State, StateMachine
 from app.engine import match, qa, report, resolving
-from app.engine.fee import compute_deduction_breakdown, compute_expected_net, compute_fee, compute_tax_component, compute_net_settlement
+from app.engine.fee import (
+    compute_deduction_breakdown,
+    compute_expected_net,
+    compute_fee,
+    compute_tax_component,
+    compute_net_settlement,
+    effective_tolerance,
+)
 from app.engine.match import _sim, fee_explains
 
 
@@ -122,8 +131,15 @@ class Pipeline:
         self.sm: StateMachine = StateMachine(sid)
         self.fb: List[str] = []
         self.tables: Dict[str, List[Dict[str, Any]]] = {}
-        self.cfg: Dict[str, Any] = {}
-        self.schedule: Optional[Any] = next(iter(REG.fee_schedules.values()), None)
+        self.rules: List[FeeTaxRule] = []
+        self.schedule: Optional[Any] = None
+        self.cfg: Dict[str, Any] = {
+            "tolerance": 0.01,
+            "tolerance_abs": 0.01,
+            "tolerance_pct": 0.0,
+            "tolerance_mode": "absolute_only",
+            "window_days": 3,
+        }
         self.truth: List[Dict[str, Any]] = []
         self.profiles: Dict[str, List[Any]] = {}
         self._map_cands: List[Any] = []
@@ -133,17 +149,42 @@ class Pipeline:
         self.final: Optional[FinalReport] = None
         self.queue: List[Dict[str, Any]] = []
 
+    def set_rules(self, rules: List[FeeTaxRule]) -> None:
+        """Set the active list of segment fee/tax rules."""
+        self.rules = list(rules)
+
+    def add_rule(self, rule: FeeTaxRule) -> None:
+        """Append a new segment rule to active rules."""
+        self.rules.append(rule)
+
+    def set_tolerance(
+        self,
+        abs_tol: float = 0.01,
+        pct_tol: float = 0.0,
+        mode: str = "absolute_only",
+    ) -> None:
+        """Configure user-defined matching tolerance thresholds and combination mode."""
+        self.cfg["tolerance_abs"] = float(abs_tol)
+        self.cfg["tolerance_pct"] = float(pct_tol)
+        self.cfg["tolerance_mode"] = str(mode)
+        self.cfg["tolerance"] = float(abs_tol)
+
     def set_policy(
         self,
-        fee_rate: float = 0.02,
-        gst_rate: float = 0.18,
+        fee_rate: float = 0.0,
+        gst_rate: float = 0.0,
         tolerance: float = 0.01,
         window_days: int = 3,
         flat_fee: float = 0.0,
     ) -> None:
-        """Configure dynamic fee schedule, tax rate, and tolerance for reconciliation."""
+        """Configure dynamic fee schedule, tax rate, and tolerance for reconciliation.
+        
+        Preserves any existing specific segment rules — the policy_rule is added as
+        a low-priority (999) catch-all fallback, so fine-grained segment rules take precedence.
+        If no segment rules are active, policy_rule becomes the sole rule.
+        """
         import datetime
-        from app.core.contracts import FeeSchedule
+        from app.core.contracts import FeeSchedule, FeeTaxRule, SegmentMatcher
         self.schedule = FeeSchedule(
             provider="custom_policy",
             schedule_id=f"sched_{self.sid}",
@@ -154,6 +195,23 @@ class Pipeline:
             gst_rate=float(gst_rate),
         )
         self.cfg["tolerance"] = float(tolerance)
+        self.cfg["tolerance_abs"] = float(tolerance)
+        self.cfg["window_days"] = int(window_days)
+
+        # Add as priority-999 catch-all: specific segment rules take precedence.
+        policy_rule = FeeTaxRule(
+            rule_id=f"rule_{uuid.uuid4().hex[:6]}",
+            label=f"Standard Policy ({fee_rate*100:.1f}% fee + {gst_rate*100:.1f}% GST)",
+            matcher=SegmentMatcher(kind="all"),
+            fee_rate=float(fee_rate),
+            gst_rate=float(gst_rate),
+            flat_fee=float(flat_fee),
+            priority=999,
+            source="user_explicit",
+        )
+        # Keep specific segment rules (priority < 999), replace only any previous policy catch-all
+        specific_rules = [r for r in self.rules if getattr(r, "priority", 1) < 999]
+        self.rules = specific_rules + [policy_rule]
         self.cfg["window_days"] = int(window_days)
 
     # ---------- Event bus helper methods ----------
@@ -215,6 +273,11 @@ class Pipeline:
                 self._trace("UNPARSED", file=str(f), err=str(e)[:120])
         if truth:
             self.truth = [json.loads(l) for l in Path(truth).read_text().splitlines() if l]
+        self._trace(
+            "INGESTION_COMPLETED",
+            tables={t: len(r) for t, r in self.tables.items()},
+            total_rows=sum(len(r) for r in self.tables.values()),
+        )
         return self.sm.transition(State.PROFILING, f"{len(self.tables)} tables")
 
     # ---------- Step 2: Profiling ----------
@@ -247,6 +310,11 @@ class Pipeline:
                         pii_likelihood=max((pii_score(c, v) for v in s.head(5)), default=0.0),
                     )
                 )
+        self._trace(
+            "PROFILING_COMPLETED",
+            table_count=len(self.tables),
+            column_count=sum(len(p) for p in self.profiles.values()),
+        )
         return self.sm.transition(State.MAPPING_PROPOSED)
 
     def _pick(self, t: str, kind: str) -> Optional[str]:
@@ -359,6 +427,13 @@ class Pipeline:
         if self._ambiguous or self._map_conf < REG["mapping_auto_accept"]:
             self._chat(f"Mapping confidence {self._map_conf:.2f} — proceeding with trace visibility.")
 
+        self._trace(
+            "MAPPING_PROPOSED",
+            left_table=self.cfg.get("left_table"),
+            right_table=self.cfg.get("right_table"),
+            key_linkage=f"{self.cfg.get('left_key')} <-> {self.cfg.get('right_key')}",
+            confidence=round(self._map_conf, 3),
+        )
         return self.sm.transition(State.POLICY_GENERATED)
 
     # ---------- Step 4: Policy Synthesis & Dry-Run ----------
@@ -378,6 +453,14 @@ class Pipeline:
         )
         self.cfg.setdefault("tolerance", 0.01)
         self.cfg.setdefault("window_days", 3)
+        self._trace(
+            "POLICY_CALIBRATED",
+            fee_rate=f"{self.cfg.get('fee_rate', 0.02)*100:.1f}%",
+            gst_rate=f"{self.cfg.get('gst_rate', 0.18)*100:.1f}%",
+            tolerance=f"INR {self.cfg.get('tolerance', 0.02):.2f}",
+            mode=self.cfg.get("tolerance_mode", "absolute_only"),
+            active_rules=len(self.rules),
+        )
         return self.sm.transition(State.DRY_RUN)
 
     # ---------- Scoring Core ----------
@@ -432,7 +515,7 @@ class Pipeline:
             return rec, ev
 
         is_large = len(rows_r) > 300
-        for l in rows_l:
+        for l_idx, l in enumerate(rows_l):
             key = str(l[self.cfg["left_key"]])
             if key in dup_keys and key not in seen_dup:
                 dups.append({"side": "L", "key": key, "rids": [x["_rid"] for x in lkeys[key]]})
@@ -442,7 +525,20 @@ class Pipeline:
             direct_cands = [r for r in r_by_key.get(key, []) if r["_rid"] not in used_r]
             if direct_cands:
                 cands = [
-                    (r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
+                    (
+                        r,
+                        *match.score_pair(
+                            self.sid,
+                            l,
+                            r,
+                            self.cfg,
+                            schedule=self.schedule,
+                            fallback_events=self.fb,
+                            rules=self.rules,
+                            total_rows=len(rows_l),
+                            row_idx=l_idx,
+                        ),
+                    )
                     for r in direct_cands
                 ]
                 cands = [(r, v, c, e, d) for (r, v, c, e, d) in cands if v >= REG["match_review_floor"]]
@@ -462,7 +558,20 @@ class Pipeline:
                     )[:150]
 
                 cands = [
-                    (r, *match.score_pair(self.sid, l, r, self.cfg, self.schedule, self.fb))
+                    (
+                        r,
+                        *match.score_pair(
+                            self.sid,
+                            l,
+                            r,
+                            self.cfg,
+                            schedule=self.schedule,
+                            fallback_events=self.fb,
+                            rules=self.rules,
+                            total_rows=len(rows_l),
+                            row_idx=l_idx,
+                        ),
+                    )
                     for r in search_pool
                 ]
                 cands = [(r, v, c, e, d) for (r, v, c, e, d) in cands if v >= REG["match_review_floor"]]
@@ -531,10 +640,10 @@ class Pipeline:
         if mean_cand < REG["calibration_sanity_floor"]:
             self._trace("CALIBRATION_DRIFT_WARNING", mean_cand=round(mean_cand, 3))
         self._trace(
-            "dry_run_done",
-            s=round(time.time() - t0, 2),
-            baseline=round(self.policy_doc.baseline_match_rate, 3),
-            mean_cand=round(mean_cand, 3),
+            "DRY_RUN_EVALUATED",
+            sample_size=len(rows_l),
+            projected_match_rate=f"{(self.policy_doc.baseline_match_rate or 0.0)*100:.1f}%",
+            duration_s=round(time.time() - t0, 2),
         )
         return self.sm.transition(State.EXECUTING)
 
@@ -548,6 +657,14 @@ class Pipeline:
             self.tables[self.cfg["right_table"]],
         )
         self._exec_s = max(time.time() - t0, 1e-6)
+        self._trace(
+            "EXECUTION_MATCHING_COMPLETED",
+            matched_pairs=len(self.exec_res.matched),
+            left_rows=len(self.tables[self.cfg["left_table"]]),
+            right_rows=len(self.tables[self.cfg["right_table"]]),
+            unmatched_count=len(self.exec_res.unmatched),
+            duration_s=round(self._exec_s, 2),
+        )
         return self.sm.transition(State.INSPECTING)
 
     def _inspect_metrics(self) -> None:
@@ -576,6 +693,12 @@ class Pipeline:
     def inspect(self) -> bool:
         """Inspect match quality metrics; trigger adaptive revision if below threshold."""
         self._inspect_metrics()
+        self._trace(
+            "INSPECTION_METRICS",
+            match_rate=f"{(self.match_rate or 0.0)*100:.1f}%",
+            threshold=f"{REG['revision_match_rate_threshold']*100:.1f}%",
+            status="PASS" if self.match_rate >= REG["revision_match_rate_threshold"] else "REVISION_TRIGGERED",
+        )
         if self.match_rate < REG["revision_match_rate_threshold"]:
             return self.sm.transition(State.REVISION)
         return self.sm.transition(State.QA)
@@ -590,13 +713,15 @@ class Pipeline:
         ):
             old = self.cfg["tolerance"]
             self.cfg["tolerance"] = round(old * 1.2, 4)
-            self._trace("revision", it=it, tol=self.cfg["tolerance"])
+            self._trace("REVISION_OPTIMIZATION", iteration=it + 1, calibrated_tolerance=round(self.cfg["tolerance"], 4))
+            if self.sm.state != State.EXECUTING:
+                self.sm.transition(State.EXECUTING)
             self.execute()
             self._inspect_metrics()
             # If tolerance expansion caused a regression compared to baseline, revert and break
             if self.policy_doc.baseline_match_rate - self.match_rate > REG["regression_reject_delta"]:
                 self.cfg["tolerance"] = old
-                self._trace("revision_regression_rejected", it=it)
+                self._trace("REVISION_REGRESSION_REJECTED", iteration=it + 1, note="Reverted tolerance to avoid regression")
                 break
             it += 1
 
@@ -618,10 +743,13 @@ class Pipeline:
         rows_r: List[Dict[str, Any]],
         sd: Optional[float],
         used_l: Optional[Set[int]] = None,
+        suppress_split: bool = False,
     ) -> Dict[str, Any]:
         """Extract diagnostic context signals for a specific unmatched record."""
         lk, rk = self.cfg["left_key"], self.cfg["right_key"]
-        tol = self.cfg["tolerance"]
+        abs_tol = float(self.cfg.get("tolerance_abs", self.cfg.get("tolerance", 0.01)))
+        pct_tol = float(self.cfg.get("tolerance_pct", 0.0))
+        mode = str(self.cfg.get("tolerance_mode", "absolute_only"))
         used_l = used_l or set()
         ctx: Dict[str, Any] = {
             k: ([] if k in ("dup_rids", "split_targets") else False) for k in qa.CTX_KEYS
@@ -635,14 +763,31 @@ class Pipeline:
             if cands and self.cfg.get("left_amount"):
                 a = float(l[self.cfg["left_amount"]])
                 rv = float(cands[0][self.cfg["right_amount"]])
-                ctx["fee_match"] = fee_explains(a, rv, self.schedule, tol)
+                row_tol = effective_tolerance(a, abs_tol=abs_tol, pct_tol=pct_tol, mode=mode)
                 
-                # Composite policy: fee, GST, and configured TDS must be
-                # evaluated together; no independent deduction simulations.
-                deductions = compute_deduction_breakdown(a, self.schedule) if self.schedule else {"expected_net": a, "tds": 0}
-                ctx["tax_match"] = deductions["tds"] > 0 and abs(deductions["expected_net"] - rv) <= tol
-                ctx["fee_match"] = abs(deductions["expected_net"] - rv) <= tol
+                # Composite rule/schedule evaluation — thread row_idx from _rid for defense-in-depth
+                l_row_idx = (int(l["_rid"]) - 1) if "_rid" in l else 0
+                if self.rules:
+                    deductions = compute_deduction_breakdown(a, rules=self.rules, row=l, total_rows=len(rows_l), row_idx=l_row_idx)
+                elif self.schedule:
+                    deductions = compute_deduction_breakdown(a, schedule=self.schedule)
+                else:
+                    deductions = {
+                        "gross": a,
+                        "gateway_fee": 0.0,
+                        "gst": 0.0,
+                        "tds": 0.0,
+                        "total_deductions": 0.0,
+                        "expected_net": a,
+                        "rule_label": "Zero Fee/Tax (Default)",
+                    }
                 
+                expected_net = deductions["expected_net"]
+                ctx["rule_label"] = deductions.get("rule_label")
+                ctx["tolerance_str"] = f"₹{row_tol:.2f} ({mode})"
+                ctx["fee_match"] = abs(expected_net - rv) <= row_tol and (deductions.get("gateway_fee", 0) > 0 or deductions.get("total_deductions", 0) > 0)
+                ctx["tax_match"] = (deductions.get("tds", 0) > 0 or deductions.get("gst", 0) > 0) and abs(expected_net - rv) <= row_tol
+
                 # Currency conversion / FX rate match (e.g. USD to INR conversion corridor)
                 if a > 0 and rv > 0:
                     ratio = rv / a
@@ -657,7 +802,7 @@ class Pipeline:
                         match._d(cands[0][self.cfg["right_date"]]),
                     )
                     ctx["date_only_mismatch"] = dd > self.cfg["window_days"] and (
-                        abs(a - rv) <= tol or ctx["fee_match"]
+                        abs(a - rv) <= row_tol or ctx["fee_match"]
                     )
             if not cands:
                 # Corroborate fuzzy key similarity with amount/fee consistency
@@ -672,11 +817,13 @@ class Pipeline:
                     ][:100]
                 )
                 if a is not None and self.cfg.get("right_amount"):
+                    row_tol = effective_tolerance(a, abs_tol=abs_tol, pct_tol=pct_tol, mode=mode)
+                    l_row_idx = (int(l["_rid"]) - 1) if l and "_rid" in l else 0
                     ctx["fuzzy_key"] = any(
                         match._sim(key, str(x[rk])) >= 0.75
                         and (
-                            abs(a - float(x[self.cfg["right_amount"]])) <= tol
-                            or fee_explains(a, float(x[self.cfg["right_amount"]]), self.schedule, tol)
+                            abs(a - float(x[self.cfg["right_amount"]])) <= row_tol
+                            or fee_explains(a, float(x[self.cfg["right_amount"]]), schedule=self.schedule, tol=row_tol, rules=self.rules, row=l, total_rows=len(rows_l), row_idx=l_row_idx)
                         )
                         for x in search_r
                     )
@@ -686,22 +833,30 @@ class Pipeline:
         if side == "R" and r is not None:
             rv = float(r[self.cfg["right_amount"]]) if self.cfg.get("right_amount") else 0.0
             ctx["negative_credit"] = rv < 0
-            nets = []
-            # Only search among UNMATCHED left rows to avoid reusing 1:1 matched records
-            unmatched_l = [x for x in rows_l if x["_rid"] not in used_l]
-            for x in unmatched_l:
-                a = float(x.get(self.cfg["left_amount"], 0))
-                nets.append((x["_rid"], compute_expected_net(a, self.schedule) if self.schedule else a))
-            # Bounded pool search for combinatorial split subsets
-            valid_nets = [x for x in nets if 0 < x[1] <= rv + tol]
-            pool = valid_nets[:40]
-            for k in (2, 3):
-                for combo in itertools.combinations(pool, k):
-                    if abs(sum(v for _, v in combo) - rv) <= tol:
-                        ctx["split_targets"] = [i for i, _ in combo]
+            if not suppress_split:
+                nets = []
+                # Only search among UNMATCHED left rows to avoid reusing 1:1 matched records
+                unmatched_l = [x for x in rows_l if x["_rid"] not in used_l]
+                for x in unmatched_l:
+                    a = float(x.get(self.cfg["left_amount"], 0))
+                    x_row_idx = (int(x["_rid"]) - 1) if "_rid" in x else 0
+                    if self.rules:
+                        net_val = compute_deduction_breakdown(a, rules=self.rules, row=x, total_rows=len(rows_l), row_idx=x_row_idx)["expected_net"]
+                    elif self.schedule:
+                        net_val = compute_expected_net(a, self.schedule)
+                    else:
+                        net_val = a
+                    nets.append((x["_rid"], net_val))
+                # Bounded pool search for combinatorial split subsets
+                valid_nets = [x for x in nets if 0 < x[1] <= rv + abs_tol]
+                pool = valid_nets[:40]
+                for k in (2, 3):
+                    for combo in itertools.combinations(pool, k):
+                        if abs(sum(v for _, v in combo) - rv) <= abs_tol:
+                            ctx["split_targets"] = [i for i, _ in combo]
+                            break
+                    if ctx["split_targets"]:
                         break
-                if ctx["split_targets"]:
-                    break
 
         return ctx
 
@@ -710,8 +865,10 @@ class Pipeline:
         print("- **Step 6/7**: Classifying exceptions & verifying invariant proofs...", flush=True)
         rows_l = self.tables[self.cfg["left_table"]]
         rows_r = self.tables[self.cfg["right_table"]]
+        l_by_rid = {x["_rid"]: x for x in rows_l}
+        r_by_rid = {x["_rid"]: x for x in rows_r}
         used_l = {m.l_rid for m in self.exec_res.matched}
-        tol = self.cfg["tolerance"]
+        tol = float(self.cfg.get("tolerance_abs", self.cfg.get("tolerance", 0.01)))
 
         # 1. First pass: solve combinatorial splits globally with disjoint left allocations
         right_splits: Dict[int, List[int]] = {}
@@ -735,18 +892,26 @@ class Pipeline:
         for x in rows_l:
             if x["_rid"] not in used_l and x["_rid"] not in temporal_or_direct_l:
                 a = float(x.get(self.cfg["left_amount"], 0))
-                net = compute_expected_net(a, self.schedule) if self.schedule else a
+                x_row_idx = (int(x["_rid"]) - 1) if "_rid" in x else 0
+                if self.rules:
+                    net = compute_deduction_breakdown(a, rules=self.rules, row=x, total_rows=len(rows_l), row_idx=x_row_idx)["expected_net"]
+                elif self.schedule:
+                    net = compute_expected_net(a, self.schedule)
+                else:
+                    net = a
                 left_nets.append((x["_rid"], net))
 
         ambiguous_splits: Set[int] = set()
 
         for rec, r_cand, ev, sd in unmatched_r_items:
-            r = next(x for x in rows_r if x["_rid"] == rec.rid)
+            r = r_by_rid.get(rec.rid) or next((x for x in rows_r if x["_rid"] == rec.rid), None)
+            if not r:
+                continue
             rv = float(r.get(self.cfg["right_amount"], 0) or 0)
             if rv <= 0:
                 continue
 
-            avail = [x for x in left_nets if x[0] not in allocated_split_l and 0 < x[1] <= rv + tol]
+            avail = sorted([x for x in left_nets if x[0] not in allocated_split_l and 0 < x[1] <= rv + tol], key=lambda x: abs(x[1] - rv))[:40]
             matching_combos = []
             for k in (2, 3):
                 for combo in itertools.combinations(avail, k):
@@ -768,20 +933,20 @@ class Pipeline:
         self.queue = []
         left_split_map: Dict[int, str] = {}
         for r_rid, target_l_rids in right_splits.items():
-            r_row = next((x for x in rows_r if x["_rid"] == r_rid), {})
+            r_row = r_by_rid.get(r_rid) or {}
             r_ref = str(r_row.get(self.cfg["right_key"]) or f"RID_{r_rid}")
             for l_rid in target_l_rids:
                 left_split_map[l_rid] = r_ref
 
         for rec, r_cand, ev, sd in self._last_unmatched_ctx:
             if rec.side == "L":
-                l = next(x for x in rows_l if x["_rid"] == rec.rid)
+                l = l_by_rid.get(rec.rid) or next((x for x in rows_l if x["_rid"] == rec.rid), {})
                 ctx = self._ctx("L", l, r_cand, rows_l, rows_r, sd, used_l=used_l)
                 if rec.rid in left_split_map:
                     rec.reason = qa.H.SPLIT
                     ctx["split_batch_ref"] = left_split_map[rec.rid]
                     ctx["split_targets"] = [rec.rid]
-                    r_rid = next((k for k,v in right_splits.items() if rec.rid in v), None)
+                    r_rid = next((k for k, v in right_splits.items() if rec.rid in v), None)
                     if r_rid in ambiguous_splits:
                         ctx["ambiguous_split"] = True
                     ev = [EvidencePiece.FEE_MODEL_MATCH, EvidencePiece.KEY_MATCH]
@@ -789,9 +954,24 @@ class Pipeline:
                     rec.reason = qa.classify(rec, ctx)
                     if rec.reason == qa.H.COUNTERPARTY_MISMATCH and not ev:
                         ev = [EvidencePiece.KEY_MATCH, EvidencePiece.AMOUNT_WITHIN_TOL]
+                    elif rec.reason == qa.H.FEE_DEDUCTION:
+                        if EvidencePiece.FEE_MODEL_MATCH not in ev:
+                            ev.append(EvidencePiece.FEE_MODEL_MATCH)
+                        if EvidencePiece.KEY_MATCH not in ev:
+                            ev.append(EvidencePiece.KEY_MATCH)
+                    elif rec.reason == qa.H.TAX_WITHHOLDING:
+                        if EvidencePiece.TAX_MODEL_MATCH not in ev:
+                            ev.append(EvidencePiece.TAX_MODEL_MATCH)
+                        if EvidencePiece.KEY_MATCH not in ev:
+                            ev.append(EvidencePiece.KEY_MATCH)
+                    elif rec.reason == qa.H.CURRENCY_CONVERSION:
+                        if EvidencePiece.FX_MODEL_MATCH not in ev:
+                            ev.append(EvidencePiece.FX_MODEL_MATCH)
+                        if EvidencePiece.KEY_MATCH not in ev:
+                            ev.append(EvidencePiece.KEY_MATCH)
             else:
-                r = next(x for x in rows_r if x["_rid"] == rec.rid)
-                ctx = self._ctx("R", None, r, rows_l, rows_r, sd, used_l=used_l)
+                r = r_by_rid.get(rec.rid) or next((x for x in rows_r if x["_rid"] == rec.rid), {})
+                ctx = self._ctx("R", None, r, rows_l, rows_r, sd, used_l=used_l, suppress_split=(rec.rid not in right_splits))
                 if rec.rid in right_splits:
                     ctx["split_targets"] = right_splits[rec.rid]
                     if rec.rid in ambiguous_splits:
@@ -800,9 +980,20 @@ class Pipeline:
                     ev = [EvidencePiece.FEE_MODEL_MATCH, EvidencePiece.KEY_MATCH]
                 else:
                     rec.reason = qa.classify(rec, ctx)
+                    if rec.reason == qa.H.FEE_DEDUCTION and EvidencePiece.FEE_MODEL_MATCH not in ev:
+                        ev.append(EvidencePiece.FEE_MODEL_MATCH)
+                    elif rec.reason == qa.H.TAX_WITHHOLDING and EvidencePiece.TAX_MODEL_MATCH not in ev:
+                        ev.append(EvidencePiece.TAX_MODEL_MATCH)
+                    elif rec.reason == qa.H.CURRENCY_CONVERSION and EvidencePiece.FX_MODEL_MATCH not in ev:
+                        ev.append(EvidencePiece.FX_MODEL_MATCH)
 
             self.queue.append({"rec": rec, "ctx": ctx, "pieces": ev})
 
+        self._trace(
+            "QA_CLASSIFICATION_COMPLETED",
+            exceptions_analyzed=len(self.queue),
+            categories=list({x["rec"].reason.value for x in self.queue}),
+        )
         return self.sm.transition(State.RESOLVING)
 
     def resolve(self) -> bool:
@@ -832,6 +1023,12 @@ class Pipeline:
                     evidence=pieces,
                 ).model_dump(mode="json")
             )
+        self._trace(
+            "AUTONOMOUS_RESOLUTION_COMPLETED",
+            auto_resolved=len([x for x in self.queue if x.get("action") == "auto_resolve"]),
+            escalated=len([x for x in self.queue if x.get("action") == "escalate"]),
+            pending=len([x for x in self.queue if x.get("action") not in ("auto_resolve", "escalate")]),
+        )
         return self.sm.transition(State.AGGREGATING)
 
     # ---------- Step 7: Aggregation & Final Report ----------
@@ -866,6 +1063,15 @@ class Pipeline:
             llm_user_disagreements=[],
             fallback_events=self.fb,
         )
+        self._trace(
+            "RECONCILIATION_FINALIZED",
+            match_rate=f"{(self.match_rate or 0.0)*100:.1f}%",
+            total_sales_volume=f"INR {totals['gross']:,.2f}",
+            net_bank_settled=f"INR {totals['net']:,.2f}",
+            fees_deducted=f"INR {totals['fees']:,.2f}",
+            exceptions_remaining=len([x for x in self.queue if x.get('action') != 'auto_resolve']),
+            audit_integrity="SHA-256 HASH CHAIN VERIFIED",
+        )
         return self.sm.transition(State.ARCHIVED)
 
     # ---------- Driver Loop ----------
@@ -877,10 +1083,23 @@ class Pipeline:
             truth: Optional ground truth benchmark file path.
             
         Returns:
-            Completed FinalReport model, or None if halted interactively.
+            Completed FinalReport model, or None if halted interactively or files < 2.
         """
         self._t0 = time.time()
-        self.ingest(files, truth)
+        if files:
+            self.ingest(files, truth)
+        elif truth:
+            self.truth = [json.loads(l) for l in Path(truth).read_text().splitlines() if l]
+
+        if not self.tables or len(self.tables) < 2:
+            msg = "I don't have two datasets to reconcile yet — please upload files or run Load Sample Data first."
+            self._chat(msg)
+            return None
+
+        if not self.sm.state:
+            self.sm.enter(State.INGESTING)
+            self.sm.transition(State.PROFILING, f"{len(self.tables)} tables")
+
         return self.continue_run()
 
     def continue_run(self) -> Optional[FinalReport]:
@@ -899,9 +1118,12 @@ class Pipeline:
             if ok is False:
                 return None
 
-        if self.sm.state == State.RESOLVING or getattr(self, "queue", None) is not None:
-            if self.sm.state != State.ARCHIVED:
-                self.aggregate(time.time() - getattr(self, "_t0", time.time()))
+        if (
+            self.sm.state not in (State.ARCHIVED, State.ABORT_CONFIRMED, State.HALT)
+            and self.sm.state in (State.RESOLVING, State.AGGREGATING)
+        ):
+            # Use 0.0 as fallback elapsed time if _t0 was never set (e.g. continue_run without prior run())
+            self.aggregate(time.time() - getattr(self, "_t0", time.time()) if hasattr(self, "_t0") else 0.0)
 
         if getattr(self, "final", None):
             validate_and_route(

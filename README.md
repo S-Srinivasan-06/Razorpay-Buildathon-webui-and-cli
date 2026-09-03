@@ -88,14 +88,16 @@ http://127.0.0.1:8000
 ```
 
 #### Web UI Features:
-1. **Upload & Ingest**: Upload CSV or Excel (`.xlsx`) files or click **Load Demo Benchmark Data** for instant reconciliation.
+1. **Upload & Ingest**: Upload CSV or Excel (`.xlsx`) files or choose from 4 pre-built dataset suites (Standard Demo, Clean Demo, 3-File Benchmark, 5-File Enterprise Ecosystem).
 2. **Interactive Stepper**: Real-time visualization of the 7-step reconciliation pipeline with live event streaming over WebSocket.
-3. **Data Inspection**: Paginated data grid with table selector, row count metrics, and column stats.
-4. **Mapping & Policy**: Visual inspection of committed key linkages and synthesized tolerance rules.
-5. **Reconciliation Results**: Summary cards for Match Rate, Total Gross Ledger Volume, Bank Inflow, and Discrepancies.
-6. **Exception Management Queue**: Review classified discrepancies, view AI diagnostic explanations, and perform manual manager overrides (Approve / Reject / Escalation Notes).
-7. **Audit Trail**: Real-time SHA-256 chain integrity verification with hash inspector.
-8. **Grounded AI Assistant**: Multi-turn chat grounded in the active session's financial records.
+3. **Fee & Tax Rules Engine**: Interactive Segment Rules manager panel with custom priority, label, matcher type (`row_range_pct`, `column_equals`, `row_range_abs`, `all`), fee rate, and GST rate configuration.
+4. **Multi-Way Chaining Hub**: 3-legged reconciliation (Sales ↔ Gateway Hub ↔ Bank Statements), Cash Position schedule, T+1/T+2/T+7+ aging analysis, and Double-Entry General Ledger journal table with CSV export.
+5. **Data Inspection**: Paginated data grid with table selector, row count metrics, and column stats with PII redaction.
+6. **Mapping & Policy**: Visual inspection of committed key linkages, synthesized tolerance rules, and dry-run calibration.
+7. **Reconciliation Results**: Summary cards for Match Rate, Total Gross Ledger Volume, Bank Inflow, and Discrepancies.
+8. **Exception Management Queue**: Review classified discrepancies, view AI diagnostic explanations, and perform manual manager overrides (Approve / Reject / Escalation Notes).
+9. **Audit Trail**: Real-time SHA-256 chain integrity verification with hash inspector and JSONL export.
+10. **Grounded AI Assistant & Confirmation Gate**: Multi-turn chat grounded in the active session's financial records with inline interactive confirmation buttons for autonomous actions.
 
 ---
 
@@ -113,19 +115,25 @@ Evaluate precision, recall, and classification accuracy against a benchmark grou
 python run.py sample_data/payments.csv sample_data/bank.csv --truth sample_data/ground_truth.jsonl
 ```
 
-#### 3. Interactive Grounded Chatbot Mode (`--chat` or `-i`)
+#### 3. Save Output Artifacts to Disk (`--out-dir`)
+Specify a custom directory to store the final report, reconciled CSV, and audit chain:
+```bash
+python run.py sample_data/payments.csv sample_data/bank.csv --out-dir data/outputs/my_run/
+```
+
+#### 4. Interactive Grounded Chatbot Mode (`--chat` or `-i`)
 Launch the continuous interactive REPL grounded in the reconciled session:
 ```bash
 python run.py sample_data/payments.csv sample_data/bank.csv --chat
 ```
 
-#### 4. Fast Offline / Zero-LLM Deterministic Mode (`--deterministic`)
+#### 5. Fast Offline / Zero-LLM Deterministic Mode (`--deterministic`)
 Execute using purely deterministic rule engines without external API calls:
 ```bash
 python run.py sample_data/payments.csv sample_data/bank.csv --deterministic
 ```
 
-#### 5. Structured JSON Output Mode (`--json`)
+#### 6. Structured JSON Output Mode (`--json`)
 Export the complete structured reconciliation report as JSON:
 ```bash
 python run.py sample_data/payments.csv sample_data/bank.csv --truth sample_data/ground_truth.jsonl --json
@@ -222,6 +230,39 @@ Session ID: 86f3fa97
 
 ---
 
+## Outputs & Export Artifacts
+
+The system generates and persists reconciliation artifacts across three complementary destinations:
+
+### 1. Persistent Filesystem on Disk (`recon_agent/data/`)
+
+| Artifact | Disk Path | Description |
+| :--- | :--- | :--- |
+| **Output Directory** | `recon_agent/data/outputs/{sid}/` | Session folder containing `final_report.json`, `reconciliation_output.csv`, `journal_entries.csv`, and `audit_chain.jsonl`. |
+| **Cryptographic Audit Ledger** | `recon_agent/data/audit/{sid}.audit.jsonl` | Append-only, tamper-evident JSONL log signed with a SHA-256 hash chain for every state change, tool call, and operator action. |
+| **Staged User Datasets** | `recon_agent/data/uploads/{sid}_{filename}` | Staged CSV and Excel datasets uploaded via the Web UI or API. |
+| **Server & Engine Logs** | `recon_agent/data/logs/` | Background execution logs (`server.log`, `{sid}.log`, `session.log`). |
+| **Full Repository Snapshot** | `codebase.md` | Monolithic, byte-for-byte synchronized export of all repository files. |
+
+### 2. Web UI & REST API Endpoints
+
+From the Web Console (`http://localhost:8000`), users can inspect or download artifacts via dedicated buttons and endpoints:
+
+| Artifact | UI Action / API Endpoint | Format | Contents |
+| :--- | :--- | :--- | :--- |
+| **Reconciled CSV** | **Export CSV**<br>`GET /api/v2/sessions/{sid}/export.csv` | CSV | Unified itemized table of matched pairs and classified exceptions with deltas and diagnostics. |
+| **Final Report JSON** | **Export JSON Report**<br>`GET /api/v2/sessions/{sid}/export/report.json` | JSON | Complete `FinalReport` (financial totals, match rates, queue statistics, and throughput). |
+| **Audit JSONL** | **Export Audit Trail**<br>`GET /api/v2/sessions/{sid}/export/audit.jsonl` | JSONL | Full cryptographic SHA-256 hash chain verifying session integrity. |
+| **Double-Entry Journal** | **Export Journal CSV**<br>`GET /api/v2/sessions/{sid}/export/journal.csv` | CSV | Multi-way accounting ledger vouchers (Debits, Credits, Accounts, Tax ITC). |
+| **Multi-Way Report** | `GET /api/v2/sessions/{sid}/multiway` | JSON | 3-legged reconciliation metrics, Cash Position schedule, and T+1/T+2/T+7+ aging analysis. |
+
+### 3. CLI Terminal Output (`python run.py`)
+
+- **Terminal Display**: Formatted Markdown tables rendered directly to stdout (Performance & Throughput, Financial Balances, Exception Queue, Discrepancy Diagnostics, and Audit verification).
+- **Disk Persistence**: Automatically writes `final_report.json`, `reconciliation_output.csv`, and `audit_chain.jsonl` to `data/outputs/{sid}/` (or custom directory specified via `--out-dir`).
+
+---
+
 ## Running Automated Tests
 
 Run the full automated test suite:
@@ -231,7 +272,7 @@ cd recon_agent
 pytest -v
 ```
 
-All test suites covering state machine transitions, cryptographic ledger verification, fee calculations, file deletion context isolation, and ground-truth benchmarks execute deterministically.
+All 37 test suites covering state machine transitions, multi-way chaining, cash position invariants, cryptographic ledger verification, fee rules, file deletion context isolation, and ground-truth benchmarks execute deterministically.
 
 ---
 
@@ -239,20 +280,24 @@ All test suites covering state machine transitions, cryptographic ledger verific
 
 ```
 Razorpay-Buildathon-webui-and-cli/
-├── README.md                          # Project documentation
+├── README.md                          # Project documentation & usage guide
 ├── requirements.txt                   # Root Python dependencies
+├── codebase.md                        # Byte-for-byte full codebase snapshot
 ├── .env.example                       # Environment configuration template
 ├── .gitignore                         # Git ignore patterns
 └── recon_agent/
     ├── requirements.txt               # Application dependencies
     ├── constants_v0.yaml              # Governance constants, rules & fee schedules
-    ├── run.py                         # Unified CLI & server runner
-    ├── sample_data/                   # Demo benchmark files
-    │   ├── payments.csv
-    │   ├── bank.csv
-    │   └── ground_truth.jsonl
+    ├── run.py                         # Unified CLI & server runner with --out-dir support
+    ├── sample_data/                   # Demo benchmark files & multi-party ecosystems
+    │   ├── payments.csv               # Standard demo ledger (Source A)
+    │   ├── bank.csv                   # Standard demo bank statement (Source B)
+    │   ├── ground_truth.jsonl         # Benchmark ground truth classifications
+    │   ├── clean_demo/                # 100% matched validation pair
+    │   ├── benchmark_3file/           # 3-file benchmark (Sales, Gateway, Bank)
+    │   └── enterprise_ecosystem/      # 5-file enterprise suite (Zomato, Flipkart, Razorpay, ICICI, HDFC)
     ├── app/
-    │   ├── config.py                  # File system paths & environment loader
+    │   ├── config.py                  # File system paths (DATA_DIR, OUTPUT_DIR, UPLOAD_DIR) & .env loader
     │   ├── pipeline.py                # 7-step reconciliation pipeline driver
     │   ├── core/
     │   │   ├── audit.py               # Cryptographic SHA-256 tamper-evident ledger
@@ -267,12 +312,16 @@ Razorpay-Buildathon-webui-and-cli/
     │   ├── data/
     │   │   └── generator.py           # Synthetic benchmark data generator
     │   ├── engine/
-    │   │   ├── chatbot.py             # Grounded conversational session engine
-    │   │   ├── fee.py                 # Gateway fee calculations (MDR, fixed fee, GST)
+    │   │   ├── actions.py             # Agentic action dispatcher (policy, tolerance, re-runs)
+    │   │   ├── chatbot.py             # Grounded conversational session engine with action queue
+    │   │   ├── fee.py                 # Segment-based fee/tax rules engine & legacy schedules
+    │   │   ├── journal.py             # Double-entry general ledger voucher generator
     │   │   ├── match.py               # Multi-heuristic matching engine
+    │   │   ├── multiway.py            # Multi-way chaining, Cash Position & controller invariant
     │   │   ├── qa.py                  # Hypothesis-ordered exception classification
+    │   │   ├── report.py              # Balance aggregator, FinalReport builder & CSV exporter
     │   │   ├── resolving.py           # Intelligent approvals & diagnostic explanations
-    │   │   └── report.py              # Balance aggregator & FinalReport builder
+    │   │   └── rule_compiler.py       # Natural-language segment rule compiler
     │   ├── server/
     │   │   ├── main.py                # FastAPI app initialization
     │   │   └── api_v2.py              # REST & WebSocket API endpoints for Web UI
@@ -280,8 +329,11 @@ Razorpay-Buildathon-webui-and-cli/
     │       └── index.html             # Single-page Web UI application
     └── tests/
         ├── test_api_v2_e2e.py         # End-to-end API v2 & 10k dataset tests
+        ├── test_audit_remediation.py  # Full bug audit remediation & multi-way test suite
+        ├── test_bug_audit_fixes.py    # Unit tests for core engine audit fixes
         ├── test_constants.py          # Registry loading & fee parsing tests
         ├── test_durability.py         # SHA-256 hash-chain verification tests
+        ├── test_enterprise_and_rules_e2e.py # 3-file & 5-file enterprise benchmark tests
         ├── test_file_lifecycle_and_chat.py # File add/delete & chat tests
         ├── test_halt_reentry_safety.py # Review gate & resume safety tests
         ├── test_interactive_resume.py # Multi-halt interactive resume tests

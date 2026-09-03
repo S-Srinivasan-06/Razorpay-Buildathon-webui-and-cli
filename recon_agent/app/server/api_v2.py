@@ -31,16 +31,23 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import BASE_DIR, UPLOAD_DIR
+from app.config import BASE_DIR, OUTPUT_DIR, UPLOAD_DIR
 from app.core.audit import audit_for
 from app.core.channels import subscribe
 from app.core.constants import REG
-from app.core.contracts import MessageKind
+from app.core.contracts import FeeTaxRule, MessageKind, SegmentMatcher
 from app.core.cost import tracker_for
 from app.core.dispatcher import _breakers
 from app.core.masking import pii_score
+from app.engine.actions import execute_agent_action
 from app.engine.chatbot import ReconChatSession
-from app.engine.fee import compute_fee, compute_tax_component
+from app.engine.fee import (
+    compute_deduction_breakdown,
+    compute_fee,
+    compute_tax_component,
+    effective_tolerance,
+)
+from app.engine.report import export_reconciliation_csv_string
 from app.pipeline import Pipeline
 
 STATIC_DIR = BASE_DIR / "app" / "static"
@@ -59,7 +66,6 @@ _P3_PATTERN = re.compile(r"^(tool_ok|cost_overrun|args_rejected|AUDIT_COMMIT)")
 # High-priority control signals routed to user notification stream (Priority 1)
 _P1_CONTROL = {
     "STATE_ENTERED",
-    "STATE_EXITED",
     "HALT",
     "RESUMED",
     "ABORT_CONFIRMED",
@@ -79,6 +85,8 @@ def _classify(kind: MessageKind, payload: Dict[str, Any]) -> int:
     """Classify message into priority tiers: 1=user narration/cards, 2=trace, 3=silent background logs."""
     if kind in (MessageKind.CHAT, MessageKind.ARTIFACT):
         return 1
+    if payload.get("event") == "STATE_EXITED":
+        return 3
     if kind == MessageKind.CONTROL:
         return 1 if payload.get("event") in _P1_CONTROL else 2
     return 3 if _P3_PATTERN.match(payload.get("event", "")) else 2
@@ -485,8 +493,8 @@ def get_policy(sid: str) -> Dict[str, Any]:
 
 
 class PolicyUpdateRequest(BaseModel):
-    fee_rate: float = 0.02
-    gst_rate: float = 0.18
+    fee_rate: float = 0.0
+    gst_rate: float = 0.0
     tolerance: float = 0.01
     window_days: int = 3
     flat_fee: float = 0.0
@@ -494,24 +502,76 @@ class PolicyUpdateRequest(BaseModel):
 
 @router.post("/sessions/{sid}/policy")
 def update_policy(sid: str, body: PolicyUpdateRequest) -> Dict[str, Any]:
-    """Update dynamic fee schedule, tax rate, and matching tolerance for the session."""
+    """Update dynamic fee schedule, tax rate, and matching tolerance via unified action dispatcher."""
     sess = _sess(sid)
     pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
     sess["pipe"] = pipe
-    pipe.set_policy(
-        fee_rate=body.fee_rate,
-        gst_rate=body.gst_rate,
-        tolerance=body.tolerance,
-        window_days=body.window_days,
-        flat_fee=body.flat_fee,
-    )
+    res = execute_agent_action(sid, pipe, "SET_POLICY", body.model_dump(), source="rest")
     sess["policy"] = body.model_dump()
-    audit_for(sid).append({
-        "event": "POLICY_UPDATED",
-        "policy": body.model_dump(),
-        "ts": datetime.now(timezone.utc).isoformat(),
-    })
-    return {"ok": True, "policy": body.model_dump()}
+    return {"ok": True, "policy": body.model_dump(), "audit": res}
+
+
+class ToleranceUpdateRequest(BaseModel):
+    abs_tol: float = 0.01
+    pct_tol: float = 0.0
+    mode: str = "absolute_only"
+
+
+@router.get("/sessions/{sid}/tolerance")
+def get_tolerance(sid: str) -> Dict[str, Any]:
+    """Retrieve active matching tolerance configuration."""
+    pipe = _pipe(sid)
+    cfg = getattr(pipe, "cfg", {}) if pipe else {}
+    return {
+        "tolerance_abs": cfg.get("tolerance_abs", cfg.get("tolerance", 0.01)),
+        "tolerance_pct": cfg.get("tolerance_pct", 0.0),
+        "tolerance_mode": cfg.get("tolerance_mode", "absolute_only"),
+    }
+
+
+@router.post("/sessions/{sid}/tolerance")
+def update_tolerance(sid: str, body: ToleranceUpdateRequest) -> Dict[str, Any]:
+    """Update matching tolerance configuration via unified action dispatcher."""
+    sess = _sess(sid)
+    pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
+    sess["pipe"] = pipe
+    return execute_agent_action(sid, pipe, "SET_TOLERANCE", body.model_dump(), source="rest")
+
+
+class RulesUpdateRequest(BaseModel):
+    rules: List[Dict[str, Any]]
+
+
+@router.get("/sessions/{sid}/rules")
+def get_rules(sid: str) -> Dict[str, Any]:
+    """Retrieve active list of segment fee/tax rules."""
+    pipe = _pipe(sid)
+    rules = getattr(pipe, "rules", []) if pipe else []
+    return {
+        "rules": [r.model_dump(mode="json") if hasattr(r, "model_dump") else r for r in rules],
+        "total": len(rules),
+    }
+
+
+@router.post("/sessions/{sid}/rules")
+def update_rules(sid: str, body: RulesUpdateRequest) -> Dict[str, Any]:
+    """Set active list of segment fee/tax rules via unified action dispatcher."""
+    sess = _sess(sid)
+    pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
+    sess["pipe"] = pipe
+    return execute_agent_action(sid, pipe, "SET_RULES", body.model_dump(), source="rest")
+
+
+@router.post("/sessions/{sid}/confirm-action/{token}")
+def confirm_action(sid: str, token: str) -> Dict[str, Any]:
+    """Confirm a staged state-changing chat action token."""
+    chat_sess = CHAT_SESSIONS.get(sid)
+    if not chat_sess or token not in chat_sess.pending_actions:
+        raise HTTPException(status_code=404, detail="Pending action token not found or expired")
+    act = chat_sess.pending_actions.pop(token)
+    chat_sess.pending_action = None
+    pipe = _pipe(sid)
+    return execute_agent_action(sid, pipe, act["kind"], act["payload"], source="rest_confirmation")
 
 
 @router.get("/sessions/{sid}/results")
@@ -544,25 +604,38 @@ def results(sid: str) -> Dict[str, Any]:
         r_amt = float(r_d.get(ra_col, 0) or 0)
         diff = round(l_amt - r_amt, 2)
         ref = str(l_d.get(lk_col) or f"RID-{m.l_rid}")
-        tol = float(cfg.get("tolerance", 0.01))
+        
+        row_tol = effective_tolerance(
+            l_amt,
+            abs_tol=float(cfg.get("tolerance_abs", cfg.get("tolerance", 0.01))),
+            pct_tol=float(cfg.get("tolerance_pct", 0.0)),
+            mode=str(cfg.get("tolerance_mode", "absolute_only")),
+        )
+        tol_tag = f" [Tolerance: ₹{row_tol:.2f} ({cfg.get('tolerance_mode', 'absolute_only')})]"
 
-        # Check method column if available
-        method_val = str(l_d.get("method") or l_d.get("payment_method") or "").strip()
-        expected_fee = compute_fee(l_amt, pipe.schedule, method=method_val) if getattr(pipe, "schedule", None) else 0.0
-        expected_tax = compute_tax_component(l_amt, pipe.schedule, method=method_val) if getattr(pipe, "schedule", None) else 0.0
+        if getattr(pipe, "rules", None) and len(pipe.rules) > 0:
+            deductions = compute_deduction_breakdown(l_amt, rules=pipe.rules, row=l_d, total_rows=len(l_rows), row_idx=m.l_rid - 1)
+            expected_fee = deductions["gateway_fee"]
+            expected_tax = deductions["gst"] + deductions["tds"]
+            rule_tag = f" [Rule: '{deductions.get('rule_label')}']" if deductions.get("rule_label") else ""
+        else:
+            method_val = str(l_d.get("method") or l_d.get("payment_method") or "").strip()
+            expected_fee = compute_fee(l_amt, pipe.schedule, method=method_val) if getattr(pipe, "schedule", None) else 0.0
+            expected_tax = compute_tax_component(l_amt, pipe.schedule, method=method_val) if getattr(pipe, "schedule", None) else 0.0
+            rule_tag = ""
 
-        if abs(diff) <= tol:
+        if abs(diff) <= row_tol:
             m_dict["match_type"] = "EXACT MATCH"
-            m_dict["ai_reason"] = f"Exact 1:1 gross match on reference '{ref}' (Gross: INR {l_amt:.2f}, Bank: INR {r_amt:.2f})."
-        elif abs(diff - expected_fee) <= tol:
-            m_dict["match_type"] = "FEE DEDUCTION"
-            m_dict["ai_reason"] = f"Reference '{ref}' verified against policy schedule (Gross: INR {l_amt:.2f} - Fee: INR {diff:.2f} [MDR: INR {diff-expected_tax:.2f} + GST: INR {expected_tax:.2f}] = Net: INR {r_amt:.2f})."
-        elif abs(diff - round(l_amt * 0.01, 2)) <= tol:
+            m_dict["ai_reason"] = f"Exact 1:1 gross match on reference '{ref}' (Gross: INR {l_amt:.2f}, Bank: INR {r_amt:.2f}).{tol_tag}"
+        elif abs(diff - (expected_fee + expected_tax)) <= row_tol or abs(diff - expected_fee) <= row_tol:
+            m_dict["match_type"] = "FEE/TAX DEDUCTION"
+            m_dict["ai_reason"] = f"Reference '{ref}' verified against policy (Gross: INR {l_amt:.2f} - Expected Deductions: INR {diff:.2f} = Net: INR {r_amt:.2f}).{rule_tag}{tol_tag}"
+        elif abs(diff - round(l_amt * 0.01, 2)) <= row_tol:
             m_dict["match_type"] = "TDS WITHHOLDING"
-            m_dict["ai_reason"] = f"Reference '{ref}' matched with 1.0% Section 194-O TDS tax withholding (INR {diff:.2f})."
+            m_dict["ai_reason"] = f"Reference '{ref}' matched with 1.0% Section 194-O TDS tax withholding (INR {diff:.2f}).{tol_tag}"
         else:
             m_dict["match_type"] = "TOLERANCE MATCH"
-            m_dict["ai_reason"] = f"Reference '{ref}' matched within allowable tolerance (Gross: INR {l_amt:.2f}, Bank: INR {r_amt:.2f}, Variance: INR {abs(diff):.2f})."
+            m_dict["ai_reason"] = f"Reference '{ref}' matched within allowable tolerance (Gross: INR {l_amt:.2f}, Bank: INR {r_amt:.2f}, Variance: INR {abs(diff):.2f}).{rule_tag}{tol_tag}"
 
         enriched_matched.append(m_dict)
 
@@ -586,7 +659,7 @@ def results(sid: str) -> Dict[str, Any]:
 def exceptions(
     sid: str,
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=500),
+    page_size: int = Query(50, ge=1, le=5000),
 ) -> Dict[str, Any]:
     """Retrieve paginated exception queue items with confidence breakdowns and action status."""
     pipe = _pipe(sid)
@@ -699,59 +772,13 @@ def export_reconciliation_csv(sid: str) -> StreamingResponse:
     if not pipe:
         raise HTTPException(status_code=404, detail="no pipeline")
 
-    output = io.StringIO()
-    writer = csv.writer(output)
+    csv_text = export_reconciliation_csv_string(pipe)
+    out_dir = OUTPUT_DIR / sid
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "reconciliation_output.csv").write_text(csv_text, encoding="utf-8")
 
-    # Write CSV Header
-    writer.writerow([
-        "type",
-        "l_rid",
-        "r_rid",
-        "ref",
-        "side",
-        "reason",
-        "composite_score_or_confidence",
-        "delta",
-        "action",
-        "explanation",
-    ])
-
-    # Write Matched Pairs
-    if getattr(pipe, "exec_res", None) and getattr(pipe.exec_res, "matched", None):
-        for m in pipe.exec_res.matched:
-            writer.writerow([
-                "matched",
-                m.l_rid,
-                m.r_rid,
-                "",
-                "",
-                "",
-                m.composite_score,
-                "",
-                "matched",
-                "",
-            ])
-
-    # Write Exception Items
-    if getattr(pipe, "queue", None):
-        for item in pipe.queue:
-            rec = item["rec"]
-            writer.writerow([
-                "exception",
-                rec.rid if rec.side == "L" else "",
-                rec.rid if rec.side == "R" else "",
-                rec.ref or "",
-                rec.side,
-                rec.reason.value if hasattr(rec.reason, "value") else str(rec.reason),
-                item.get("conf", 0.0),
-                rec.delta if rec.delta is not None else "",
-                item.get("action", "mark_pending"),
-                (item.get("explanation") or getattr(rec, "explanation", "") or "").replace("\n", " "),
-            ])
-
-    output.seek(0)
     return StreamingResponse(
-        iter([output.getvalue()]),
+        iter([csv_text]),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=reconciliation_output_{sid}.csv"},
     )
@@ -764,8 +791,13 @@ def export_report_json(sid: str) -> StreamingResponse:
     if not pipe or not getattr(pipe, "final", None):
         raise HTTPException(status_code=404, detail="no final report yet")
 
+    json_str = pipe.final.model_dump_json(indent=2)
+    out_dir = OUTPUT_DIR / sid
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "final_report.json").write_text(json_str, encoding="utf-8")
+
     return StreamingResponse(
-        iter([pipe.final.model_dump_json(indent=2)]),
+        iter([json_str]),
         media_type="application/json",
         headers={"Content-Disposition": f"attachment; filename=final_report_{sid}.json"},
     )
@@ -776,9 +808,13 @@ def export_audit_jsonl(sid: str) -> StreamingResponse:
     """Download the complete cryptographic audit chain as a JSONL stream."""
     log = audit_for(sid)
     lines = [json.dumps(r, default=str) for r in log.records]
+    content = "\n".join(lines)
+    out_dir = OUTPUT_DIR / sid
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "audit_chain.jsonl").write_text(content, encoding="utf-8")
 
     return StreamingResponse(
-        iter(["\n".join(lines)]),
+        iter([content]),
         media_type="application/jsonl",
         headers={"Content-Disposition": f"attachment; filename=audit_chain_{sid}.jsonl"},
     )
@@ -870,12 +906,23 @@ def line_matching(sid: str, kind: str = Query("tax", pattern="^(tax|charge)$")) 
             net = float(str(other.get(right_amt, 0) or 0).replace(",", "")) if (other and right_amt) else 0.0
             deduction = round(gross - net, 2) if other else gross
             
-            # Read active session schedule and payment method
+            # Read active session segment rules or schedule
+            rules = getattr(pipe, "rules", [])
             sched = getattr(pipe, "schedule", None) or next(iter(REG.fee_schedules.values()), None)
             method_val = str(row.get("method") or row.get("payment_method") or "").strip()
-            
-            if kind == "charge":
+
+            if rules and len(rules) > 0:
+                l_idx = row.get("_rid", 1) - 1
+                brk = compute_deduction_breakdown(gross, rules=rules, row=row, total_rows=len(left), row_idx=l_idx)
+                expected_fee = brk["gateway_fee"]
+                expected_tax = brk["gst"] + brk["tds"]
+                rule_label = brk.get("rule_label") or "Segment Rule"
+            else:
                 expected_fee = compute_fee(gross, sched, method=method_val) if (deduction > 0.01 and sched) else 0.0
+                expected_tax = compute_tax_component(gross, sched, method=method_val) if (deduction > 0.01 and sched) else 0.0
+                rule_label = "Standard Schedule"
+
+            if kind == "charge":
                 actual = max(0.0, deduction)
                 variance = round(expected_fee - actual, 2)
                 if not other:
@@ -886,15 +933,12 @@ def line_matching(sid: str, kind: str = Query("tax", pattern="^(tax|charge)$")) 
                     reason = "Zero gateway fee deducted (1:1 gross settlement without fee deductions)."
                 elif abs(variance) <= 0.05:
                     status = "MATCHED"
-                    fee_rate_pct = (sched.params.get('rate', 0.02) * 100) if sched else 2.0
-                    gst_pct = (sched.gst_rate * 100) if sched else 18.0
-                    reason = f"Gateway charge of INR {actual:.2f} verified against active policy ({fee_rate_pct:.2f}% MDR + {gst_pct:.1f}% GST schedule)."
+                    reason = f"Gateway charge of INR {actual:.2f} verified against rule [{rule_label}]."
                 else:
                     status = "EXCEPTION"
-                    reason = f"Fee variance of INR {abs(variance):.2f}; actual deduction INR {actual:.2f} vs expected policy charge of INR {expected_fee:.2f}."
+                    reason = f"Fee variance of INR {abs(variance):.2f}; actual deduction INR {actual:.2f} vs expected policy charge of INR {expected_fee:.2f} [{rule_label}]."
                 expected = expected_fee
             else: # tax
-                expected_tax = compute_tax_component(gross, sched, method=method_val) if (deduction > 0.01 and sched) else 0.0
                 actual_tax = expected_tax if abs(deduction) > 0.01 else 0.0
                 variance = 0.0
                 if not other:
@@ -902,11 +946,10 @@ def line_matching(sid: str, kind: str = Query("tax", pattern="^(tax|charge)$")) 
                     reason = f"No counterparty record found for reference {ref}."
                 elif abs(deduction) <= 0.01:
                     status = "MATCHED"
-                    reason = "Zero GST on gateway fees (transaction settled at gross with no MDR charges)."
+                    reason = "Zero GST/tax on transactions settled at gross with no deductions."
                 else:
                     status = "MATCHED"
-                    gst_pct = (sched.gst_rate * 100) if sched else 18.0
-                    reason = f"Verified {gst_pct:.1f}% GST component on Gateway MDR fee: INR {actual_tax:.2f} (claimable as Input Tax Credit under GSTR-2B)."
+                    reason = f"Verified tax component INR {actual_tax:.2f} against [{rule_label}] (claimable as Input Tax Credit / TDS certificate)."
                 expected = expected_tax
                 actual = actual_tax
 
@@ -958,8 +1001,14 @@ def bulk_exception_action(sid: str, body: BulkActionBody) -> Dict[str, Any]:
 
 
 @router.post("/sessions/{sid}/load_sample")
-def load_sample_data(sid: str) -> Dict[str, Any]:
-    """Load bundled sample datasets (payments.csv and bank.csv) directly into the session staging area."""
+def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
+    """Load bundled sample datasets into the session staging area.
+    
+    Args:
+        sid: Session identifier.
+        dataset: One of 'basic' (2-file payments+bank), 'clean_demo' (clean 100% match),
+                 'benchmark_3file' (3-file benchmark), or 'enterprise_ecosystem' (5-file enterprise).
+    """
     sess = _sess(sid)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     sample_dir = BASE_DIR / "sample_data"
@@ -967,13 +1016,33 @@ def load_sample_data(sid: str) -> Dict[str, Any]:
     pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
     sess["pipe"] = pipe
     
-    loaded_files = []
-    sample_names = ["payments.csv", "bank.csv"]
+    # Dataset-specific file lists
+    DATASET_FILES: Dict[str, List[str]] = {
+        "basic": ["payments.csv", "bank.csv"],
+        "clean_demo": ["clean_demo/payments.csv", "clean_demo/bank.csv"],
+        "benchmark_3file": [
+            "benchmark_3file/merchant_sales.csv",
+            "benchmark_3file/gateway_settlements.csv",
+            "benchmark_3file/bank_statement.csv",
+        ],
+        "enterprise_ecosystem": [
+            "enterprise_ecosystem/zomato_orders.csv",
+            "enterprise_ecosystem/flipkart_orders.csv",
+            "enterprise_ecosystem/razorpay_ledger.csv",
+            "enterprise_ecosystem/icici_bank.csv",
+            "enterprise_ecosystem/hdfc_bank.csv",
+        ],
+    }
     
-    for fname in sample_names:
-        src = sample_dir / fname
+    if dataset not in DATASET_FILES:
+        raise HTTPException(status_code=400, detail=f"Unknown dataset '{dataset}'. Choose: {list(DATASET_FILES)}")
+    
+    loaded_files = []
+    for fpath in DATASET_FILES[dataset]:
+        src = sample_dir / fpath
         if not src.exists():
             continue
+        fname = src.name
         dest = UPLOAD_DIR / f"{sid}_{fname}"
         content = src.read_bytes()
         dest.write_bytes(content)
@@ -982,7 +1051,7 @@ def load_sample_data(sid: str) -> Dict[str, Any]:
         # Ingest into session pipe tables for immediate exploration
         frame = pd.read_csv(dest)
         frame.insert(0, "_rid", range(1, len(frame) + 1))
-        table = Path(fname).stem
+        table = src.stem
         pipe.tables[table] = frame.where(pd.notna(frame), None).to_dict("records")
         
         cols = [c for c in frame.columns if c != "_rid"]
@@ -997,17 +1066,24 @@ def load_sample_data(sid: str) -> Dict[str, Any]:
             "dtypes": {c: str(t) for c, t in frame.dtypes.items() if c != "_rid"},
             "preview_rows": rows[:10],
         })
+    
+    # Advisory: multi-file datasets benefit from multiway reconciliation
+    advisory = None
+    if len(loaded_files) > 2:
+        advisory = (f"Loaded {len(loaded_files)} tables. Use 'Run Multi-Way Chaining' for full "
+                    f"3-way reconciliation (Sales ↔ Gateway ↔ Banks) or 'Run' for standard pairwise.")
         
     if sid in CHAT_SESSIONS:
         CHAT_SESSIONS[sid].set_pipe(pipe)
 
     audit_for(sid).append({
         "event": "SAMPLE_DATA_LOADED",
+        "dataset": dataset,
         "files": [f["name"] for f in loaded_files],
         "ts": datetime.now(timezone.utc).isoformat(),
     })
     
-    return {"ok": True, "files": loaded_files}
+    return {"ok": True, "dataset": dataset, "files": loaded_files, "advisory": advisory}
 
 
 @router.post("/sessions/{sid}/run")
@@ -1034,6 +1110,15 @@ async def run(sid: str, files: Optional[List[UploadFile]] = File(None)) -> Dict[
         raise HTTPException(status_code=400, detail="need at least two tables (e.g. ledger and statement)")
 
     pipe = Pipeline(sid, auto_ack=True)
+    if existing:
+        if getattr(existing, "rules", None):
+            pipe.rules = list(existing.rules)
+        if getattr(existing, "schedule", None):
+            pipe.schedule = existing.schedule
+        pipe.cfg.update({
+            k: v for k, v in existing.cfg.items()
+            if k in ("tolerance", "tolerance_abs", "tolerance_pct", "tolerance_mode", "window_days")
+        })
     sess["pipe"] = pipe
     if sid in CHAT_SESSIONS:
         CHAT_SESSIONS[sid].set_pipe(pipe)
@@ -1208,6 +1293,84 @@ def mount_v2(app: FastAPI) -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     return app
+
+
+# -----------------------------------------------------------------------------
+# Multi-Way Chaining Endpoints
+# -----------------------------------------------------------------------------
+@router.post("/sessions/{sid}/multiway-run")
+def multiway_run(sid: str) -> Dict[str, Any]:
+    """Execute full multi-way 3-legged reconciliation (Sales ↔ Gateway Hub ↔ Banks).
+    
+    Requires 3+ tables staged in the session. Uses detect_table_roles() to classify tables,
+    then runs run_multiway_chaining() to produce Cash Position, Aging, Controller Invariant,
+    and Double-Entry Journal entries.
+    """
+    from app.engine.multiway import detect_table_roles, run_multiway_chaining
+    
+    sess = _sess(sid)
+    pipe = _pipe(sid)
+    if not pipe:
+        raise HTTPException(status_code=404, detail="no active pipeline for session")
+    if not getattr(pipe, "tables", None) or len(pipe.tables) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Multi-way reconciliation requires 3+ tables; only {len(getattr(pipe, 'tables', {}))} are staged. Use standard /run for 2-table reconciliation."
+        )
+    
+    rules = getattr(pipe, "rules", []) or []
+    schedule = getattr(pipe, "schedule", None)
+    tol = float(pipe.cfg.get("tolerance_abs", pipe.cfg.get("tolerance", 0.01)))
+    
+    report = run_multiway_chaining(
+        sid,
+        pipe.tables,
+        rules=rules,
+        schedule=schedule,
+        tolerance=tol,
+    )
+    
+    # Store on pipe for later retrieval
+    pipe.multiway_report = report
+    
+    audit_for(sid).append({
+        "event": "MULTIWAY_RUN_COMPLETED",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "leg1_match_rate": round(report.legs[0].match_rate, 4) if report.legs else None,
+        "leg2_match_rate": round(report.legs[1].match_rate, 4) if len(report.legs) > 1 else None,
+        "cash_position_closing": report.cash_position.projected_closing,
+    })
+    return {"ok": True, "report": report.model_dump(mode="json")}
+
+
+@router.get("/sessions/{sid}/multiway")
+def get_multiway_report(sid: str) -> Dict[str, Any]:
+    """Retrieve the most recent multi-way chaining report for a session."""
+    pipe = _pipe(sid)
+    rpt = getattr(pipe, "multiway_report", None) if pipe else None
+    if not rpt:
+        raise HTTPException(status_code=404, detail="no multiway report available; run /multiway-run first")
+    return {"ok": True, "report": rpt.model_dump(mode="json")}
+
+
+@router.get("/sessions/{sid}/export/journal.csv")
+def export_journal_csv(sid: str) -> StreamingResponse:
+    """Download double-entry journal entries as a CSV file for the current multi-way session."""
+    from app.engine.journal import export_journal_entries_csv
+    pipe = _pipe(sid)
+    rpt = getattr(pipe, "multiway_report", None) if pipe else None
+    if not rpt:
+        raise HTTPException(status_code=404, detail="no multiway journal available; run /multiway-run first")
+    csv_content = export_journal_entries_csv(rpt.journal_entries)
+    out_dir = OUTPUT_DIR / sid
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "journal_entries.csv").write_text(csv_content, encoding="utf-8")
+
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="journal_{sid}.csv"'},
+    )
 
 
 # -----------------------------------------------------------------------------

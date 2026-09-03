@@ -42,10 +42,11 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
-from app.config import LOGS_DIR
+from app.config import AUDIT_DIR, LOGS_DIR, OUTPUT_DIR
 from app.core import llm_client
 from app.core.audit import audit_for
 from app.engine.chatbot import ReconChatSession
+from app.engine.report import export_reconciliation_csv_string
 from app.pipeline import Pipeline
 
 
@@ -127,6 +128,7 @@ def run_cli(
     as_json: bool = False,
     deterministic: bool = False,
     chat: bool = False,
+    out_dir: Optional[Path] = None,
 ) -> None:
     """Execute reconciliation pipeline in terminal CLI mode and render results.
     
@@ -280,6 +282,32 @@ def run_cli(
     print(format_markdown_table(audit_headers, audit_rows), flush=True)
     print("\n---\n", flush=True)
 
+    # 4. Save Output Artifacts to Disk
+    target_out = out_dir if out_dir else (OUTPUT_DIR / sid)
+    target_out.mkdir(parents=True, exist_ok=True)
+    rep_path = target_out / "final_report.json"
+    csv_path = target_out / "reconciliation_output.csv"
+    aud_path = target_out / "audit_chain.jsonl"
+    
+    if report:
+        rep_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    csv_str = export_reconciliation_csv_string(pipe)
+    csv_path.write_text(csv_str, encoding="utf-8")
+    audit_src = AUDIT_DIR / f"{sid}.audit.jsonl"
+    if audit_src.exists():
+        shutil.copy2(audit_src, aud_path)
+
+    print("## Saved Output Files\n", flush=True)
+    out_headers = ["Output Artifact", "Disk Path"]
+    out_rows = [
+        ["Session Output Directory", f"`{target_out}`"],
+        ["Reconciliation Output CSV", f"`{csv_path}`"],
+        ["Final Report JSON", f"`{rep_path}`"],
+        ["Cryptographic Audit Ledger", f"`{aud_path}`"],
+    ]
+    print(format_markdown_table(out_headers, out_rows), flush=True)
+    print("\n---\n", flush=True)
+
     if chat:
         start_chat_repl(pipe, sid)
 
@@ -344,6 +372,7 @@ def main() -> None:
     parser.add_argument("--json", action="store_true", help="Output final report as formatted JSON")
     parser.add_argument("--chat", "-i", action="store_true", help="Start continuous interactive chatbot REPL after reconciliation")
     parser.add_argument("--clear-logs", action="store_true", help="Delete all session logs, audit trails, and uploads")
+    parser.add_argument("--out-dir", type=Path, default=None, help="Custom directory to save reconciliation outputs (default: data/outputs/<session_id>/)")
     parser.add_argument("--server", action="store_true", help="Launch FastAPI REST/WebSocket server with web console")
     parser.add_argument("--cli", action="store_true", help="Force CLI mode (skip auto-server)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Server host (default: 127.0.0.1)")
@@ -352,7 +381,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.clear_logs:
-        for d in [LOGS_DIR, LOGS_DIR.parent / "audit", LOGS_DIR.parent / "uploads"]:
+        for d in [LOGS_DIR, LOGS_DIR.parent / "audit", LOGS_DIR.parent / "uploads", OUTPUT_DIR]:
             if d.exists():
                 for f in d.glob("*"):
                     try:
@@ -362,14 +391,22 @@ def main() -> None:
                             shutil.rmtree(f)
                     except Exception:
                         pass
-        print("- **Status**: All session logs, audit files, and uploaded datasets have been cleared.")
+        print("- **Status**: All session logs, audit files, uploaded datasets, and output directories have been cleared.")
         if not args.server and not args.files:
             return
 
     if args.server:
         run_server(host=args.host, port=args.port)
     elif args.files:
-        run_cli(files=args.files, truth=args.truth, auto_ack=True, as_json=args.json, deterministic=args.deterministic, chat=args.chat)
+        run_cli(
+            files=args.files,
+            truth=args.truth,
+            auto_ack=True,
+            as_json=args.json,
+            deterministic=args.deterministic,
+            chat=args.chat,
+            out_dir=args.out_dir,
+        )
     elif args.cli:
         parser.print_help()
     else:

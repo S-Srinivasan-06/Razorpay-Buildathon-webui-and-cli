@@ -1,0 +1,61 @@
+order_id,customer_name,category,food_tax_rate,gross_amount,order_status,payment_method,created_at
+ZOM_1001,Customer_101,Food & Beverages,0.05,421.25,COMPLETED,Debit Card,2026-03-02
+ZOM_1002,Customer_102,Food & Beverages,0.05,761.16,COMPLETED,UPI,2026-03-03
+ZOM_1003,Customer_103,Food & Beverages,0.05,449.52,COMPLETED,UPI,2026-03-04
+ZOM_1004,Customer_104,Food & Beverages,0.05,254.68,COMPLETED,Credit Card,2026-03-05
+ZOM_1005,Customer_105,Food & Beverages,0.05,278.06,COMPLETED,NetBanking,2026-03-06
+ZOM_1006,Customer_106,Food & Beverages,0.05,772.46,COMPLETED,Debit Card,2026-03-07
+ZOM_1007,Customer_107,Food & Beverages,0.05,287.94,COMPLETED,Credit Card,2026-03-08
+ZOM_1008,Customer_108,Food & Beverages,0.05,1397.01,COMPLETED,Credit Card,2026-03-09
+ZOM_1009,Customer_109,Food & Beverages,0.05,797.86,COMPLETED,Debit Card,2026-03-10
+ZOM_1010,Customer_110,Food & Beverages,0.05,424.64,COMPLETED,UPI,2026-03-11
+ZOM_1011,Customer_111,Food & Beverages,0.05,1192.37,COMPLETED,Debit Card,2026-03-12
+ZOM_1012,Customer_112,Food & Beverages,0.05,286.49,COMPLETED,UPI,2026-03-13
+ZOM_1013,Customer_113,Food & Beverages,0.05,1383.94,COMPLETED,Debit Card,2026-03-14
+ZOM_1014,Customer_114,Food & Beverages,0.05,1178.87,COMPLETED,UPI,2026-03-15
+ZOM_1015,Customer_115,Food & Beverages,0.05,283.06,COMPLETED,Debit Card,2026-03-16
+ZOM_1016,Customer_116,Food & Beverages,0.05,462.77,COMPLETED,UPI,2026-03-17
+ZOM_1017,Customer_117,Food & Beverages,0.05,1393.9,COMPLETED,Debit Card,2026-03-18
+ZOM_1018,Customer_118,Food & Beverages,0.05,598.51,COMPLETED,Credit Card,2026-03-19
+ZOM_1019,Customer_119,Food & Beverages,0.05,955.09,COMPLETED,UPI,2026-03-20
+ZOM_1020,Customer_120,Food & Beverages,0.05,606.71,COMPLETED,Credit Card,2026-03-21
+ZOM_1021,Customer_121,Food & Beverages,0.05,603.11,COMPLETED,Debit Card,2026-03-22
+ZOM_1022,Customer_122,Food & Beverages,0.05,784.23,COMPLETED,UPI,2026-03-23
+ZOM_1023,Customer_123,Food & Beverages,0.05,791.09,COMPLETED,Debit Card,2026-03-24
+ZOM_1024,Customer_124,Food & Beverages,0.05,1393.39,COMPLETED,Credit Card,2026-03-25
+ZOM_1025,Customer_125,Food & Beverages,0.05,1160.63,FAILED,NetBanking,2026-03-01
+ZOM_1026,Customer_126,Food & Beverages,0.05,1424.23,COMPLETED,NetBanking,2026-03-02
+ZOM_1027,Customer_127,Food & Beverages,0.05,593.24,COMPLETED,Credit Card,2026-03-03
+ZOM_1028,Customer_128,Food & Beverages,0.05,957.35,COMPLETED,NetBanking,2026-03-04
+ZOM_1029,Customer_129,Food & Beverages,0.05,1398.1,COMPLETED,Credit Card,2026-03-05
+ZOM_1030,Customer_130,Food & Beverages,0.05,1654.55,REFUND_REQUESTED,UPI,2026-03-06
+ZOM_1031,Customer_131,Food & Beverages,0.05,427.64,COMPLETED,Credit Card,2026-03-07
+ZOM_1032,Customer_132,Food & Beverages,0.05,1409.82,COMPLETED,NetBanking,2026-03-08
+ZOM_1033,Customer_133,Food & Beverages,0.05,1409.79,COMPLETED,NetBanking,2026-03-09
+ZOM_1034,Customer_134,Food & Beverages,0.05,968.55,COMPLETED,UPI,2026-03-10
+ZOM_1035,Customer_135,Food & Beverages,0.05,454.09,REFUNDED,Debit Card,2026-03-11
+ZOM_1036,Customer_136,Food & Beverages,0.05,1155.58,COMPLETED,NetBanking,2026-03-12
+ZOM_1037,Customer_137,Food & Beverages,0.05,602.69,COMPLETED,Debit Card,2026-03-13
+ZOM_1038,Customer_138,Food & Beverages,0.05,605.38,COMPLETED,UPI,2026-03-14
+ZOM_1039,Customer_139,Food & Beverages,0.05,962.08,COMPLETED,Credit Card,2026-03-15
+ZOM_1040,Customer_140,Food & Beverages,0.05,598.7,COMPLETED,Credit Card,2026-03-16
+ZOM_1041,Customer_141,Food & Beverages,0.05,279.95,COMPLETED,NetBanking,2026-03-17
+ZOM_1042,Customer_142,Food & Beverages,0.05,255.59,COMPLETED,Debit Card,2026-03-18
+ZOM_1043,Customer_143,Food & Beverages,0.05,931.97,COMPLETED,Credit Card,2026-03-19
+ZOM_1044,Customer_144,Food & Beverages,0.05,424.28,COMPLETED,NetBanking,2026-03-20
+ZOM_1045,Customer_145,Food & Beverages,0.05,468.9,COMPLETED,Credit Card,2026-03-21
+ZOM_1046,Customer_146,Food & Beverages,0.05,612.99,COMPLETED,Credit Card,2026-03-22
+ZOM_1047,Customer_147,Food & Beverages,0.05,946.38,COMPLETED,NetBanking,2026-03-23
+ZOM_1048,Customer_148,Food & Beverages,0.05,796.45,COMPLETED,Credit Card,2026-03-24
+ZOM_1049,Customer_149,Food & Beverages,0.05,939.95,COMPLETED,Debit Card,2026-03-25
+ZOM_1050,Customer_150,Food & Beverages,0.05,1694.98,COMPLETED,NetBanking,2026-03-01
+ZOM_1051,Customer_151,Food & Beverages,0.05,432.4,COMPLETED,UPI,2026-03-02
+ZOM_1052,Customer_152,Food & Beverages,0.05,1151.05,COMPLETED,Credit Card,2026-03-03
+ZOM_1053,Customer_153,Food & Beverages,0.05,750.36,COMPLETED,UPI,2026-03-04
+ZOM_1054,Customer_154,Food & Beverages,0.05,753.37,COMPLETED,UPI,2026-03-05
+ZOM_1055,Customer_155,Food & Beverages,0.05,1153.54,COMPLETED,Credit Card,2026-03-06
+ZOM_1056,Customer_156,Food & Beverages,0.05,953.45,COMPLETED,Credit Card,2026-03-07
+ZOM_1057,Customer_157,Food & Beverages,0.05,616.17,COMPLETED,NetBanking,2026-03-08
+ZOM_1058,Customer_158,Food & Beverages,0.05,789.23,COMPLETED,NetBanking,2026-03-09
+ZOM_1059,Customer_159,Food & Beverages,0.05,754.72,COMPLETED,NetBanking,2026-03-10
+ZOM_1060,Customer_160,Food & Beverages,0.05,1171.18,COMPLETED,NetBanking,2026-03-11

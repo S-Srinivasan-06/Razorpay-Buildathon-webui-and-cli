@@ -5,9 +5,9 @@ decision records governing communication between the state machine, match engine
 LLM tools, event bus, and audit logging.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Literal, Optional, Type
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -41,6 +41,8 @@ class EvidencePiece(str, Enum):
     AMOUNT_WITHIN_TOL = "amount_within_tol"
     DATE_WITHIN_WINDOW = "date_within_window"
     FEE_MODEL_MATCH = "fee_model_match"
+    TAX_MODEL_MATCH = "tax_model_match"
+    FX_MODEL_MATCH = "fx_model_match"
 
 
 class HypothesisCategory(str, Enum):
@@ -136,6 +138,35 @@ class ToolCall(BaseModel):
     retries: int
     fallback: Callable[..., Any]
     cost_budget_usd: float
+
+
+class SegmentMatcher(BaseModel):
+    """Defines which rows a rule applies to. Exactly one strategy must be set."""
+    kind: Literal["all", "row_range_pct", "row_range_abs", "date_range", "column_equals", "column_in"]
+    start_pct: Optional[float] = None
+    end_pct: Optional[float] = None
+    sort_by: Optional[str] = None
+    start_row: Optional[int] = None
+    end_row: Optional[int] = None
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    column: Optional[str] = None
+    value: Optional[Any] = None
+    values: Optional[List[Any]] = None
+
+
+class FeeTaxRule(BaseModel):
+    """Segment-based fee, tax, and withholding rule."""
+    rule_id: str
+    label: str
+    matcher: SegmentMatcher
+    fee_rate: float = 0.0
+    gst_rate: float = 0.0
+    flat_fee: float = 0.0
+    tds_rate: float = 0.0
+    priority: int = 0
+    source: Literal["user_explicit", "ai_interpreted", "system_default"] = "user_explicit"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class FeeSchedule(BaseModel):
@@ -272,4 +303,66 @@ class FinalReport(BaseModel):
     constants_version: str
     retention_note: str
     storage_backend: str = "local_hash_chain"
+
+
+class JournalEntryLine(BaseModel):
+    """Single debit or credit entry in a double-entry journal voucher."""
+    account: str
+    debit: float = 0.0
+    credit: float = 0.0
+
+
+class JournalEntry(BaseModel):
+    """Auditable double-entry general ledger voucher with debit-credit parity."""
+    je_id: str
+    date: str
+    description: str
+    leg: str
+    lines: List[JournalEntryLine]
+    total_debit: float
+    total_credit: float
+
+
+class CashPosition(BaseModel):
+    """Comprehensive cash flow and settlement position with aging analysis."""
+    opening_balance: float
+    gross_sales: float
+    expected_settlements: float
+    settled_in_bank: float
+    in_transit_total: float
+    in_transit_t1: float
+    in_transit_t2: float
+    in_transit_t7_plus: float
+    fees_withheld: float
+    gst_withheld: float
+    refund_chargeback_reserve: float
+    exception_value_at_risk: float
+    projected_closing: float
+    variance_unexplained: float = 0.0
+
+
+class MultiWayLeg(BaseModel):
+    """Reconciliation performance and volume metrics for an individual chaining leg."""
+    leg_name: str
+    source_table: str
+    target_table: str
+    matched_count: int
+    unmatched_count: int
+    matched_value: float
+    unmatched_value: float
+    match_rate: float
+
+
+class MultiWayReport(BaseModel):
+    """Consolidated three-legged reconciliation report across multi-party ecosystem."""
+    legs: List[MultiWayLeg]
+    consolidated_match_rate: float
+    total_orders_evaluated: int
+    fully_reconciled_count: int
+    pending_bank_clearing_count: int
+    gateway_variance_count: int
+    dropped_by_gateway_count: int
+    direct_bank_charge_count: int
+    cash_position: CashPosition
+    journal_entries: List[JournalEntry]
 

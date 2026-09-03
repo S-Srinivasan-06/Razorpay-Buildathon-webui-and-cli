@@ -337,7 +337,13 @@ def override(sid: str, rid: int, body: Dict[str, Any]) -> Dict[str, bool]:
     prior_conf = item.get("conf", 0.0)
     prior_reason = item["rec"].reason.value if hasattr(item["rec"].reason, "value") else str(item["rec"].reason)
 
-    new_action = "mark_resolved" if body.get("action") == "approve" else "escalate"
+    act = (body.get("action") or "").lower()
+    if act == "approve":
+        new_action = "mark_resolved"
+    elif act in ("decline", "reject"):
+        new_action = "declined"
+    else:
+        new_action = "escalate"
     item["action"] = new_action
 
     prior_decision = {
@@ -362,7 +368,7 @@ def override(sid: str, rid: int, body: Dict[str, Any]) -> Dict[str, bool]:
             1 for e in pipe.queue if e.get("action") in ("request_confirmation", "escalate")
         )
         pipe.final.unresolved_count = sum(
-            1 for e in pipe.queue if e.get("action") == "mark_pending"
+            1 for e in pipe.queue if e.get("action") in ("mark_pending", "declined")
         )
         if prior_action != new_action:
             pipe.final.llm_user_disagreements.append({

@@ -137,10 +137,13 @@ def generate_explanation(
     side = rec.side
     ref = rec.ref or "N/A"
 
+    rule_tag = f" [Rule: '{ctx['rule_label']}']" if ctx.get("rule_label") else ""
+    tol_tag = f" [Tolerance: {ctx['tolerance_str']}]" if ctx.get("tolerance_str") else ""
+
     if cat == HypothesisCategory.TEMPORAL_DRIFT:
         return (
             f"Approved [No Error]: Exact amount & reference '{ref}' matched; "
-            "settlement deferred by bank holiday/clearing window."
+            f"settlement deferred by bank holiday/clearing window.{tol_tag}"
         )
     elif cat == HypothesisCategory.SPLIT:
         if ctx.get("ambiguous_split"):
@@ -152,19 +155,19 @@ def generate_explanation(
             batch_ref = ctx.get("split_batch_ref", "bank batch settlement")
             return (
                 f"Approved [No Error]: Constituent transaction leg resolved as part of "
-                f"batch deposit '{batch_ref}' net of gateway fees."
+                f"batch deposit '{batch_ref}' net of gateway deductions.{rule_tag}{tol_tag}"
             )
         targets = ctx.get("split_targets", [])
         return (
             f"Approved [No Error]: Batch settlement combines multiple order legs "
-            f"(RIDs {targets}) net of payment gateway fees."
+            f"(RIDs {targets}) net of payment gateway deductions.{rule_tag}{tol_tag}"
         )
     elif cat == HypothesisCategory.FEE_DEDUCTION:
-        return "Approved [No Error]: Net bank deposit variance matches standard payment gateway fee schedule."
+        return f"Approved [No Error]: Net bank deposit variance matches payment gateway fee policy.{rule_tag}{tol_tag}"
     elif cat == HypothesisCategory.TAX_WITHHOLDING:
-        return "Approved [No Error]: Variance matched standard tax withholding deduction (e.g. 1.0% TDS)."
+        return f"Approved [No Error]: Variance matches configured tax withholding / GST deduction policy.{rule_tag}{tol_tag}"
     elif cat == HypothesisCategory.CURRENCY_CONVERSION:
-        return "Approved [No Error]: Variance explained by expected FX/currency conversion spread."
+        return f"Approved [No Error]: Variance explained by expected FX/currency conversion spread corridor.{tol_tag}"
     elif cat == HypothesisCategory.DUPLICATE:
         return f"Error in Source A (Ledger): Duplicate order reference '{ref}' recorded multiple times in payments ledger."
     elif cat == HypothesisCategory.REFUND_OFFSET:
@@ -173,7 +176,7 @@ def generate_explanation(
             "representing customer refund or chargeback."
         )
     elif cat == HypothesisCategory.COUNTERPARTY_MISMATCH:
-        return f"Approved [No Error]: Normalized token/semantic match verified between order '{ref}' and counterpart UTR."
+        return f"Approved [No Error]: Normalized token/semantic match verified between order '{ref}' and counterpart UTR.{tol_tag}"
     elif side == "L":
         return f"Error in Source B (Bank): Order '{ref}' exists in payments ledger but has no corresponding bank settlement credit."
     elif side == "R":

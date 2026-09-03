@@ -90,3 +90,42 @@ def test_server_file_lifecycle_and_chat_endpoints() -> None:
     assert "payments.csv" not in del_resp.json()["remaining_files"]
     assert "bank.csv" in del_resp.json()["remaining_files"]
 
+
+def test_chat_answers_standard_deviation_and_statistics(tmp_path: Path) -> None:
+    """Verify that the assistant calculates and provides standard deviation metrics without refusal."""
+    p1 = tmp_path / "merchant_sales.csv"
+    p1.write_text(
+        "order_id,gross_amount,date\n"
+        "ORD_1,1000.00,2026-03-01\n"
+        "ORD_2,2000.00,2026-03-01\n"
+        "ORD_3,3000.00,2026-03-01\n"
+        "ORD_4,4000.00,2026-03-01\n",
+        encoding="utf-8",
+    )
+    p2 = tmp_path / "bank_statement.csv"
+    p2.write_text(
+        "utr,credit_amount,date\n"
+        "ORD_1,980.00,2026-03-02\n"
+        "ORD_2,1960.00,2026-03-02\n"
+        "ORD_3,2940.00,2026-03-02\n"
+        "ORD_4,3920.00,2026-03-02\n",
+        encoding="utf-8",
+    )
+
+    pipe = Pipeline("test_stats_chat", auto_ack=True)
+    pipe.ingest([p1, p2])
+
+    ctx = build_grounded_context(pipe)
+    assert "[Active Statistical Profiles & Standard Deviations across Datasets]:" in ctx
+    assert "Average Standard Deviation" in ctx
+    assert "gross_amount" in ctx
+    assert "credit_amount" in ctx
+
+    session = ReconChatSession("test_stats_chat", pipe=pipe)
+    resp = session.chat("What is the average standard deviation across the datasets?")
+    assert resp["ok"] is True
+    assert "standard deviation" in resp["response"].lower()
+    assert "not available" not in resp["response"].lower()
+    assert "1,290.99" in resp["response"] or "1290" in resp["response"] or "Average Standard Deviation" in resp["response"]
+
+

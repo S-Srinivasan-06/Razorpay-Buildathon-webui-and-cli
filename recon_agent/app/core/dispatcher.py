@@ -33,6 +33,16 @@ def breaker_open(sid: str, tool: str) -> bool:
     return _breakers.get((sid, tool), 0) >= REG["circuit_breaker_failure_count"]
 
 
+def cleanup_breakers(sid: Optional[str] = None) -> None:
+    """Evict breaker entries for a specific session or prune old entries if size exceeds limit."""
+    global _breakers
+    if sid:
+        _breakers = {k: v for k, v in _breakers.items() if k[0] != sid}
+    elif len(_breakers) > 1000:
+        keys = list(_breakers.keys())[-500:]
+        _breakers = {k: _breakers[k] for k in keys}
+
+
 def _count_failure(sid: str, tool: str) -> None:
     """Increment failure counter and emit a CIRCUIT_BREAKER_OPEN event if threshold is hit.
     
@@ -40,6 +50,8 @@ def _count_failure(sid: str, tool: str) -> None:
         sid: Session identifier string.
         tool: Name of the tool that encountered a failure.
     """
+    if len(_breakers) > 1000:
+        cleanup_breakers()
     k = (sid, tool)
     _breakers[k] = _breakers.get(k, 0) + 1
     if _breakers[k] == REG["circuit_breaker_failure_count"]:
@@ -59,7 +71,7 @@ def reset_breaker(sid: str, tool: str) -> None:
     
     Args:
         sid: Session identifier string.
-        tool: Name of the tool to reset.
+        tool: Name of the tool.
     """
     _breakers[(sid, tool)] = 0
 

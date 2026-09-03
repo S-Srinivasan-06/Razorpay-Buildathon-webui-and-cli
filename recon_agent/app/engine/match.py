@@ -11,6 +11,7 @@ import datetime
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, model_validator
 
@@ -18,7 +19,14 @@ from app.core.channels import validate_and_route
 from app.core.constants import REG
 from app.core.contracts import EvidencePiece, MessageKind
 from app.core.dispatcher import dispatch_tool_call, ToolCall
-from app.engine.fee import compute_fee, compute_expected_net, compute_tax_component, compute_net_settlement
+from app.engine.fee import (
+    compute_fee,
+    compute_expected_net,
+    compute_tax_component,
+    compute_net_settlement,
+    compute_deduction_breakdown,
+    effective_tolerance,
+)
 
 
 class SemArgs(BaseModel):
@@ -144,6 +152,7 @@ def _busdays(d1: datetime.date, d2: datetime.date) -> int:
     """Calculate the number of business days (Monday through Friday) between two dates.
     
     Excludes weekend days to avoid falsely penalizing banking clearing delays.
+    Utilizes numpy.busday_count for vectorized C-speed calculation.
     
     Args:
         d1: First date.
@@ -153,12 +162,13 @@ def _busdays(d1: datetime.date, d2: datetime.date) -> int:
         Integer count of business days between d1 and d2.
     """
     a, b = sorted((d1, d2))
-    n, cur = 0, a
-    while cur < b:
-        cur += datetime.timedelta(days=1)
-        if cur.weekday() < 5:  # Monday=0, Sunday=6
-            n += 1
-    return n
+    try:
+        return int(np.busday_count(a, b))
+    except Exception:
+        # Fallback closed-form computation if dates are edge-case objects
+        diff_days = (b - a).days
+        full_weeks, extra_days = divmod(diff_days, 7)
+        return full_weeks * 5 + min(extra_days, 5)
 
 
 def _d(v: Any) -> datetime.date:
@@ -166,18 +176,26 @@ def _d(v: Any) -> datetime.date:
     return pd.to_datetime(v).date()
 
 
-def fee_explains(a: float, rv: float, schedule: Optional[Any], tol: float) -> bool:
-    """Check if the variance between ledger amount and bank deposit matches the fee schedule.
+def fee_explains(
+    a: float,
+    rv: float,
+    schedule: Optional[Any] = None,
+    tol: float = 0.01,
+    rules: Optional[List[Any]] = None,
+    row: Optional[Dict[str, Any]] = None,
+    total_rows: int = 1,
+    row_idx: int = 0,
+) -> bool:
+    """Check if the variance between ledger amount and bank deposit matches the fee schedule or rules.
     
     Returns True if raw amount delta exceeds tolerance but net amount delta
-    (gross minus calculated fee) is strictly within tolerance.
-    
-    Args:
-        a: Gross ledger amount.
-        rv: Received bank credit amount.
-        schedule: Configured FeeSchedule.
-        tol: Permissible tolerance in currency units (e.g. 0.01).
+    (gross minus calculated fee/tax) is strictly within tolerance.
     """
+    if rules is not None and len(rules) > 0:
+        breakdown = compute_deduction_breakdown(a, rules=rules, row=row, total_rows=total_rows, row_idx=row_idx)
+        raw = abs(a - rv)
+        net = abs(breakdown["expected_net"] - rv)
+        return raw > tol and net <= tol and breakdown["total_deductions"] > 0
     if not schedule:
         return False
     raw = abs(a - rv)
@@ -190,8 +208,11 @@ def score_pair(
     l: Dict[str, Any],
     r: Dict[str, Any],
     cfg: Dict[str, Any],
-    schedule: Optional[Any],
-    fallback_events: List[str],
+    schedule: Optional[Any] = None,
+    fallback_events: Optional[List[str]] = None,
+    rules: Optional[List[Any]] = None,
+    total_rows: int = 1,
+    row_idx: int = 0,
 ) -> Tuple[float, Dict[str, float], List[EvidencePiece], Optional[float]]:
     """Compute composite multi-attribute match score for a candidate pair of records.
     
@@ -200,19 +221,14 @@ def score_pair(
       2. Amount agreement on gross or net-of-fee basis (`w_match_amount`).
       3. Date proximity in business days (`w_match_date`).
       4. Semantic similarity via LLM or deterministic fallback (`w_match_semantic`).
-      
-    Args:
-        sid: Session identifier string.
-        l: Left ledger record dict.
-        r: Right statement record dict.
-        cfg: Schema mapping configuration (field names, tolerance, window_days).
-        schedule: Active FeeSchedule instance.
-        fallback_events: Mutable list collecting fallback event names.
-        
-    Returns:
-        Tuple of (composite_score, component_scores_dict, evidence_pieces_list, signed_amount_delta).
     """
-    tol, win = cfg["tolerance"], cfg["window_days"]
+    if fallback_events is None:
+        fallback_events = []
+    abs_tol = float(cfg.get("tolerance_abs", cfg.get("tolerance", 0.01)))
+    pct_tol = float(cfg.get("tolerance_pct", 0.0))
+    mode = str(cfg.get("tolerance_mode", "absolute_only"))
+    win = int(cfg.get("window_days", 3))
+
     comps: Dict[str, float] = {}
     w: Dict[str, float] = {}
 
@@ -224,21 +240,34 @@ def score_pair(
     )
     comps["key"], w["key"] = key, REG["w_match_key"]
 
-    # 2. Amount scoring with fee schedule evaluation
+    # 2. Amount scoring with fee/tax rule evaluation
     signed_delta = None
     raw_matched = fee_x = None
     if cfg.get("left_amount") and cfg.get("right_amount"):
         a, rv = float(l[cfg["left_amount"]]), float(r[cfg["right_amount"]])
+        row_tol = effective_tolerance(a, abs_tol=abs_tol, pct_tol=pct_tol, mode=mode)
         raw_delta = abs(a - rv)
-        raw_matched = raw_delta <= tol
-        net_expected = compute_expected_net(a, schedule) if schedule else a
+        raw_matched = raw_delta <= row_tol
+
+        if rules is not None and len(rules) > 0:
+            breakdown = compute_deduction_breakdown(a, rules=rules, row=l, total_rows=total_rows, row_idx=row_idx)
+            net_expected = breakdown["expected_net"]
+            has_expected_deduction = breakdown["total_deductions"] > 0
+        elif schedule:
+            net_expected = compute_expected_net(a, schedule)
+            has_expected_deduction = abs(net_expected - a) > row_tol
+        else:
+            net_expected = a
+            has_expected_deduction = False
+
         net_delta = abs(net_expected - rv)
-        net_matched = net_delta <= tol
-        # Strict schedules make a missing mandatory deduction an anomaly rather
-        # than accepting a gross match beside net-of-fee matches.
-        if schedule and schedule.params.get("strict_fee_policy", False):
-            raw_matched = raw_matched and abs(net_expected - a) <= tol
-        fee_x = fee_explains(a, rv, schedule, tol)
+        net_matched = net_delta <= row_tol
+
+        # Enforce strict fee policy: if fee/tax is expected, raw zero-diff match is invalid
+        if has_expected_deduction:
+            raw_matched = raw_matched and abs(net_expected - a) <= row_tol
+
+        fee_x = fee_explains(a, rv, schedule=schedule, tol=row_tol, rules=rules, row=l, total_rows=total_rows, row_idx=row_idx)
         signed_delta = a - rv
         best = min(raw_delta, net_delta)
         comps["amount"] = (

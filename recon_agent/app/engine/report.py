@@ -57,7 +57,7 @@ def build_final_report(
             1 for e in exceptions if e.get("action") in ("request_confirmation", "escalate")
         ),
         unresolved_count=sum(
-            1 for e in exceptions if e.get("action") == "mark_pending"
+            1 for e in exceptions if e.get("action") in ("mark_pending", "declined")
         ),
         total_gross=totals["gross"],
         total_net=totals["net"],
@@ -72,4 +72,54 @@ def build_final_report(
         constants_version=REG.version,
         retention_note="intermediates 90d; final report + audit retained indefinitely",
     )
+
+
+def export_reconciliation_csv_string(pipe: Any) -> str:
+    """Generate canonical CSV string containing matched pairs and classified exceptions."""
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "record_type",
+        "l_rid",
+        "r_rid",
+        "ref",
+        "side",
+        "reason",
+        "composite_score_or_confidence",
+        "delta",
+        "action",
+        "explanation",
+    ])
+    if getattr(pipe, "exec_res", None) and getattr(pipe.exec_res, "matched", None):
+        for m in pipe.exec_res.matched:
+            writer.writerow([
+                "matched",
+                m.l_rid,
+                m.r_rid,
+                "",
+                "",
+                "",
+                m.composite_score,
+                "",
+                "matched",
+                "",
+            ])
+    if getattr(pipe, "queue", None):
+        for item in pipe.queue:
+            rec = item["rec"]
+            writer.writerow([
+                "exception",
+                rec.rid if rec.side == "L" else "",
+                rec.rid if rec.side == "R" else "",
+                rec.ref or "",
+                rec.side,
+                rec.reason.value if hasattr(rec.reason, "value") else str(rec.reason),
+                item.get("conf", 0.0),
+                rec.delta if rec.delta is not None else "",
+                item.get("action", "mark_pending"),
+                (item.get("explanation") or getattr(rec, "explanation", "") or "").replace("\n", " "),
+            ])
+    return output.getvalue()
 

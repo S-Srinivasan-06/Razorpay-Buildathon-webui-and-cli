@@ -42,7 +42,7 @@ def test_exact_raw_match_scores_full_amount() -> None:
     """Verify that exact amount equality generates AMOUNT_WITHIN_TOL and full amount score."""
     l = {"order_id": "A", "amount": 1000.0, "date": "2026-03-01"}
     r = {"utr": "A", "credit": 1000.0, "date": "2026-03-02"}
-    v, comps, ev, sd = match.score_pair("t", l, r, CFG, SCHED, [])
+    v, comps, ev, sd = match.score_pair("t", l, r, CFG, None, [])
     assert comps["amount"] == 1.0
     assert EvidencePiece.AMOUNT_WITHIN_TOL in ev and EvidencePiece.FEE_MODEL_MATCH not in ev
     assert v >= REG["match_auto_threshold"]

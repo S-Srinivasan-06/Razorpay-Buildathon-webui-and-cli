@@ -5,9 +5,10 @@ transitions, abort tokens, circuit breaker halts, and safe interactive resumptio
 Emits CONTROL events via the central channel dispatcher.
 """
 
+import secrets
 import uuid
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 from app.core.channels import validate_and_route
 from app.core.contracts import MessageKind
@@ -33,45 +34,54 @@ class State(str, Enum):
     ABORT_CONFIRMED = "ABORT_CONFIRMED"
 
 
-class StateMachine:
-    """Deterministic finite state machine managing reconciliation execution flow.
-    
-    Coordinates sequential execution steps, handles voluntary and error halts,
-    maintains abort tokens for cancellation, and supports reentry upon resumption.
-    """
+VALID_TRANSITIONS: Dict[State, Set[State]] = {
+    State.INGESTING: {State.PROFILING, State.HALT, State.ABORT_CONFIRMED},
+    State.PROFILING: {State.MAPPING_PROPOSED, State.HALT, State.ABORT_CONFIRMED},
+    State.MAPPING_PROPOSED: {State.MAPPING_VALIDATED, State.POLICY_GENERATED, State.HALT, State.ABORT_CONFIRMED},
+    State.MAPPING_VALIDATED: {State.POLICY_GENERATED, State.DRY_RUN, State.HALT, State.ABORT_CONFIRMED},
+    State.POLICY_GENERATED: {State.DRY_RUN, State.EXECUTING, State.HALT, State.ABORT_CONFIRMED},
+    State.DRY_RUN: {State.EXECUTING, State.HALT, State.ABORT_CONFIRMED},
+    State.EXECUTING: {State.INSPECTING, State.HALT, State.ABORT_CONFIRMED},
+    State.INSPECTING: {State.EXECUTING, State.REVISION, State.QA, State.HALT, State.ABORT_CONFIRMED},
+    State.REVISION: {State.EXECUTING, State.INSPECTING, State.QA, State.HALT, State.ABORT_CONFIRMED},
+    State.QA: {State.RESOLVING, State.HALT, State.ABORT_CONFIRMED},
+    State.RESOLVING: {State.AGGREGATING, State.ARCHIVED, State.HALT, State.ABORT_CONFIRMED},
+    State.AGGREGATING: {State.ARCHIVED, State.HALT, State.ABORT_CONFIRMED},
+    State.HALT: set(State),
+    State.ARCHIVED: set(),
+    State.ABORT_CONFIRMED: set(),
+}
 
-    def __init__(self, session_id: str) -> None:
-        """Initialize state machine for a specific session.
-        
-        Args:
-            session_id: Unique session identifier string.
-        """
-        self.sid: str = session_id
+
+class StateMachine:
+    """Deterministic finite state machine managing reconciliation execution flow."""
+
+    def __init__(self, sid: str) -> None:
+        """Initialize state machine for a reconciliation session."""
+        self.sid: str = sid
         self.state: Optional[State] = None
-        self._token: Optional[str] = None
-        self._abort_pending: bool = False
+        self._token: str = secrets.token_hex(4)
         self._pre_halt: Optional[State] = None
         self._halt_tools: List[str] = []
+        self._abort_pending: bool = False
 
-    def enter(self, s: State, detail: str = "") -> None:
-        """Enter a new state and emit a STATE_ENTERED control event.
-        
-        Generates a fresh abort token for the new state.
-        
-        Args:
-            s: Target state to enter.
-            detail: Contextual note or reason for entering the state.
-        """
-        self.state = s
-        self._token = uuid.uuid4().hex
+    @property
+    def token(self) -> str:
+        """Active abort authorization token."""
+        return self._token
+
+    def enter(self, state: State, detail: str = "") -> None:
+        """Forcefully enter a state without lifecycle validation checks."""
+        self.state = state
+        self._token = secrets.token_hex(4)
         validate_and_route(
             self.sid,
             MessageKind.CONTROL,
             {
                 "event": "STATE_ENTERED",
-                "state": s.value,
-                "abort_token": self._token,
-                "detail": {"d": detail},
+                "state": state.value,
+                "token": self._token,
+                "detail": detail,
             },
             "system",
         )
@@ -86,7 +96,7 @@ class StateMachine:
             self._abort_pending = True
 
     def transition(self, to: State, detail: str = "") -> bool:
-        """Transition from current state to a target state.
+        """Transition from current state to a target state with transition validation.
         
         Checks if an abort was requested before transitioning. If aborted,
         transitions immediately to ABORT_CONFIRMED and returns False.
@@ -97,11 +107,21 @@ class StateMachine:
             
         Returns:
             True if transition succeeded, False if aborted.
+            
+        Raises:
+            ValueError: If attempting an illegal lifecycle transition.
         """
         if self._abort_pending:
             self._abort_pending = False
             self.enter(State.ABORT_CONFIRMED)
             return False
+
+        if self.state is not None and self.state in VALID_TRANSITIONS:
+            allowed = VALID_TRANSITIONS[self.state]
+            if to not in allowed and to not in (State.ABORT_CONFIRMED, State.HALT):
+                raise ValueError(
+                    f"Illegal state transition from {self.state.value} to {to.value}."
+                )
 
         if self.state is not None:
             validate_and_route(

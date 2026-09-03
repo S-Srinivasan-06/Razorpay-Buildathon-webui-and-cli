@@ -10,6 +10,7 @@ import io
 import json
 import sys
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
@@ -23,6 +24,9 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
 BASE_URL = "http://127.0.0.1:8000"
+
+
+SAMPLE_DIR = Path(__file__).resolve().parent.parent / "sample_data"
 
 
 def test_api_v2_full_suite() -> None:
@@ -56,7 +60,9 @@ def test_api_v2_full_suite() -> None:
 
     # 3. Test File Upload & Run with Sample Data
     print("\n[Step 3] Testing multipart file upload and reconciliation run...")
-    with open("sample_data/payments.csv", "rb") as f1, open("sample_data/bank.csv", "rb") as f2:
+    p_csv = SAMPLE_DIR / "payments.csv"
+    b_csv = SAMPLE_DIR / "bank.csv"
+    with open(p_csv, "rb") as f1, open(b_csv, "rb") as f2:
         files = [
             ("files", ("payments.csv", f1, "text/csv")),
             ("files", ("bank.csv", f2, "text/csv")),

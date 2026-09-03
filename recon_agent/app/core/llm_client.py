@@ -14,31 +14,25 @@ from typing import Any, Dict, List, Tuple
 from app.config import DEFAULT_API_KEY
 from app.core.constants import REG
 
-# Default model configuration: Gemma 4 31B instruction-tuned
-MODEL = os.getenv("LLM_MODEL", os.getenv("GEMINI_MODEL", "gemma-4-31b-it"))
+# Default model configuration: Gemma 31B instruction-tuned (always)
+MODEL = "gemma-4-31b-it"
 
 # Internal telemetry state tracking token counts from the most recent LLM invocation
 _last: Dict[str, Any] = {"in": 0, "out": 0, "estimated": False}
 
 
-def resolve_model_slug(model_name: str) -> str:
+def resolve_model_slug(model_name: str = "") -> str:
     """Normalize model slug for Google Generative Language API endpoints.
     
-    Translates common shorthand names to official API endpoint identifiers
-    (e.g., 'gemma-4-31b' -> 'gemma-4-31b-it').
+    Checks explicit parameter, LLM_MODEL environment variable, or default MODEL.
     
     Args:
-        model_name: Raw model string or alias.
+        model_name: Optional raw model string or alias.
         
     Returns:
         Canonical Google model identifier.
     """
-    m = model_name.strip()
-    if m in ("gemma-4-31b", "gemma-31b"):
-        return "gemma-4-31b-it"
-    if m in ("gemma-4b", "gemma-4b-it", "gemma-4-26b"):
-        return "gemma-4-26b-a4b-it"
-    return m
+    return model_name or os.getenv("LLM_MODEL") or MODEL
 
 
 def get_api_key() -> str:
@@ -114,7 +108,7 @@ def json_chat(tool_name: str, args: Dict[str, Any], timeout: float = 25.0) -> Di
     if not key:
         raise RuntimeError("GEMINI_API_KEY not set — deterministic fallback will be used")
 
-    actual_model = resolve_model_slug(MODEL)
+    actual_model = resolve_model_slug()
 
     if tool_name == "mapping_semantic":
         schema_hint = (
@@ -133,7 +127,7 @@ def json_chat(tool_name: str, args: Dict[str, Any], timeout: float = 25.0) -> Di
         f"Input Data:\n{json.dumps(args, default=str)}"
     )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{actual_model}:generateContent?key={key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{actual_model}:generateContent"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -145,7 +139,7 @@ def json_chat(tool_name: str, args: Dict[str, Any], timeout: float = 25.0) -> Di
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-goog-api-key": key},
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         d = json.loads(r.read())
@@ -189,7 +183,7 @@ def conversational_chat(
     if not key:
         raise RuntimeError("GEMINI_API_KEY not set")
 
-    actual_model = resolve_model_slug(MODEL)
+    actual_model = resolve_model_slug()
 
     formatted_contents = []
     for msg in messages:
@@ -199,7 +193,7 @@ def conversational_chat(
             "parts": [{"text": msg.get("content", "")}],
         })
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{actual_model}:generateContent?key={key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{actual_model}:generateContent"
     payload = {
         "system_instruction": {
             "parts": [{
@@ -220,7 +214,7 @@ def conversational_chat(
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-goog-api-key": key},
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         d = json.loads(r.read())

@@ -17,7 +17,7 @@ from app.core.contracts import ArtifactPayload
 #  - Indian Permanent Account Number / PAN: 5 letters, 4 digits, 1 letter (score: 0.80)
 #  - 12-digit Indian Aadhaar number (score: 0.75)
 _PAT = [
-    (re.compile(r"[\w.+-]+@[\w-]+\.\w+"), 1.0),
+    (re.compile(r"^[\w.+-]+@[\w-]+\.\w+$"), 1.0),
     (re.compile(r"^\+?\d[\d\s-]{9,14}$"), 0.9),
     (re.compile(r"^[A-Z]{5}\d{4}[A-Z]$"), 0.8),
     (re.compile(r"^\d{12}$"), 0.75),
