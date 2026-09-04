@@ -24,11 +24,14 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     html {
-      zoom: 0.8;
+      zoom: 0.9;
     }
 
     body {
@@ -70,15 +73,140 @@
     }
 
     @keyframes pulseAnim {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.35; transform: scale(0.85); }
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.35;
+        transform: scale(0.85);
+      }
+    }
+
+    /* Markdown rendering styles */
+    .prose-chat h1, .prose-chat h2, .prose-chat h3, .prose-chat h4 {
+      font-weight: 700;
+      color: #0F172A;
+      margin-top: 0.75rem;
+      margin-bottom: 0.35rem;
+      line-height: 1.3;
+    }
+    .prose-chat h1:first-child, .prose-chat h2:first-child, .prose-chat h3:first-child, .prose-chat h4:first-child {
+      margin-top: 0;
+    }
+    .prose-chat h1 { font-size: 1.05rem; }
+    .prose-chat h2 { font-size: 0.95rem; }
+    .prose-chat h3 { font-size: 0.9rem; }
+    .prose-chat h4 { font-size: 0.85rem; }
+    .prose-chat p {
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+    .prose-chat p:last-child {
+      margin-bottom: 0;
+    }
+    .prose-chat ul {
+      list-style-type: disc;
+      padding-left: 1.25rem;
+      margin-top: 0.35rem;
+      margin-bottom: 0.5rem;
+    }
+    .prose-chat ol {
+      list-style-type: decimal;
+      padding-left: 1.25rem;
+      margin-top: 0.35rem;
+      margin-bottom: 0.5rem;
+    }
+    .prose-chat li {
+      margin-bottom: 0.25rem;
+      line-height: 1.45;
+    }
+    .prose-chat code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background: rgba(15, 23, 42, 0.07);
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.375rem;
+      color: #0F172A;
+      font-weight: 500;
+    }
+    .prose-chat pre {
+      background: #0F172A;
+      color: #F8FAFC;
+      padding: 0.65rem 0.85rem;
+      border-radius: 0.65rem;
+      overflow-x: auto;
+      margin: 0.5rem 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8em;
+      line-height: 1.45;
+    }
+    .prose-chat pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      font-size: 1em;
+    }
+    .prose-chat blockquote {
+      border-left: 3px solid #0284C7;
+      background: rgba(2, 132, 199, 0.08);
+      padding: 0.4rem 0.65rem;
+      border-radius: 0 0.5rem 0.5rem 0;
+      margin: 0.5rem 0;
+      font-style: italic;
+    }
+    .prose-chat table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.65rem 0;
+      font-size: 0.8em;
+      background: #FFFFFF;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      border: 1px solid #E2E8F0;
+    }
+    .prose-chat th {
+      background: #F8FAFC;
+      color: #334155;
+      font-weight: 600;
+      text-align: left;
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid #E2E8F0;
+      border-right: 1px solid #F1F5F9;
+    }
+    .prose-chat td {
+      padding: 0.35rem 0.6rem;
+      border-bottom: 1px solid #F1F5F9;
+      border-right: 1px solid #F1F5F9;
+      color: #1E293B;
+    }
+    .prose-chat tr:nth-child(even) td {
+      background: #F8FAFC;
+    }
+    .prose-chat hr {
+      border: 0;
+      height: 1px;
+      background: #E2E8F0;
+      margin: 0.65rem 0;
+    }
+    .prose-chat a {
+      color: #0284C7;
+      text-decoration: underline;
+    }
+    .prose-chat strong {
+      font-weight: 700;
+      color: #0F172A;
     }
   </style>
 </head>
 
 <body class="min-h-screen font-sans text-sm antialiased">
   <div class="min-h-screen p-3 lg:p-6 flex flex-col gap-4 max-w-[1800px] mx-auto">
-    
+
     <!-- Top Header -->
     <header class="glass flex items-center justify-between gap-4 rounded-2xl px-5 py-3.5">
       <div class="flex items-center gap-3">
@@ -97,21 +225,25 @@
           <span id="statusText" class="font-mono font-semibold uppercase text-slate-700">IDLE</span>
         </div>
 
-        <button id="btnAiOpen" class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3.5 py-1.5 font-medium hover:bg-slate-50 text-ink transition">
+        <button id="btnAiOpen"
+          class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3.5 py-1.5 font-medium hover:bg-slate-50 text-ink transition">
           <i data-lucide="message-square" class="h-4 w-4 text-slate-700"></i>
           <span>Recon AI</span>
         </button>
 
         <div class="flex items-center gap-1.5">
-          <button id="btnExport" title="Export Reconciled CSV" class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
+          <button id="btnExport" title="Export Reconciled CSV"
+            class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
             <i data-lucide="download" class="h-3.5 w-3.5 text-slate-700"></i>
             <span class="hidden sm:inline">CSV</span>
           </button>
-          <button id="btnExportJson" title="Export Report JSON" class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
+          <button id="btnExportJson" title="Export Report JSON"
+            class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
             <i data-lucide="file-json" class="h-3.5 w-3.5 text-slate-700"></i>
             <span class="hidden sm:inline">Report JSON</span>
           </button>
-          <button id="btnExportAudit" title="Export Audit Trail JSONL" class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
+          <button id="btnExportAudit" title="Export Audit Trail JSONL"
+            class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
             <i data-lucide="shield-check" class="h-3.5 w-3.5 text-slate-700"></i>
             <span class="hidden sm:inline">Audit JSONL</span>
           </button>
@@ -121,34 +253,47 @@
 
     <!-- Main Grid -->
     <div class="grid flex-1 gap-4 lg:grid-cols-[230px_minmax(0,1fr)] items-start">
-      
+
       <!-- Sidebar Navigation -->
       <aside class="glass rounded-2xl p-3 space-y-4 lg:sticky lg:top-6">
         <div>
           <p class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Navigation</p>
           <nav class="space-y-1">
-            <button class="nav-btn active flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="home">
+            <button
+              class="nav-btn active flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition"
+              data-view="home">
               <i data-lucide="layout-dashboard" class="h-4 w-4"></i>
               <span>Reconciliation</span>
             </button>
-            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="results">
+            <button
+              class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition"
+              data-view="results">
               <i data-lucide="table" class="h-4 w-4"></i>
               <span>Results Grid</span>
-              <span id="badgeResults" class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
+              <span id="badgeResults"
+                class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
             </button>
-            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="exceptions">
+            <button
+              class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition"
+              data-view="exceptions">
               <i data-lucide="alert-circle" class="h-4 w-4"></i>
               <span>Discrepancies</span>
-              <span id="badgeExceptions" class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
+              <span id="badgeExceptions"
+                class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
             </button>
-            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="data">
+            <button
+              class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition"
+              data-view="data">
               <i data-lucide="database" class="h-4 w-4"></i>
               <span>Data Explorer</span>
             </button>
-            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="multiway">
+            <button
+              class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition"
+              data-view="multiway">
               <i data-lucide="git-merge" class="h-4 w-4"></i>
               <span>Multi-Way Chaining</span>
-              <span id="badgeMultiway" class="ml-auto font-mono text-[10px] bg-sky-50 text-sky-700 border border-sky-200 rounded px-1.5 py-0.5 font-semibold">3-Way</span>
+              <span id="badgeMultiway"
+                class="ml-auto font-mono text-[10px] bg-sky-50 text-sky-700 border border-sky-200 rounded px-1.5 py-0.5 font-semibold">3-Way</span>
             </button>
           </nav>
         </div>
@@ -161,7 +306,7 @@
 
       <!-- View Containers -->
       <main class="min-w-0 space-y-4">
-        
+
         <!-- VIEW 1: Home / Staging & Controls -->
         <section id="view-home" class="view-panel space-y-4">
           <!-- Action Banner -->
@@ -170,44 +315,54 @@
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Reconciliation Controls</p>
                 <h2 class="mt-1 text-2xl font-bold text-ink">Autonomous Financial Reconciliation</h2>
-                <p class="mt-1 text-slate-600 text-sm">Stage internal payment ledgers and external bank statements, then run the matching engine.</p>
+                <p class="mt-1 text-slate-600 text-sm">Stage internal payment ledgers and external bank statements, then
+                  run the matching engine.</p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2.5">
                 <div class="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-1 shadow-sm">
-                  <select id="selectSampleDataset" class="rounded-lg bg-transparent px-2.5 py-1.5 text-xs font-semibold text-ink outline-none cursor-pointer">
+                  <select id="selectSampleDataset"
+                    class="rounded-lg bg-transparent px-2.5 py-1.5 text-xs font-semibold text-ink outline-none cursor-pointer">
                     <option value="basic">Standard Demo (2-File)</option>
                     <option value="clean_demo">Clean Demo (100% Match)</option>
                     <option value="benchmark_3file">3-File Benchmark</option>
                     <option value="enterprise_ecosystem">5-File Enterprise Ecosystem</option>
                   </select>
-                  <button id="btnSample" class="flex items-center gap-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 font-semibold text-xs text-ink transition">
+                  <button id="btnSample"
+                    class="flex items-center gap-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 font-semibold text-xs text-ink transition">
                     <i data-lucide="sparkles" class="h-3.5 w-3.5 text-emerald"></i>
                     <span>Load</span>
                   </button>
                 </div>
-                
-                <button id="btnResume" class="hidden flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 font-semibold text-amber-800 hover:bg-amber-100 transition shadow-sm">
+
+                <button id="btnResume"
+                  class="hidden flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 font-semibold text-amber-800 hover:bg-amber-100 transition shadow-sm">
                   <i data-lucide="play-circle" class="h-4 w-4"></i>
                   <span>Resume</span>
                 </button>
 
-                <button id="btnRestart" class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm" title="Restart Session">
+                <button id="btnRestart"
+                  class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+                  title="Restart Session">
                   <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
                   <span class="hidden sm:inline">Restart</span>
                 </button>
 
-                <button id="btnStop" disabled class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-rose-700 hover:bg-rose-50 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
+                <button id="btnStop" disabled
+                  class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-rose-700 hover:bg-rose-50 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
                   <i data-lucide="square" class="h-4 w-4"></i>
                   <span>Stop</span>
                 </button>
 
-                <button id="btnRun" disabled class="flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 font-semibold text-white hover:bg-slate-800 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
+                <button id="btnRun" disabled
+                  class="flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 font-semibold text-white hover:bg-slate-800 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
                   <i data-lucide="play" class="h-4 w-4 text-emerald"></i>
                   <span>Run Pairwise</span>
                 </button>
 
-                <button id="btnRunMultiwayHeader" class="hidden flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 font-semibold text-white hover:bg-emerald-800 transition shadow-sm" title="Run 3-Legged Multi-Way Chaining">
+                <button id="btnRunMultiwayHeader"
+                  class="hidden flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 font-semibold text-white hover:bg-emerald-800 transition shadow-sm"
+                  title="Run 3-Legged Multi-Way Chaining">
                   <i data-lucide="git-merge" class="h-4 w-4 text-white"></i>
                   <span>Run Multi-Way (3-Legged)</span>
                 </button>
@@ -245,27 +400,40 @@
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dynamic Policy Control</p>
                 <h3 class="mt-1 text-lg font-bold text-ink">Fee Schedule & Tax Tolerance</h3>
-                <p class="text-xs text-slate-600">Configure custom MDR fee rates and GST percentages for multi-attribute matching.</p>
+                <p class="text-xs text-slate-600">Configure custom MDR fee rates and GST percentages for multi-attribute
+                  matching.</p>
               </div>
               <div class="flex flex-wrap gap-2">
-                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="2.0" data-tax="18.0" data-abstol="0.01" data-pcttol="0.0" data-mode="absolute_only">Standard (2% + 18% GST)</button>
-                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="0.2" data-tax="5.0" data-abstol="0.05" data-pcttol="0.05" data-mode="greater">Custom (0.2% + 5% Tax, Greater)</button>
-                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="0.0" data-tax="0.0" data-abstol="0.01" data-pcttol="0.0" data-mode="absolute_only">Zero Fee (0% + 0%)</button>
+                <button type="button"
+                  class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition"
+                  data-fee="2.0" data-tax="18.0" data-abstol="0.01" data-pcttol="0.0" data-mode="absolute_only">Standard
+                  (2% + 18% GST)</button>
+                <button type="button"
+                  class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition"
+                  data-fee="0.2" data-tax="5.0" data-abstol="0.05" data-pcttol="0.05" data-mode="greater">Custom (0.2% +
+                  5% Tax, Greater)</button>
+                <button type="button"
+                  class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition"
+                  data-fee="0.0" data-tax="0.0" data-abstol="0.01" data-pcttol="0.0" data-mode="absolute_only">Zero Fee
+                  (0% + 0%)</button>
               </div>
             </div>
 
             <div class="mt-4 grid gap-3 sm:grid-cols-6 items-end">
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">Fee / MDR (%)</label>
-                <input id="inputFeeRate" type="number" step="0.01" min="0" max="100" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+                <input id="inputFeeRate" type="number" step="0.01" min="0" max="100" value="0.0"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">GST Tax (%)</label>
-                <input id="inputTaxRate" type="number" step="0.1" min="0" max="100" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+                <input id="inputTaxRate" type="number" step="0.1" min="0" max="100" value="0.0"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">Tolerance Mode</label>
-                <select id="selectToleranceMode" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink outline-none focus:border-slate-400">
+                <select id="selectToleranceMode"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink outline-none focus:border-slate-400">
                   <option value="absolute_only" selected>Absolute Only</option>
                   <option value="percentage_only">Percentage Only</option>
                   <option value="greater">Greater (Max)</option>
@@ -274,14 +442,18 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">Abs Tol (₹)</label>
-                <input id="inputToleranceAbs" type="number" step="0.01" min="0" max="100" value="0.01" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+                <input id="inputToleranceAbs" type="number" step="0.01" min="0" max="100" value="0.01"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">Pct Tol (%)</label>
-                <input id="inputTolerancePct" type="number" step="0.01" min="0" max="10" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+                <input id="inputTolerancePct" type="number" step="0.01" min="0" max="10" value="0.0"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
               </div>
               <div>
-                <button id="btnApplyPolicy" class="w-full rounded-xl bg-ink py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 transition">Save & Apply</button>
+                <button id="btnApplyPolicy"
+                  class="w-full rounded-xl bg-ink py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 transition">Save
+                  & Apply</button>
               </div>
             </div>
           </div>
@@ -292,13 +464,16 @@
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dynamic Segment Rules</p>
                 <h3 class="mt-1 text-lg font-bold text-ink">Fee & Tax Rules Engine</h3>
-                <p class="text-xs text-slate-600">Granular rules by percentage range (e.g. 0-40%), item category, payment method, or transaction dates.</p>
+                <p class="text-xs text-slate-600">Granular rules by percentage range (e.g. 0-40%), item category,
+                  payment method, or transaction dates.</p>
               </div>
               <div class="flex items-center gap-2">
-                <button id="btnOpenAddRule" class="flex items-center gap-1.5 rounded-xl bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm">
+                <button id="btnOpenAddRule"
+                  class="flex items-center gap-1.5 rounded-xl bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm">
                   <i data-lucide="plus" class="h-3.5 w-3.5"></i> Add Rule
                 </button>
-                <button id="btnClearRules" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition">
+                <button id="btnClearRules"
+                  class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition">
                   <i data-lucide="trash-2" class="h-3.5 w-3.5"></i> Clear All
                 </button>
               </div>
@@ -318,7 +493,10 @@
                   </tr>
                 </thead>
                 <tbody id="rulesTableBody" class="divide-y divide-slate-100 font-mono">
-                  <tr><td colspan="7" class="p-6 text-center text-slate-400 font-sans">No segment rules configured. Standard policy catch-all applies.</td></tr>
+                  <tr>
+                    <td colspan="7" class="p-6 text-center text-slate-400 font-sans">No segment rules configured.
+                      Standard policy catch-all applies.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -326,12 +504,14 @@
 
           <!-- Dropzone & Staged Files -->
           <div class="glass rounded-2xl p-6">
-            <div id="dropzone" class="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-8 text-center hover:border-slate-400 hover:bg-white/80 transition">
+            <div id="dropzone"
+              class="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-8 text-center hover:border-slate-400 hover:bg-white/80 transition">
               <div class="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-slate-100 text-slate-600 mb-3">
                 <i data-lucide="upload" class="h-6 w-6"></i>
               </div>
               <p class="font-semibold text-base text-ink">Drop statement and ledger files here</p>
-              <p class="mt-1 text-xs text-slate-500">Supports CSV and Excel statements. Or click "Load Sample Data" above.</p>
+              <p class="mt-1 text-xs text-slate-500">Supports CSV and Excel statements. Or click "Load Sample Data"
+                above.</p>
               <input id="fileInput" class="hidden" type="file" multiple accept=".csv,.xlsx,.xls">
             </div>
 
@@ -351,11 +531,14 @@
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Reconciliation Output</p>
                 <h2 class="mt-1 text-2xl font-bold text-ink">Results Grid</h2>
-                <p class="text-slate-600 text-sm">Every reconciled pair and discrepancy with prominent AI Diagnostic analysis.</p>
+                <p class="text-slate-600 text-sm">Every reconciled pair and discrepancy with prominent AI Diagnostic
+                  analysis.</p>
               </div>
 
               <div class="flex items-center gap-2">
-                <input id="resultsSearch" class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-ink outline-none focus:border-slate-400 w-full sm:w-80 shadow-sm" placeholder="Search reference, amount, reason...">
+                <input id="resultsSearch"
+                  class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-ink outline-none focus:border-slate-400 w-full sm:w-80 shadow-sm"
+                  placeholder="Search reference, amount, reason...">
               </div>
             </div>
           </div>
@@ -363,9 +546,12 @@
           <div class="glass overflow-hidden rounded-2xl">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-3.5 bg-white/70">
               <div class="flex rounded-xl bg-slate-100 p-1">
-                <button class="tab-btn active rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="all">All Records</button>
-                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="matched">Matched</button>
-                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="exception">Discrepancies</button>
+                <button class="tab-btn active rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition"
+                  data-filter="all">All Records</button>
+                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition"
+                  data-filter="matched">Matched</button>
+                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition"
+                  data-filter="exception">Discrepancies</button>
               </div>
               <span id="resultsMeta" class="font-mono text-xs text-slate-500 font-semibold">0 records</span>
             </div>
@@ -384,14 +570,30 @@
                   </tr>
                 </thead>
                 <tbody id="resultsTableBody">
-                  <tr><td colspan="7" class="p-12 text-center text-slate-400 font-medium">No reconciliation output yet. Execute reconciliation from the controls tab.</td></tr>
+                  <tr>
+                    <td colspan="7" class="p-12 text-center text-slate-400 font-medium">No reconciliation output yet.
+                      Execute reconciliation from the controls tab.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
           <div class="glass rounded-2xl p-5">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-emerald">Line intelligence</p><h3 class="mt-1 text-lg font-bold text-ink">Tax and charge matcher</h3><p class="text-xs text-slate-600">Compare GST, tax, MDR, and fee lines across the first two loaded tables without initiating a reconciliation run.</p></div><div class="flex gap-2"><button id="btnTaxMatch" class="rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">Check tax lines</button><button id="btnChargeMatch" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Check charge lines</button></div></div>
-            <div id="lineMatchResults" class="mt-4 overflow-auto text-xs text-slate-500">Load two datasets, then select a line-matching check.</div>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Line intelligence</p>
+                <h3 class="mt-1 text-lg font-bold text-ink">Tax and charge matcher</h3>
+                <p class="text-xs text-slate-600">Compare GST, tax, MDR, and fee lines across the first two loaded
+                  tables without initiating a reconciliation run.</p>
+              </div>
+              <div class="flex gap-2"><button id="btnTaxMatch"
+                  class="rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">Check tax lines</button><button
+                  id="btnChargeMatch"
+                  class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Check charge
+                  lines</button></div>
+            </div>
+            <div id="lineMatchResults" class="mt-4 overflow-auto text-xs text-slate-500">Load two datasets, then select
+              a line-matching check.</div>
           </div>
         </section>
 
@@ -400,11 +602,13 @@
           <div class="glass rounded-2xl p-6">
             <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Exception Review Queue</p>
             <h2 class="mt-1 text-2xl font-bold text-ink">Discrepancies & AI QA</h2>
-            <p class="text-slate-600 text-sm">Review classified discrepancy items, inspect verified root-cause evidence, and apply manager decisions.</p>
+            <p class="text-slate-600 text-sm">Review classified discrepancy items, inspect verified root-cause evidence,
+              and apply manager decisions.</p>
           </div>
 
           <div id="exceptionsList" class="space-y-3">
-            <div class="glass rounded-2xl p-12 text-center text-slate-400 font-medium">No exceptions currently queued for review.</div>
+            <div class="glass rounded-2xl p-12 text-center text-slate-400 font-medium">No exceptions currently queued
+              for review.</div>
           </div>
         </section>
 
@@ -413,7 +617,8 @@
           <div class="glass rounded-2xl p-6">
             <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dataset Inspection</p>
             <h2 class="mt-1 text-2xl font-bold text-ink">Data Explorer</h2>
-            <p class="text-slate-600 text-sm">Browse raw ingested transaction records and column profiles across all loaded statement tables.</p>
+            <p class="text-slate-600 text-sm">Browse raw ingested transaction records and column profiles across all
+              loaded statement tables.</p>
           </div>
 
           <div class="glass overflow-hidden rounded-2xl">
@@ -427,11 +632,13 @@
             </div>
 
             <div class="flex items-center justify-between border-t border-slate-200 p-3.5 bg-white/70">
-              <button id="btnPrevPage" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
+              <button id="btnPrevPage"
+                class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
                 <i data-lucide="chevron-left" class="h-4 w-4"></i> Previous
               </button>
               <span id="pageMeta" class="font-mono text-xs text-slate-600 font-semibold">Page 1 of 1</span>
-              <button id="btnNextPage" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
+              <button id="btnNextPage"
+                class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
                 Next <i data-lucide="chevron-right" class="h-4 w-4"></i>
               </button>
             </div>
@@ -443,16 +650,20 @@
           <div class="glass rounded-2xl p-6">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Multi-Party Ecosystem Intelligence</p>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Multi-Party Ecosystem
+                  Intelligence</p>
                 <h2 class="mt-1 text-2xl font-bold text-ink">Multi-Way Chaining & Cash Position</h2>
-                <p class="text-slate-600 text-sm">3-Legged reconciliation across order sources (e.g. Zomato, Flipkart), gateway ledger hub, and bank statements.</p>
+                <p class="text-slate-600 text-sm">3-Legged reconciliation across order sources (e.g. Zomato, Flipkart),
+                  gateway ledger hub, and bank statements.</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
-                <button id="btnRunMultiway" class="flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm">
+                <button id="btnRunMultiway"
+                  class="flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm">
                   <i data-lucide="play" class="h-3.5 w-3.5 text-emerald"></i>
                   <span>Run Multi-Way Chaining</span>
                 </button>
-                <button id="btnExportJournal" class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-ink hover:bg-slate-50 transition shadow-sm">
+                <button id="btnExportJournal"
+                  class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-ink hover:bg-slate-50 transition shadow-sm">
                   <i data-lucide="download" class="h-3.5 w-3.5 text-slate-700"></i>
                   <span>Export Journal CSV</span>
                 </button>
@@ -461,19 +672,24 @@
           </div>
 
           <!-- Multi-Way Staging Guidance Banner -->
-          <div id="mwStagingBanner" class="rounded-2xl border border-amber-200 bg-amber-50/75 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div id="mwStagingBanner"
+            class="rounded-2xl border border-amber-200 bg-amber-50/75 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
             <div class="flex items-center gap-2.5">
               <i data-lucide="info" class="h-4 w-4 text-amber-700 shrink-0"></i>
               <div>
                 <span class="font-bold text-amber-900">3+ datasets required for multi-way chaining:</span>
-                <span class="text-amber-800 ml-1">Currently <span id="mwStagedCount" class="font-mono font-bold">0</span> tables staged. Load a multi-dataset ecosystem to run 3-way reconciliation:</span>
+                <span class="text-amber-800 ml-1">Currently <span id="mwStagedCount"
+                    class="font-mono font-bold">0</span> tables staged. Load a multi-dataset ecosystem to run 3-way
+                  reconciliation:</span>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <button id="btnLoadMwBenchmark" class="rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-semibold px-3 py-1.5 transition shadow-xs">
+              <button id="btnLoadMwBenchmark"
+                class="rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-semibold px-3 py-1.5 transition shadow-xs">
                 Load 3-File Benchmark
               </button>
-              <button id="btnLoadMwEnterprise" class="rounded-lg border border-amber-300 bg-white hover:bg-amber-100/60 text-amber-900 font-semibold px-3 py-1.5 transition shadow-xs">
+              <button id="btnLoadMwEnterprise"
+                class="rounded-lg border border-amber-300 bg-white hover:bg-amber-100/60 text-amber-900 font-semibold px-3 py-1.5 transition shadow-xs">
                 Load 5-File Enterprise
               </button>
             </div>
@@ -483,7 +699,8 @@
           <div class="grid gap-3 md:grid-cols-2">
             <div class="glass rounded-2xl p-5">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Leg 1 · Sales to Gateway</span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Leg 1 · Sales to
+                  Gateway</span>
                 <span id="mwLeg1Rate" class="font-mono text-sm font-bold text-emerald">—</span>
               </div>
               <h4 id="mwLeg1Title" class="mt-1 text-base font-bold text-ink">Sales ↔ Gateway Clearing</h4>
@@ -501,7 +718,8 @@
 
             <div class="glass rounded-2xl p-5">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Leg 2 · Gateway to Bank</span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Leg 2 · Gateway to
+                  Bank</span>
                 <span id="mwLeg2Rate" class="font-mono text-sm font-bold text-emerald">—</span>
               </div>
               <h4 id="mwLeg2Title" class="mt-1 text-base font-bold text-ink">Gateway ↔ Bank Statements</h4>
@@ -520,9 +738,11 @@
 
           <!-- Cash Position & Aging Analysis -->
           <div class="glass rounded-2xl p-6">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3 gap-2">
+            <div
+              class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3 gap-2">
               <div>
-                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Treasury Liquidity & Controller Invariant</p>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Treasury Liquidity & Controller
+                  Invariant</p>
                 <h3 class="mt-0.5 text-lg font-bold text-ink">Cash Position & Settlement Schedule</h3>
               </div>
               <div class="sm:text-right">
@@ -552,7 +772,8 @@
 
             <div class="mt-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-200/60">
               <div class="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
-                <span>Cash In-Transit Aging Schedule (Total: <span id="mwInTransitTotal" class="font-mono font-bold text-ink">—</span>)</span>
+                <span>Cash In-Transit Aging Schedule (Total: <span id="mwInTransitTotal"
+                    class="font-mono font-bold text-ink">—</span>)</span>
               </div>
               <div class="grid grid-cols-3 gap-2 text-xs">
                 <div class="rounded-lg bg-white p-2 text-center border border-slate-200">
@@ -594,7 +815,10 @@
                   </tr>
                 </thead>
                 <tbody id="mwJournalTableBody" class="divide-y divide-slate-100 font-mono">
-                  <tr><td colspan="7" class="p-8 text-center text-slate-400 font-sans">Run Multi-Way Chaining above to generate general ledger journal vouchers.</td></tr>
+                  <tr>
+                    <td colspan="7" class="p-8 text-center text-slate-400 font-sans">Run Multi-Way Chaining above to
+                      generate general ledger journal vouchers.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -605,21 +829,25 @@
     </div>
 
     <!-- Add Rule Modal Dialog -->
-    <div id="addRuleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+    <div id="addRuleModal"
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
       <div class="glass w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4">
         <div class="flex items-center justify-between border-b border-slate-200 pb-3">
           <h3 class="font-bold text-ink text-base">Add Fee & Tax Segment Rule</h3>
-          <button onclick="closeAddRuleModal()" class="rounded-lg p-1 text-slate-400 hover:text-ink"><i data-lucide="x" class="h-4 w-4"></i></button>
+          <button onclick="closeAddRuleModal()" class="rounded-lg p-1 text-slate-400 hover:text-ink"><i data-lucide="x"
+              class="h-4 w-4"></i></button>
         </div>
         <div class="space-y-3 text-xs">
           <div>
             <label class="block font-semibold text-slate-700 mb-1">Rule Label</label>
-            <input id="newRuleLabel" type="text" placeholder="e.g. First 40% Tier 1 (2% Fee + 18% GST)" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-medium">
+            <input id="newRuleLabel" type="text" placeholder="e.g. First 40% Tier 1 (2% Fee + 18% GST)"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-medium">
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="block font-semibold text-slate-700 mb-1">Matcher Kind</label>
-              <select id="newRuleKind" onchange="toggleMatcherFields()" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-medium">
+              <select id="newRuleKind" onchange="toggleMatcherFields()"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-medium">
                 <option value="row_range_pct">Row Range % (e.g. 0-40%)</option>
                 <option value="column_equals">Column Equals (e.g. category=electronics)</option>
                 <option value="row_range_abs">Row Range Abs (e.g. 1-100)</option>
@@ -628,53 +856,65 @@
             </div>
             <div>
               <label class="block font-semibold text-slate-700 mb-1">Priority (1 = Highest)</label>
-              <input id="newRulePriority" type="number" min="1" max="999" value="1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-mono">
+              <input id="newRulePriority" type="number" min="1" max="999" value="1"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-mono">
             </div>
           </div>
           <div id="matcherRangeFields" class="grid grid-cols-2 gap-2">
             <div>
               <label class="block font-semibold text-slate-700 mb-1">Start %</label>
-              <input id="newRuleStartPct" type="number" step="0.1" min="0" max="100" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+              <input id="newRuleStartPct" type="number" step="0.1" min="0" max="100" value="0.0"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
             </div>
             <div>
               <label class="block font-semibold text-slate-700 mb-1">End %</label>
-              <input id="newRuleEndPct" type="number" step="0.1" min="0" max="100" value="40.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+              <input id="newRuleEndPct" type="number" step="0.1" min="0" max="100" value="40.0"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
             </div>
           </div>
           <div id="matcherColFields" class="hidden grid grid-cols-2 gap-2">
             <div>
               <label class="block font-semibold text-slate-700 mb-1">Column Name</label>
-              <input id="newRuleCol" type="text" placeholder="e.g. category or payment_method" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <input id="newRuleCol" type="text" placeholder="e.g. category or payment_method"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
             </div>
             <div>
               <label class="block font-semibold text-slate-700 mb-1">Target Value</label>
-              <input id="newRuleVal" type="text" placeholder="e.g. electronics or upi" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <input id="newRuleVal" type="text" placeholder="e.g. electronics or upi"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
             </div>
           </div>
           <div class="grid grid-cols-3 gap-2">
             <div>
               <label class="block font-semibold text-slate-700 mb-1">Fee Rate (%)</label>
-              <input id="newRuleFeeRate" type="number" step="0.01" min="0" max="100" value="2.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+              <input id="newRuleFeeRate" type="number" step="0.01" min="0" max="100" value="2.0"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
             </div>
             <div>
               <label class="block font-semibold text-slate-700 mb-1">GST Rate (%)</label>
-              <input id="newRuleGstRate" type="number" step="0.1" min="0" max="100" value="18.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+              <input id="newRuleGstRate" type="number" step="0.1" min="0" max="100" value="18.0"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
             </div>
             <div>
               <label class="block font-semibold text-slate-700 mb-1">Flat Fee (₹)</label>
-              <input id="newRuleFlatFee" type="number" step="0.01" min="0" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+              <input id="newRuleFlatFee" type="number" step="0.01" min="0" value="0.0"
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
             </div>
           </div>
         </div>
         <div class="flex justify-end gap-2 pt-3 border-t border-slate-200">
-          <button onclick="closeAddRuleModal()" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold hover:bg-slate-50 transition">Cancel</button>
-          <button onclick="submitNewRule()" class="rounded-xl bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition">Add Rule</button>
+          <button onclick="closeAddRuleModal()"
+            class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold hover:bg-slate-50 transition">Cancel</button>
+          <button onclick="submitNewRule()"
+            class="rounded-xl bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition">Add
+            Rule</button>
         </div>
       </div>
     </div>
 
     <!-- Grounded AI Copilot Drawer -->
-    <aside id="aiDrawer" class="fixed inset-y-3 right-3 z-50 flex w-[min(440px,calc(100vw-24px))] translate-x-[calc(100%+30px)] flex-col rounded-2xl border border-slate-200/90 bg-white/95 shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out">
+    <aside id="aiDrawer"
+      class="fixed inset-y-3 right-3 z-50 flex w-[min(440px,calc(100vw-24px))] translate-x-[calc(100%+30px)] flex-col rounded-2xl border border-slate-200/90 bg-white/95 shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out">
       <div class="flex items-center justify-between border-b border-slate-200/90 p-4">
         <div class="flex items-center gap-2.5">
           <div class="grid h-8 w-8 place-items-center rounded-lg bg-ink text-white">
@@ -685,27 +925,39 @@
             <p class="text-[11px] text-slate-500 font-medium">Grounded in active statement data</p>
           </div>
         </div>
-        <button id="btnAiClose" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+        <button id="btnAiClose"
+          class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
           <i data-lucide="x" class="h-4 w-4"></i>
         </button>
       </div>
 
       <div id="chatMessages" class="flex-1 space-y-3 overflow-y-auto p-4">
-        <div class="max-w-[90%] rounded-xl bg-[#F0F9FF] border border-blue-100 p-3.5 text-xs leading-relaxed text-slate-800">
-          Hello. I am your <strong>Reconciliation AI Assistant</strong>. Ask questions about matched orders, fee variances, duplicate transactions, or reasons why specific items differed.
+        <div
+          class="max-w-[90%] rounded-xl bg-[#F0F9FF] border border-blue-100 p-3.5 text-xs leading-relaxed text-slate-800">
+          Hello. I am your <strong>Reconciliation AI Assistant</strong>. Ask questions about matched orders, fee
+          variances, duplicate transactions, or reasons why specific items differed.
         </div>
       </div>
 
       <div class="border-t border-slate-200/90 p-3.5 space-y-3 bg-slate-50/60">
         <div class="flex flex-wrap gap-1.5">
-          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="What is the total fee variance?">Total fee variance?</button>
-          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="Why did ORD_3 fail to match?">Why did ORD_3 fail?</button>
-          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="Explain duplicate orders and refunds">Duplicate orders?</button>
+          <button
+            class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition"
+            data-query="What is the total fee variance?">Total fee variance?</button>
+          <button
+            class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition"
+            data-query="Why did ORD_3 fail to match?">Why did ORD_3 fail?</button>
+          <button
+            class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition"
+            data-query="Explain duplicate orders and refunds">Duplicate orders?</button>
         </div>
 
         <div class="flex items-center gap-2">
-          <input id="chatInput" class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 shadow-sm" placeholder="Ask about fees, orders, variances...">
-          <button id="btnChatSend" class="grid h-8 w-8 place-items-center rounded-xl bg-ink text-white hover:bg-slate-800 transition">
+          <input id="chatInput"
+            class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 shadow-sm"
+            placeholder="Ask about fees, orders, variances...">
+          <button id="btnChatSend"
+            class="grid h-8 w-8 place-items-center rounded-xl bg-ink text-white hover:bg-slate-800 transition">
             <i data-lucide="send" class="h-3.5 w-3.5"></i>
           </button>
         </div>
@@ -713,7 +965,9 @@
     </aside>
 
     <!-- Toast Notification -->
-    <div id="toast" class="fixed bottom-5 left-1/2 z-50 hidden -translate-x-1/2 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white shadow-lg transition-opacity duration-200"></div>
+    <div id="toast"
+      class="fixed bottom-5 left-1/2 z-50 hidden -translate-x-1/2 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white shadow-lg transition-opacity duration-200">
+    </div>
 
   </div>
 
@@ -739,6 +993,117 @@
 
     function esc(s) {
       return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function renderMarkdown(text) {
+      if (!text) return '';
+      if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+        try {
+          return marked.parse(String(text), { gfm: true, breaks: true });
+        } catch (_) {}
+      }
+
+      // Offline markdown parser fallback
+      let s = String(text);
+
+      // 1. Code blocks (extract to prevent regex collisions)
+      const codeBlocks = [];
+      s = s.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
+        const id = `___CODE_BLOCK_${codeBlocks.length}___`;
+        codeBlocks.push(`<pre><code class="language-${esc(lang)}">${esc(code.trim())}</code></pre>`);
+        return id;
+      });
+
+      // 2. Inline code
+      const inlineCodes = [];
+      s = s.replace(/`([^`\n]+)`/g, (_, code) => {
+        const id = `___INLINE_CODE_${inlineCodes.length}___`;
+        inlineCodes.push(`<code>${esc(code)}</code>`);
+        return id;
+      });
+
+      // Helper for inline markdown formatting
+      function inlineFormat(str) {
+        return str
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+          .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+          .replace(/_([^_]+)_/g, '<em>$1</em>')
+          .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      }
+
+      // 3. Tables (GitHub Flavored Markdown tables)
+      s = s.replace(/(?:^|\n)((?:\|[^\n]+\|\r?\n?)+)/g, (match, tableBlock) => {
+        const lines = tableBlock.trim().split(/\r?\n/).filter(l => l.trim().startsWith('|'));
+        if (lines.length < 2) return match;
+        const parseRow = (line, tag) => {
+          const cells = line.split('|').slice(1, -1);
+          return '<tr>' + cells.map(c => `<${tag}>${inlineFormat(esc(c.trim()))}</${tag}>`).join('') + '</tr>';
+        };
+        const header = parseRow(lines[0], 'th');
+        let startIdx = 1;
+        if (lines[1] && lines[1].replace(/[\s|:\-]/g, '').length === 0) {
+          startIdx = 2;
+        }
+        const rows = lines.slice(startIdx).map(l => parseRow(l, 'td')).join('');
+        return `\n<div class="overflow-x-auto my-2"><table><thead>${header}</thead><tbody>${rows}</tbody></table></div>\n`;
+      });
+
+      // 4. Blockquotes
+      s = s.replace(/(?:^|\n)>[ \t]?(.*(?:\n[ \t]?>[ \t]?.*)*)/g, (m, quote) => {
+        const clean = quote.replace(/(?:^|\n)>[ \t]?/g, ' ').trim();
+        return `\n<blockquote>${inlineFormat(esc(clean))}</blockquote>\n`;
+      });
+
+      // 5. Headings
+      s = s.replace(/^####[ \t]+(.*$)/gim, (_, h) => `<h4>${inlineFormat(esc(h))}</h4>`);
+      s = s.replace(/^###[ \t]+(.*$)/gim, (_, h) => `<h3>${inlineFormat(esc(h))}</h3>`);
+      s = s.replace(/^##[ \t]+(.*$)/gim, (_, h) => `<h2>${inlineFormat(esc(h))}</h2>`);
+      s = s.replace(/^#[ \t]+(.*$)/gim, (_, h) => `<h1>${inlineFormat(esc(h))}</h1>`);
+
+      // 6. Horizontal Rules
+      s = s.replace(/^(?:---|\*\*\*|___)[ \t]*$/gim, '<hr>');
+
+      // 7. Unordered Lists
+      s = s.replace(/(?:^|\n)((?:[ \t]*[-*+][ \t]+[^\n]+\r?\n?)+)/g, (m, listBlock) => {
+        const items = listBlock.trim().split(/\r?\n/).map(l => {
+          const content = l.replace(/^[ \t]*[-*+][ \t]+/, '');
+          return `<li>${inlineFormat(esc(content))}</li>`;
+        }).join('');
+        return `\n<ul>${items}</ul>\n`;
+      });
+
+      // 8. Ordered Lists
+      s = s.replace(/(?:^|\n)((?:[ \t]*\d+\.[ \t]+[^\n]+\r?\n?)+)/g, (m, listBlock) => {
+        const items = listBlock.trim().split(/\r?\n/).map(l => {
+          const content = l.replace(/^[ \t]*\d+\.[ \t]+/, '');
+          return `<li>${inlineFormat(esc(content))}</li>`;
+        }).join('');
+        return `\n<ol>${items}</ol>\n`;
+      });
+
+      // 9. Inline formatting on remaining text
+      s = esc(s);
+      s = inlineFormat(s);
+
+      // 10. Restore code blocks and inline code
+      inlineCodes.forEach((html, i) => {
+        s = s.replace(`___INLINE_CODE_${i}___`, html);
+      });
+      codeBlocks.forEach((html, i) => {
+        s = s.replace(`___CODE_BLOCK_${i}___`, html);
+      });
+
+      // 11. Paragraphs and line breaks
+      const blocks = s.split(/\n\s*\n/);
+      return blocks.map(b => {
+        b = b.trim();
+        if (!b) return '';
+        if (/^<(h[1-6]|ul|ol|table|div|blockquote|pre|hr)/i.test(b)) {
+          return b;
+        }
+        return `<p>${b.replace(/\n/g, '<br>')}</p>`;
+      }).join('');
     }
 
     function money(v) {
@@ -826,13 +1191,13 @@
     function updateStatus(status, abortToken) {
       State.status = status;
       if (abortToken) State.abortToken = abortToken;
-      
+
       $('#statusText').textContent = status;
       const dot = $('#statusDot');
       dot.className = 'h-2.5 w-2.5 rounded-full';
 
       const isRunning = ['RUNNING', 'INGESTING', 'PROFILING', 'MAPPING_PROPOSED', 'POLICY_GENERATED', 'DRY_RUN', 'EXECUTING', 'QA', 'RESOLVING', 'AGGREGATING'].includes(status);
-      
+
       const btnResume = $('#btnResume');
       if (status === 'HALTED') {
         if (btnResume) {
@@ -1008,7 +1373,7 @@
         const data = await fetchApi(`/sessions/${State.sid}/ingestion?table=${encodeURIComponent(table)}&page=1&page_size=10`);
         const page = data.tables[table], cols = data.table_meta[table]?.columns || [];
         const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4';
-        modal.innerHTML = `<div role="dialog" aria-modal="true" class="max-h-[80vh] w-full max-w-5xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl"><div class="flex justify-between"><div><h3 class="font-bold">${esc(file.name)} preview</h3><p class="text-xs text-slate-500">${page.total} rows · ${cols.length} columns · detected types: ${esc(Object.entries(file.dtypes || {}).map(([k,v]) => k + ' (' + v + ')').join(', '))}</p></div><button class="closePreview rounded-lg border px-3 py-1 text-xs">Close</button></div><table class="mt-4 w-full min-w-max text-xs"><thead class="bg-slate-50"><tr>${cols.map(c => `<th class="p-2 text-left">${esc(c)}</th>`).join('')}</tr></thead><tbody>${page.items.map(row => `<tr>${cols.map(c => `<td class="border-b p-2">${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        modal.innerHTML = `<div role="dialog" aria-modal="true" class="max-h-[80vh] w-full max-w-5xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl"><div class="flex justify-between"><div><h3 class="font-bold">${esc(file.name)} preview</h3><p class="text-xs text-slate-500">${page.total} rows · ${cols.length} columns · detected types: ${esc(Object.entries(file.dtypes || {}).map(([k, v]) => k + ' (' + v + ')').join(', '))}</p></div><button class="closePreview rounded-lg border px-3 py-1 text-xs">Close</button></div><table class="mt-4 w-full min-w-max text-xs"><thead class="bg-slate-50"><tr>${cols.map(c => `<th class="p-2 text-left">${esc(c)}</th>`).join('')}</tr></thead><tbody>${page.items.map(row => `<tr>${cols.map(c => `<td class="border-b p-2">${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
         modal.querySelector('.closePreview').onclick = () => modal.remove(); document.body.append(modal);
       } catch (err) { showToast(err.message); }
     };
@@ -1157,8 +1522,8 @@
             <td class="p-3.5 text-right font-mono text-slate-700">${money(r.b)}</td>
             <td class="p-3.5 text-right font-mono font-semibold ${r.v > 0 ? 'text-amber-700' : (r.v < 0 ? 'text-rose-700' : 'text-slate-400')}">${money(r.v)}</td>
             <td class="p-3.5">
-              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-2.5 text-xs text-slate-800 leading-relaxed font-medium">
-                ${esc(r.reason)}
+              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-2.5 text-xs text-slate-800 leading-relaxed font-medium prose-chat">
+                ${renderMarkdown(r.reason)}
               </div>
             </td>
           </tr>
@@ -1182,7 +1547,7 @@
         list.innerHTML = State.exceptions.map(item => {
           const isResolved = ['auto_resolve', 'mark_resolved'].includes(item.action);
           const isDeclined = item.action === 'declined';
-          
+
           let badge = '<span class="rounded-md border border-amber-200 bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">REVIEW REQUIRED</span>';
           if (isResolved) badge = '<span class="rounded-md border border-emerald-200 bg-[#F0FDF4] px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">RESOLVED</span>';
           if (isDeclined) badge = '<span class="rounded-md border border-rose-200 bg-[#FDF2F8] px-2 py-0.5 text-[10px] font-bold uppercase text-rose-800">DECLINED</span>';
@@ -1201,9 +1566,9 @@
                 </div>
               </div>
 
-              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-3.5 text-xs text-slate-800 leading-relaxed font-medium">
+              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-3.5 text-xs text-slate-800 leading-relaxed font-medium prose-chat">
                 <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">AI Diagnostic Analysis</p>
-                <p>${esc(item.explanation || item.auto_reason || item.reason)}</p>
+                <div>${renderMarkdown(item.explanation || item.auto_reason || item.reason)}</div>
               </div>
 
               <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -1308,8 +1673,8 @@
     function appendChatBubble(role, text) {
       const container = $('#chatMessages');
       const bubble = document.createElement('div');
-      bubble.className = `max-w-[90%] rounded-xl p-3.5 text-xs leading-relaxed ${role === 'user' ? 'ml-auto bg-ink text-white' : 'bg-[#F0F9FF] border border-blue-100 text-slate-800'}`;
-      let html = esc(text).replace(/\n/g, '<br>');
+      bubble.className = `max-w-[90%] rounded-xl p-3.5 text-xs leading-relaxed ${role === 'user' ? 'ml-auto bg-ink text-white' : 'bg-[#F0F9FF] border border-blue-100 text-slate-800 prose-chat'}`;
+      let html = role === 'user' ? esc(text).replace(/\n/g, '<br>') : renderMarkdown(text);
       if (role !== 'user' && text.includes('Confirmation Required')) {
         html += `
           <div class="mt-3 flex items-center gap-2 pt-2 border-t border-blue-200/60">
@@ -1406,19 +1771,19 @@
       } catch { }
     }
 
-    window.openAddRuleModal = function() {
+    window.openAddRuleModal = function () {
       $('#addRuleModal')?.classList.remove('hidden');
       if (typeof lucide !== 'undefined') lucide.createIcons();
     };
-    window.closeAddRuleModal = function() {
+    window.closeAddRuleModal = function () {
       $('#addRuleModal')?.classList.add('hidden');
     };
-    window.toggleMatcherFields = function() {
+    window.toggleMatcherFields = function () {
       const k = $('#newRuleKind')?.value;
       $('#matcherRangeFields')?.classList.toggle('hidden', k !== 'row_range_pct');
       $('#matcherColFields')?.classList.toggle('hidden', k !== 'column_equals');
     };
-    window.submitNewRule = async function() {
+    window.submitNewRule = async function () {
       try {
         const k = $('#newRuleKind').value;
         const matcher = { kind: k };
@@ -1454,7 +1819,7 @@
         showToast('Failed to add rule: ' + err.message);
       }
     };
-    window.clearAllRules = async function() {
+    window.clearAllRules = async function () {
       try {
         await fetchApi(`/sessions/${State.sid}/rules`, {
           method: 'POST',
