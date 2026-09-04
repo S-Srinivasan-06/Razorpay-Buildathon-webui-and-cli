@@ -456,6 +456,25 @@
             </div>
           </div>
 
+          <!-- Multi-Way Staging Guidance Banner -->
+          <div id="mwStagingBanner" class="rounded-2xl border border-amber-200 bg-amber-50/75 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="info" class="h-4 w-4 text-amber-700 shrink-0"></i>
+              <div>
+                <span class="font-bold text-amber-900">3+ datasets required for multi-way chaining:</span>
+                <span class="text-amber-800 ml-1">Currently <span id="mwStagedCount" class="font-mono font-bold">0</span> tables staged. Load a multi-dataset ecosystem to run 3-way reconciliation:</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button id="btnLoadMwBenchmark" class="rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-semibold px-3 py-1.5 transition shadow-xs">
+                Load 3-File Benchmark
+              </button>
+              <button id="btnLoadMwEnterprise" class="rounded-lg border border-amber-300 bg-white hover:bg-amber-100/60 text-amber-900 font-semibold px-3 py-1.5 transition shadow-xs">
+                Load 5-File Enterprise
+              </button>
+            </div>
+          </div>
+
           <!-- Legs Summary Cards -->
           <div class="grid gap-3 md:grid-cols-2">
             <div class="glass rounded-2xl p-5">
@@ -735,8 +754,18 @@
     async function fetchApi(path, opts = {}) {
       const res = await fetch(API + path, opts);
       if (res.status === 404 && path.includes(`/sessions/${State.sid}`)) {
-        await initSession();
-        throw new Error('Session refreshed.');
+        let isSessionNotFound = false;
+        try {
+          const clone = res.clone();
+          const body = await clone.json();
+          if (body && body.detail === 'session not found') {
+            isSessionNotFound = true;
+          }
+        } catch { }
+        if (isSessionNotFound) {
+          await initSession();
+          throw new Error('Session expired and was refreshed.');
+        }
       }
       if (!res.ok) {
         let detail = '';
@@ -755,6 +784,7 @@
         connectWS();
         loadPolicyAndTolerance();
         loadRules();
+        updateMultiwayButtonState();
       } catch (err) {
         updateStatus('OFFLINE');
         showToast('Could not initialize session: ' + err.message);
@@ -861,6 +891,18 @@
       const tableCount = Object.keys(State.tables || {}).length || State.stagedFiles.length;
       const isMulti = tableCount >= 3;
 
+      const stagedCountEl = $('#mwStagedCount');
+      if (stagedCountEl) stagedCountEl.textContent = tableCount;
+
+      const banner = $('#mwStagingBanner');
+      if (banner) {
+        if (isMulti) {
+          banner.classList.add('hidden');
+        } else {
+          banner.classList.remove('hidden');
+        }
+      }
+
       const headerBtn = $('#btnRunMultiwayHeader');
       if (headerBtn) {
         if (isMulti) {
@@ -876,12 +918,14 @@
       if (mwBtn) {
         if (!isMulti) {
           mwBtn.disabled = true;
-          mwBtn.title = `Requires 3+ tables; currently ${tableCount} staged`;
-          mwBtn.classList.add('opacity-40', 'pointer-events-none');
+          mwBtn.title = `Requires 3+ tables; currently ${tableCount} staged. Load benchmark or enterprise dataset.`;
+          mwBtn.classList.add('opacity-40', 'cursor-not-allowed');
+          mwBtn.classList.remove('hover:bg-slate-800');
         } else {
           mwBtn.disabled = false;
           mwBtn.title = '';
-          mwBtn.classList.remove('opacity-40', 'pointer-events-none');
+          mwBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+          mwBtn.classList.add('hover:bg-slate-800');
         }
       }
 
@@ -911,6 +955,7 @@
     function renderStaged() {
       $('#stagedCount').textContent = `${State.stagedFiles.length} files staged`;
       $('#btnRun').disabled = State.stagedFiles.length < 2 || ['RUNNING', 'EXECUTING'].includes(State.status);
+      updateMultiwayButtonState();
 
       const grid = $('#stagedGrid');
       if (!State.stagedFiles.length) {
@@ -1422,16 +1467,15 @@
     async function runMultiway() {
       const tableCount = Object.keys(State.tables || {}).length || State.stagedFiles.length;
       if (tableCount < 3) {
-        showToast(`Multi-way reconciliation requires 3+ tables. Only ${tableCount} staged. Use 'Run Pairwise' for 2-table reconciliation.`);
+        showToast(`Multi-way reconciliation requires 3+ tables. Only ${tableCount} staged. Please load the 3-file benchmark or 5-file enterprise dataset.`);
         return;
       }
       try {
-        switchView('multiway');
         showToast('Initiating 3-legged multi-way reconciliation...');
         const res = await fetchApi(`/sessions/${State.sid}/multiway-run`, { method: 'POST' });
-        if (res.ok && res.report) {
+        if (res && res.ok && res.report) {
           renderMultiwayReport(res.report);
-          showToast('Multi-way chaining completed.');
+          showToast('Multi-way chaining completed successfully.');
         }
       } catch (err) {
         showToast('Multi-way run failed: ' + err.message);
@@ -1441,7 +1485,7 @@
     async function loadMultiwayReport() {
       try {
         const res = await fetchApi(`/sessions/${State.sid}/multiway`);
-        if (res.ok && res.report) {
+        if (res && res.ok && res.report) {
           renderMultiwayReport(res.report);
         }
       } catch { }
@@ -1559,6 +1603,16 @@
       $('#btnRestart')?.addEventListener('click', restartSession);
       $('#btnRunMultiway')?.addEventListener('click', runMultiway);
       $('#btnRunMultiwayHeader')?.addEventListener('click', runMultiway);
+      $('#btnLoadMwBenchmark')?.addEventListener('click', () => {
+        const sel = $('#selectSampleDataset');
+        if (sel) sel.value = 'benchmark_3file';
+        loadSample();
+      });
+      $('#btnLoadMwEnterprise')?.addEventListener('click', () => {
+        const sel = $('#selectSampleDataset');
+        if (sel) sel.value = 'enterprise_ecosystem';
+        loadSample();
+      });
       $('#btnOpenAddRule')?.addEventListener('click', openAddRuleModal);
       $('#btnClearRules')?.addEventListener('click', clearAllRules);
 

@@ -1307,13 +1307,32 @@ def multiway_run(sid: str) -> Dict[str, Any]:
     from app.engine.multiway import detect_table_roles, run_multiway_chaining
     
     sess = _sess(sid)
-    pipe = _pipe(sid)
+    pipe = sess.get("pipe")
     if not pipe:
-        raise HTTPException(status_code=404, detail="no active pipeline for session")
+        pipe = Pipeline(sid, auto_ack=True)
+        sess["pipe"] = pipe
+        if sid in CHAT_SESSIONS:
+            CHAT_SESSIONS[sid].set_pipe(pipe)
+
+    # Populate tables from staged files if not already loaded into pipe.tables
+    if not getattr(pipe, "tables", None) and sess.get("files"):
+        for fname, path in sess["files"].items():
+            try:
+                p = Path(path)
+                frame = pd.read_csv(p) if p.suffix.lower() == ".csv" else pd.read_excel(p)
+                frame.insert(0, "_rid", range(1, len(frame) + 1))
+                table = p.stem
+                if table.startswith(f"{sid}_"):
+                    table = table[len(sid) + 1:]
+                pipe.tables[table] = frame.where(pd.notna(frame), None).to_dict("records")
+            except Exception:
+                pass
+
     if not getattr(pipe, "tables", None) or len(pipe.tables) < 3:
+        staged_count = len(getattr(pipe, "tables", {}))
         raise HTTPException(
             status_code=400,
-            detail=f"Multi-way reconciliation requires 3+ tables; only {len(getattr(pipe, 'tables', {}))} are staged. Use standard /run for 2-table reconciliation."
+            detail=f"Multi-way reconciliation requires 3+ tables; currently {staged_count} staged. Please load a 3-file benchmark or 5-file enterprise dataset first."
         )
     
     rules = getattr(pipe, "rules", []) or []
@@ -1344,10 +1363,11 @@ def multiway_run(sid: str) -> Dict[str, Any]:
 @router.get("/sessions/{sid}/multiway")
 def get_multiway_report(sid: str) -> Dict[str, Any]:
     """Retrieve the most recent multi-way chaining report for a session."""
+    _sess(sid)
     pipe = _pipe(sid)
     rpt = getattr(pipe, "multiway_report", None) if pipe else None
     if not rpt:
-        raise HTTPException(status_code=404, detail="no multiway report available; run /multiway-run first")
+        return {"ok": False, "report": None, "detail": "no multiway report available; run /multiway-run first"}
     return {"ok": True, "report": rpt.model_dump(mode="json")}
 
 
@@ -1355,10 +1375,11 @@ def get_multiway_report(sid: str) -> Dict[str, Any]:
 def export_journal_csv(sid: str) -> StreamingResponse:
     """Download double-entry journal entries as a CSV file for the current multi-way session."""
     from app.engine.journal import export_journal_entries_csv
+    _sess(sid)
     pipe = _pipe(sid)
     rpt = getattr(pipe, "multiway_report", None) if pipe else None
     if not rpt:
-        raise HTTPException(status_code=404, detail="no multiway journal available; run /multiway-run first")
+        raise HTTPException(status_code=400, detail="no multiway journal available; run /multiway-run first")
     csv_content = export_journal_entries_csv(rpt.journal_entries)
     out_dir = OUTPUT_DIR / sid
     out_dir.mkdir(parents=True, exist_ok=True)

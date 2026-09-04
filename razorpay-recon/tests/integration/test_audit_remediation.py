@@ -262,3 +262,53 @@ def test_load_sample_enterprise_ecosystem_loads_5_tables() -> None:
     assert "razorpay_ledger" in table_names
     assert "icici_bank" in table_names
     assert "hdfc_bank" in table_names
+
+
+# -----------------------------------------------------------------------------
+# 9. Multi-Way Endpoint Resilience (No False 404s, Clean 400 Bad Requests)
+# -----------------------------------------------------------------------------
+def test_multiway_endpoints_resilience_and_no_404_session_wiping() -> None:
+    """Verify multiway endpoints return 200/400 (never 404 for valid sessions), preventing frontend session wiping."""
+    r = client.post("/api/v2/sessions")
+    sid = r.json()["session_id"]
+
+    # 1. GET multiway before any run should return 200 with report: None (NOT 404)
+    r_empty_get = client.get(f"/api/v2/sessions/{sid}/multiway")
+    assert r_empty_get.status_code == 200
+    assert r_empty_get.json()["ok"] is False
+    assert r_empty_get.json()["report"] is None
+
+    # 2. Export journal before run should return 400 Bad Request (NOT 404)
+    r_empty_csv = client.get(f"/api/v2/sessions/{sid}/export/journal.csv")
+    assert r_empty_csv.status_code == 400
+    assert "no multiway journal" in r_empty_csv.json()["detail"].lower()
+
+    # 3. POST multiway-run with 0 tables should return 400 Bad Request (NOT 404)
+    r_empty_run = client.post(f"/api/v2/sessions/{sid}/multiway-run")
+    assert r_empty_run.status_code == 400
+    assert "requires 3+ tables" in r_empty_run.json()["detail"]
+
+    # 4. POST multiway-run with only 2 tables should return 400 Bad Request (NOT 404)
+    client.post(f"/api/v2/sessions/{sid}/load_sample?dataset=basic")
+    r_2table_run = client.post(f"/api/v2/sessions/{sid}/multiway-run")
+    assert r_2table_run.status_code == 400
+    assert "requires 3+ tables" in r_2table_run.json()["detail"]
+
+    # 5. POST multiway-run with 3 tables succeeds with 200 OK
+    client.post(f"/api/v2/sessions/{sid}/load_sample?dataset=benchmark_3file")
+    r_valid_run = client.post(f"/api/v2/sessions/{sid}/multiway-run")
+    assert r_valid_run.status_code == 200
+    assert r_valid_run.json()["ok"] is True
+    assert "report" in r_valid_run.json()
+
+    # 6. GET multiway after run returns 200 OK with report
+    r_after_get = client.get(f"/api/v2/sessions/{sid}/multiway")
+    assert r_after_get.status_code == 200
+    assert r_after_get.json()["ok"] is True
+    assert r_after_get.json()["report"] is not None
+
+    # 7. Genuinely missing session ID still returns 404 "session not found"
+    r_missing_sess = client.get("/api/v2/sessions/nonexistent/multiway")
+    assert r_missing_sess.status_code == 404
+    assert r_missing_sess.json()["detail"] == "session not found"
+

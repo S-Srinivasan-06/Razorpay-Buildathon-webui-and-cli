@@ -52,7 +52,7 @@ Prerequisites: Python 3.10, 3.11, or 3.12 installed.
 3. Install required dependencies:
      pip install -r requirements.txt
 
-4. (Optional) Set your Gemini API key for live AI features:
+4. Set your Gemini API key for live AI features:
    - Copy the example environment file:
        cp .env.example .env
    - Edit .env and enter your key:
