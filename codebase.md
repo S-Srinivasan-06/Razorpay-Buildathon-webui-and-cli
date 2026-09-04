@@ -4106,14 +4106,16 @@ def conversational_chat(
                 "text": (
                     system_instruction
                     + "\n\nCRITICAL INSTRUCTION: You MUST wrap your final user-facing reply in XML tags <response> and </response>. "
-                    "You may use a <thought> block before the <response> block to plan your answer, but ONLY the text inside <response> will be shown to the user."
+                    "Output EVERYTHING requested by the user directly, thoroughly, and completely. NEVER state that a metric, standard deviation, or calculation is not available. "
+                    "If the user asks for standard deviation, average standard deviation, variance, or statistical dispersion, provide the exact numbers from the pre-calculated statistical profiles above. "
+                    "Do NOT output internal scratchpad notes, check lists, or meta-analysis (e.g. 'I need to check the provided context', 'Looking through:') outside <thought>. ONLY the final text inside <response> will be shown to the user."
                 )
             }]
         },
         "contents": formatted_contents,
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 1024,
+            "maxOutputTokens": 4096,
         },
     }
 
@@ -4131,10 +4133,24 @@ def conversational_chat(
     match = re.search(r"<response>([\s\S]*?)</response>", raw_reply, flags=re.IGNORECASE)
     if match:
         raw_reply = match.group(1).strip()
+    elif "<response>" in raw_reply.lower():
+        idx = raw_reply.lower().find("<response>") + len("<response>")
+        raw_reply = raw_reply[idx:].strip()
     else:
         # Fallback if the model failed to output the tag
         raw_reply = re.sub(r"<thought>[\s\S]*?</thought>", "", raw_reply, flags=re.IGNORECASE)
         raw_reply = re.sub(r"<scratchpad>[\s\S]*?</scratchpad>", "", raw_reply, flags=re.IGNORECASE).strip()
+        # Clean unclosed <thought> block if token limit or formatting failed
+        if "<thought>" in raw_reply.lower() and "</thought>" not in raw_reply.lower():
+            raw_reply = re.sub(r"<thought>[\s\S]*$", "", raw_reply, flags=re.IGNORECASE).strip()
+
+    # Clean any leaked scratchpad chain-of-thought prefix
+    raw_reply = re.sub(
+        r"^(?:I need to check the provided context[\s\S]*?(?:report|context)\.\s*)",
+        "",
+        raw_reply,
+        flags=re.IGNORECASE,
+    ).strip()
 
     u = d.get("usageMetadata", {})
     t_in = u.get("promptTokenCount", sum(len(m.get("content", "")) for m in messages) // 4)
@@ -5393,8 +5409,8 @@ class ReconChatSession:
                     m_info += f" where {r.matcher.column}='{r.matcher.value or r.matcher.values}'"
                 elif r.matcher.start_pct is not None:
                     m_info += f" rows {r.matcher.start_pct}%-{r.matcher.end_pct}%"
-                rule_descs.append(f"- **{r.label}** (ID: `{r.rule_id}`): Criteria: `{m_info}` → Gateway Fee: `{r.fee_rate*100:.2f}%`, Tax/GST: `{r.gst_rate*100:.1f}%`, Flat: `₹{r.flat_fee:.2f}` (Priority: {r.priority})")
-            return "### Active Segment Rules Configuration\n\n" + "\n".join(rule_descs) + f"\n\nActive Tolerance: `{pipe.cfg.get('tolerance_mode', 'absolute_only')}` (Abs: ₹{pipe.cfg.get('tolerance_abs', 0.01)}, Pct: {pipe.cfg.get('tolerance_pct', 0.0)}%)"
+                rule_descs.append(f"- **{r.label}** (ID: `{r.rule_id}`): Criteria: `{m_info}` → Gateway Fee: `{r.fee_rate*100:.2f}%`, Tax/GST: `{r.gst_rate*100:.1f}%`, Flat: `INR {r.flat_fee:.2f}` (Priority: {r.priority})")
+            return "### Active Segment Rules Configuration\n\n" + "\n".join(rule_descs) + f"\n\nActive Tolerance: `{pipe.cfg.get('tolerance_mode', 'absolute_only')}` (Abs: INR {pipe.cfg.get('tolerance_abs', 0.01)}, Pct: {pipe.cfg.get('tolerance_pct', 0.0)}%)"
 
         # Standard Deviation & Statistical Queries
         if any(w in q for w in ("std", "standard deviation", "deviation", "variance", "dispersion", "statistic", "stats", "distribution")):
@@ -5444,17 +5460,17 @@ class ReconChatSession:
                     "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
                 ]
                 for r in rows_stats:
-                    unit = "₹" if r["is_amt"] else ""
+                    unit = "INR " if r["is_amt"] else ""
                     table_lines.append(
                         f"| **{r['table']}** | `{r['column']}` | {r['count']} | {unit}{r['mean']:,.2f} | **{unit}{r['std']:,.2f}** | {unit}{r['min']:,.2f} | {unit}{r['max']:,.2f} |"
                     )
 
-                pri_summary = ", ".join(f"**{col}**: ₹{val:,.2f}" for col, val in pri_stds) if pri_stds else "None"
+                pri_summary = ", ".join(f"**{col}**: INR {val:,.2f}" for col, val in pri_stds) if pri_stds else "None"
 
                 return (
                     "### Dataset Statistical Distribution & Standard Deviation Analysis\n\n"
-                    f"- **Average Standard Deviation (Primary Transaction Amounts)**: **₹{avg_pri_std:,.2f}**\n"
-                    f"- **Average Standard Deviation (Across All Monetary Columns)**: **₹{avg_amt_std:,.2f}**\n"
+                    f"- **Average Standard Deviation (Primary Transaction Amounts)**: **INR {avg_pri_std:,.2f}**\n"
+                    f"- **Average Standard Deviation (Across All Monetary Columns)**: **INR {avg_amt_std:,.2f}**\n"
                     f"- **Primary Amount Columns**: {pri_summary}\n\n"
                     "#### Complete Column Statistical Profiles\n"
                     + "\n".join(table_lines)
@@ -5759,6 +5775,22 @@ class ReconChatSession:
             # Strip XML action tags from visible response
             clean_reply = re.sub(r"<action>.*?</action>", "", reply, flags=re.IGNORECASE | re.DOTALL).strip()
             clean_reply += "".join(action_msgs)
+
+            # Ensure complete output: if user asked for statistical/standard deviation metrics
+            # and LLM returned a refusal, internal reasoning, or omitted standard deviations:
+            is_stats_query = any(w in clean_msg for w in ("std", "standard deviation", "deviation", "variance", "dispersion", "statistic", "stats", "distribution"))
+            is_refusal = any(ph in clean_reply.lower() for ph in [
+                "not available in the current reconciliation report",
+                "metric is not available",
+                "none of these sections provide",
+                "i need to check the provided context",
+                "information is not present in the dataset",
+                "cannot provide",
+                "not available",
+                "looking through:",
+            ])
+            if is_stats_query and (is_refusal or "standard deviation" not in clean_reply.lower()):
+                clean_reply = self._fallback_answer(user_message)
 
             self.history.append({"role": "model", "content": clean_reply})
             return {
