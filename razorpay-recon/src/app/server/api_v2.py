@@ -637,6 +637,9 @@ def results(sid: str) -> Dict[str, Any]:
 
         enriched_matched.append(m_dict)
 
+    l_cols = [c for c in (list(next(iter(l_rows.values())).keys()) if l_rows else []) if not c.startswith("_")]
+    r_cols = [c for c in (list(next(iter(r_rows.values())).keys()) if r_rows else []) if not c.startswith("_")]
+
     return {
         "executed": True,
         "match_rate": getattr(pipe, "match_rate", None),
@@ -650,6 +653,10 @@ def results(sid: str) -> Dict[str, Any]:
         "variance": r.variance.model_dump(),
         "totals": _totals(pipe),
         "final_report": pipe.final.model_dump(mode="json") if getattr(pipe, "final", None) else None,
+        "left_table": l_table_name,
+        "right_table": r_table_name,
+        "left_columns": l_cols,
+        "right_columns": r_cols,
     }
 
 

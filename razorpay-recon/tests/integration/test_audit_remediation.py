@@ -421,3 +421,166 @@ def test_no_llm_output_parsing_verbatim(monkeypatch) -> None:
     assert res["response"] == raw_complex_response
 
 
+def test_csv_export_and_results_endpoint_include_all_attributes() -> None:
+    """Verify that downloadable CSV export and results endpoint include every attribute from both datasets."""
+    import csv
+    import io
+    import uuid
+    from app.core.contracts import MatchedRecord, UnmatchedRecord, HypothesisCategory, ExecutionResult, VarianceMetrics
+    from app.engine.report import export_reconciliation_csv_string
+    from app.server.api_v2 import V2_SESSIONS
+
+    sid = f"test_attr_{uuid.uuid4().hex[:6]}"
+    pipe = Pipeline(sid, auto_ack=True)
+    pipe.cfg = {
+        "left_table": "payments",
+        "right_table": "bank",
+        "left_key": "order_id",
+        "right_key": "utr",
+        "left_amount": "amount",
+        "right_amount": "credit",
+        "tolerance_abs": 0.01,
+    }
+
+    # Populate multiple attributes across left and right tables
+    pipe.tables = {
+        "payments": [
+            {
+                "_rid": 1,
+                "order_id": "ORD_101",
+                "amount": 1500.0,
+                "date": "2026-03-01",
+                "customer_id": "CUST_99",
+                "customer_email": "user@example.com",
+                "payment_method": "upi",
+                "custom_tag": "vip_sale",
+            },
+            {
+                "_rid": 2,
+                "order_id": "ORD_102",
+                "amount": 2500.0,
+                "date": "2026-03-02",
+                "customer_id": "CUST_42",
+                "customer_email": "corp@corp.in",
+                "payment_method": "netbanking",
+                "custom_tag": "b2b",
+            },
+        ],
+        "bank": [
+            {
+                "_rid": 1,
+                "utr": "ORD_101",
+                "credit": 1500.0,
+                "date": "2026-03-01",
+                "description": "UPI INWARD / ORD_101",
+                "bank_account": "HDFC_001",
+                "channel": "IMPS",
+            }
+        ],
+    }
+
+    # Setup matched result
+    matched_rec = MatchedRecord(
+        l_rid=1,
+        r_rid=1,
+        composite_score=0.99,
+        components={"exact_key": 1.0},
+        policy_version="v0",
+    )
+    pipe.exec_res = ExecutionResult(
+        matched=[matched_rec],
+        unmatched=[],
+        duplicates=[],
+        splits=[],
+        variance=VarianceMetrics(abs_sum=0.0, signed_sum=0.0, per_record=[]),
+    )
+
+    # Setup exception queue item
+    exc_rec = UnmatchedRecord(
+        rid=2,
+        side="L",
+        ref="ORD_102",
+        delta=2500.0,
+        reason=HypothesisCategory.UNCLASSIFIED,
+        explanation="Unmatched order ORD_102",
+    )
+    pipe.queue = [
+        {
+            "rec": exc_rec,
+            "action": "mark_pending",
+            "conf": 0.35,
+            "pieces": [],
+            "record_data": pipe.tables["payments"][1],
+        }
+    ]
+
+    # Register in active session storage
+    V2_SESSIONS[sid] = {"pipe": pipe, "files": []}
+
+    # 1. Test CSV export string contains all attribute columns
+    csv_str = export_reconciliation_csv_string(pipe)
+    reader = csv.reader(io.StringIO(csv_str))
+    rows = list(reader)
+    header = rows[0]
+
+    # Verify all left attributes prefixed with payments_ are present
+    expected_left = [
+        "payments_order_id",
+        "payments_amount",
+        "payments_date",
+        "payments_customer_id",
+        "payments_customer_email",
+        "payments_payment_method",
+        "payments_custom_tag",
+    ]
+    for col in expected_left:
+        assert col in header, f"Missing expected left column in CSV: {col}"
+
+    # Verify all right attributes prefixed with bank_ are present
+    expected_right = [
+        "bank_utr",
+        "bank_credit",
+        "bank_date",
+        "bank_description",
+        "bank_bank_account",
+        "bank_channel",
+    ]
+    for col in expected_right:
+        assert col in header, f"Missing expected right column in CSV: {col}"
+
+    # Verify matched data row has all attribute values
+    matched_row = rows[1]
+    header_idx = {name: i for i, name in enumerate(header)}
+    assert matched_row[header_idx["payments_customer_id"]] == "CUST_99"
+    assert matched_row[header_idx["payments_customer_email"]] == "user@example.com"
+    assert matched_row[header_idx["payments_custom_tag"]] == "vip_sale"
+    assert matched_row[header_idx["bank_bank_account"]] == "HDFC_001"
+    assert matched_row[header_idx["bank_channel"]] == "IMPS"
+
+    # Verify exception data row has source attributes
+    exc_row = rows[2]
+    assert exc_row[header_idx["payments_customer_id"]] == "CUST_42"
+    assert exc_row[header_idx["payments_customer_email"]] == "corp@corp.in"
+    assert exc_row[header_idx["payments_custom_tag"]] == "b2b"
+
+    # 2. Test /api/v2/sessions/{sid}/results endpoint payload
+    resp = client.get(f"/api/v2/sessions/{sid}/results")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["left_table"] == "payments"
+    assert data["right_table"] == "bank"
+    for col in ["order_id", "amount", "date", "customer_id", "customer_email", "payment_method", "custom_tag"]:
+        assert col in data["left_columns"]
+    for col in ["utr", "credit", "date", "description", "bank_account", "channel"]:
+        assert col in data["right_columns"]
+
+    # Verify enriched matched pair carries full l_data and r_data dictionaries
+    match_payload = data["matched"][0]
+    assert match_payload["l_data"]["customer_email"] == "user@example.com"
+    assert match_payload["l_data"]["custom_tag"] == "vip_sale"
+    assert match_payload["r_data"]["bank_account"] == "HDFC_001"
+    assert match_payload["r_data"]["channel"] == "IMPS"
+
+
+
