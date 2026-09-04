@@ -27,6 +27,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
+    html {
+      zoom: 0.8;
+    }
+
     body {
       background: linear-gradient(135deg, #F0F9FF 0%, #FFFFFF 45%, #F0FDF4 100%);
       color: #0F172A;
@@ -1339,7 +1343,8 @@
           body: JSON.stringify({ message: text })
         });
         appendChatBubble('ai', res.response || res.error || 'No response.');
-        if (res.response && res.response.includes('confirmed and executed')) {
+        if (res.response && (res.response.includes('confirmed and executed') || /tax|gst|rule/i.test(res.response))) {
+          loadPolicyAndTolerance();
           loadRules();
           loadResults();
         }
