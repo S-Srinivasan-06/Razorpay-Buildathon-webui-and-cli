@@ -87,43 +87,68 @@
     }
 
     /* Markdown rendering styles */
-    .prose-chat h1, .prose-chat h2, .prose-chat h3, .prose-chat h4 {
+    .prose-chat h1,
+    .prose-chat h2,
+    .prose-chat h3,
+    .prose-chat h4 {
       font-weight: 700;
       color: #0F172A;
       margin-top: 0.75rem;
       margin-bottom: 0.35rem;
       line-height: 1.3;
     }
-    .prose-chat h1:first-child, .prose-chat h2:first-child, .prose-chat h3:first-child, .prose-chat h4:first-child {
+
+    .prose-chat h1:first-child,
+    .prose-chat h2:first-child,
+    .prose-chat h3:first-child,
+    .prose-chat h4:first-child {
       margin-top: 0;
     }
-    .prose-chat h1 { font-size: 1.05rem; }
-    .prose-chat h2 { font-size: 0.95rem; }
-    .prose-chat h3 { font-size: 0.9rem; }
-    .prose-chat h4 { font-size: 0.85rem; }
+
+    .prose-chat h1 {
+      font-size: 1.05rem;
+    }
+
+    .prose-chat h2 {
+      font-size: 0.95rem;
+    }
+
+    .prose-chat h3 {
+      font-size: 0.9rem;
+    }
+
+    .prose-chat h4 {
+      font-size: 0.85rem;
+    }
+
     .prose-chat p {
       margin-bottom: 0.5rem;
       line-height: 1.5;
     }
+
     .prose-chat p:last-child {
       margin-bottom: 0;
     }
+
     .prose-chat ul {
       list-style-type: disc;
       padding-left: 1.25rem;
       margin-top: 0.35rem;
       margin-bottom: 0.5rem;
     }
+
     .prose-chat ol {
       list-style-type: decimal;
       padding-left: 1.25rem;
       margin-top: 0.35rem;
       margin-bottom: 0.5rem;
     }
+
     .prose-chat li {
       margin-bottom: 0.25rem;
       line-height: 1.45;
     }
+
     .prose-chat code {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.85em;
@@ -133,6 +158,7 @@
       color: #0F172A;
       font-weight: 500;
     }
+
     .prose-chat pre {
       background: #0F172A;
       color: #F8FAFC;
@@ -144,12 +170,14 @@
       font-size: 0.8em;
       line-height: 1.45;
     }
+
     .prose-chat pre code {
       background: transparent;
       color: inherit;
       padding: 0;
       font-size: 1em;
     }
+
     .prose-chat blockquote {
       border-left: 3px solid #0284C7;
       background: rgba(2, 132, 199, 0.08);
@@ -158,6 +186,7 @@
       margin: 0.5rem 0;
       font-style: italic;
     }
+
     .prose-chat table {
       width: 100%;
       border-collapse: collapse;
@@ -169,6 +198,7 @@
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
       border: 1px solid #E2E8F0;
     }
+
     .prose-chat th {
       background: #F8FAFC;
       color: #334155;
@@ -178,25 +208,30 @@
       border-bottom: 1px solid #E2E8F0;
       border-right: 1px solid #F1F5F9;
     }
+
     .prose-chat td {
       padding: 0.35rem 0.6rem;
       border-bottom: 1px solid #F1F5F9;
       border-right: 1px solid #F1F5F9;
       color: #1E293B;
     }
+
     .prose-chat tr:nth-child(even) td {
       background: #F8FAFC;
     }
+
     .prose-chat hr {
       border: 0;
       height: 1px;
       background: #E2E8F0;
       margin: 0.65rem 0;
     }
+
     .prose-chat a {
       color: #0284C7;
       text-decoration: underline;
     }
+
     .prose-chat strong {
       font-weight: 700;
       color: #0F172A;
@@ -563,14 +598,15 @@
 
             <div class="max-h-[64vh] overflow-auto">
               <table id="resultsTable" class="w-full min-w-[1200px] text-left text-xs">
-                <thead id="resultsTableHead" class="bg-slate-50 text-slate-600 border-b border-slate-200 sticky top-0 z-10 backdrop-blur-sm">
+                <thead id="resultsTableHead"
+                  class="bg-slate-50 text-slate-600 border-b border-slate-200 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                     <th class="p-3.5 w-12 text-center">#</th>
                     <th class="p-3.5 w-28">Status</th>
+                    <th class="p-3.5 text-center w-24">Inspect</th>
                     <th class="p-3.5 w-44">Reference ID</th>
                     <th class="p-3.5 text-right w-36">Variance / Fee</th>
                     <th class="p-3.5">AI Diagnostic Reason & Match Logic</th>
-                    <th class="p-3.5 text-center w-24">Attributes</th>
                   </tr>
                 </thead>
                 <tbody id="resultsTableBody">
@@ -657,7 +693,7 @@
                 <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Multi-Party Ecosystem
                   Intelligence</p>
                 <h2 class="mt-1 text-2xl font-bold text-ink">Multi-Way Chaining & Cash Position</h2>
-                <p class="text-slate-600 text-sm">3-Legged reconciliation across order sources (e.g. Zomato, Flipkart),
+                <p class="text-slate-600 text-sm">3-Legged reconciliation across order sources (e.g. vendors,, services)
                   gateway ledger hub, and bank statements.</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
@@ -917,21 +953,26 @@
     </div>
 
     <!-- Row Attribute Inspector Modal -->
-    <div id="inspectModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-      <div class="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+    <div id="inspectModal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <div
+        class="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
         <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-slate-50/80">
           <div>
             <h3 id="inspectTitle" class="text-base font-bold text-ink">Record Attribute Inspector</h3>
-            <p id="inspectSubtitle" class="text-xs text-slate-500 mt-0.5">Comprehensive multi-attribute audit view across source datasets.</p>
+            <p id="inspectSubtitle" class="text-xs text-slate-500 mt-0.5">Comprehensive multi-attribute audit view
+              across source datasets.</p>
           </div>
-          <button onclick="closeInspectModal()" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition">
+          <button onclick="closeInspectModal()"
+            class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition">
             <i data-lucide="x" class="h-5 w-5"></i>
           </button>
         </div>
         <div id="inspectBody" class="flex-1 overflow-y-auto p-6 space-y-5">
         </div>
         <div class="flex justify-end gap-2 border-t border-slate-200 px-6 py-3 bg-slate-50/60">
-          <button onclick="closeInspectModal()" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold hover:bg-slate-100 transition">Close</button>
+          <button onclick="closeInspectModal()"
+            class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold hover:bg-slate-100 transition">Close</button>
         </div>
       </div>
     </div>
@@ -1024,7 +1065,7 @@
       if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
         try {
           return marked.parse(String(text), { gfm: true, breaks: true });
-        } catch (_) {}
+        } catch (_) { }
       }
 
       // Offline markdown parser fallback
@@ -1572,6 +1613,7 @@
           <tr>
             <th class="p-3.5 w-12 text-center">#</th>
             <th class="p-3.5 w-28">Status</th>
+            <th class="p-3.5 text-center w-24">Inspect</th>
             <th class="p-3.5 w-40">Reference</th>
             <th class="p-3.5 text-right w-28">Variance</th>
             ${lCols.map(c => `
@@ -1587,7 +1629,6 @@
               </th>
             `).join('')}
             <th class="p-3.5 min-w-[280px]">AI Diagnostic Reason &amp; Match Logic</th>
-            <th class="p-3.5 text-center w-24">Attributes</th>
           </tr>
         `;
       }
@@ -1628,6 +1669,12 @@
           <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
             <td class="p-3.5 text-center font-mono text-slate-400">${idx + 1}</td>
             <td class="p-3.5"><span class="inline-block rounded-md border ${tagBg} px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">${tagLabel}</span></td>
+            <td class="p-3.5 text-center whitespace-nowrap">
+              <button onclick="inspectRowAttributes(${r._idx})" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 shadow-sm transition">
+                <i data-lucide="scan" class="h-3 w-3 text-slate-500"></i>
+                <span>Inspect</span>
+              </button>
+            </td>
             <td class="p-3.5 font-mono font-semibold text-ink">${esc(r.ref)}</td>
             <td class="p-3.5 text-right font-mono font-semibold ${r.v > 0 ? 'text-amber-700' : (r.v < 0 ? 'text-rose-700' : 'text-slate-400')}">${money(r.v)}</td>
             ${lCells}
@@ -1636,12 +1683,6 @@
               <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-2.5 text-xs text-slate-800 leading-relaxed font-medium prose-chat">
                 ${renderMarkdown(r.reason)}
               </div>
-            </td>
-            <td class="p-3.5 text-center whitespace-nowrap">
-              <button onclick="inspectRowAttributes(${r._idx})" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 shadow-sm transition">
-                <i data-lucide="scan" class="h-3 w-3 text-slate-500"></i>
-                <span>Inspect</span>
-              </button>
             </td>
           </tr>
         `;
