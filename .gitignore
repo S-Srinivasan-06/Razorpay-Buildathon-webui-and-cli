@@ -25,7 +25,9 @@ ENV/
 
 # Runtime data, logs, and audit files
 data/
-recon_agent/data/
+recon_data/
 *.log
 *.audit.jsonl
 
+# Meta / Context Dumps (non-repo LLM artifacts)
+codebase.md

@@ -36,6 +36,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+# Ensure src directory is in sys.path
+_SRC_DIR = Path(__file__).resolve().parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 # Ensure UTF-8 output encoding on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)

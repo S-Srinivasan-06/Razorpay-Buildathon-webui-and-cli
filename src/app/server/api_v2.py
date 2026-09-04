@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import BASE_DIR, OUTPUT_DIR, UPLOAD_DIR
+from app.config import ASSETS_DIR, BASE_DIR, OUTPUT_DIR, STATIC_DIR, UPLOAD_DIR
 from app.core.audit import audit_for
 from app.core.channels import subscribe
 from app.core.constants import REG
@@ -49,8 +49,6 @@ from app.engine.fee import (
 )
 from app.engine.report import export_reconciliation_csv_string
 from app.pipeline import Pipeline
-
-STATIC_DIR = BASE_DIR / "app" / "static"
 
 # -----------------------------------------------------------------------------
 # Per-Session Registries and Priority-Tagged Event Ring Buffers
@@ -1011,7 +1009,7 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
     """
     sess = _sess(sid)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    sample_dir = BASE_DIR / "sample_data"
+    sample_dir = ASSETS_DIR if ASSETS_DIR.exists() else (BASE_DIR / "sample_data")
     
     pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
     sess["pipe"] = pipe

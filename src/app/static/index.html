@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Razorpay Reconciliation Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          colors: {
+            ink: '#0F172A',
+            emerald: '#059669'
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #F0F9FF 0%, #FFFFFF 45%, #F0FDF4 100%);
+      color: #0F172A;
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+    }
+
+    .nav-btn.active {
+      background: #E0F2FE;
+      color: #0F172A;
+      font-weight: 600;
+    }
+
+    .tab-btn.active {
+      background: #FFFFFF;
+      color: #0F172A;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .num {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pulse-dot {
+      animation: pulseAnim 1.4s infinite;
+    }
+
+    @keyframes pulseAnim {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen font-sans text-sm antialiased">
+  <div class="min-h-screen p-3 lg:p-6 flex flex-col gap-4 max-w-[1800px] mx-auto">
+    
+    <!-- Top Header -->
+    <header class="glass flex items-center justify-between gap-4 rounded-2xl px-5 py-3.5">
+      <div class="flex items-center gap-3">
+        <div class="grid h-10 w-10 place-items-center rounded-xl bg-ink text-white shadow-sm">
+          <i data-lucide="layers" class="h-5 w-5"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-base tracking-tight text-ink">Razorpay Reconciliation</h1>
+          <p class="text-xs text-slate-500 font-medium">Financial Operations & Discrepancy Intelligence</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 text-xs">
+          <span id="statusDot" class="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
+          <span id="statusText" class="font-mono font-semibold uppercase text-slate-700">IDLE</span>
+        </div>
+
+        <button id="btnAiOpen" class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3.5 py-1.5 font-medium hover:bg-slate-50 text-ink transition">
+          <i data-lucide="message-square" class="h-4 w-4 text-slate-700"></i>
+          <span>Recon AI</span>
+        </button>
+
+        <div class="flex items-center gap-1.5">
+          <button id="btnExport" title="Export Reconciled CSV" class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
+            <i data-lucide="download" class="h-3.5 w-3.5 text-slate-700"></i>
+            <span class="hidden sm:inline">CSV</span>
+          </button>
+          <button id="btnExportJson" title="Export Report JSON" class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
+            <i data-lucide="file-json" class="h-3.5 w-3.5 text-slate-700"></i>
+            <span class="hidden sm:inline">Report JSON</span>
+          </button>
+          <button id="btnExportAudit" title="Export Audit Trail JSONL" class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
+            <i data-lucide="shield-check" class="h-3.5 w-3.5 text-slate-700"></i>
+            <span class="hidden sm:inline">Audit JSONL</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <div class="grid flex-1 gap-4 lg:grid-cols-[230px_minmax(0,1fr)] items-start">
+      
+      <!-- Sidebar Navigation -->
+      <aside class="glass rounded-2xl p-3 space-y-4 lg:sticky lg:top-6">
+        <div>
+          <p class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Navigation</p>
+          <nav class="space-y-1">
+            <button class="nav-btn active flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="home">
+              <i data-lucide="layout-dashboard" class="h-4 w-4"></i>
+              <span>Reconciliation</span>
+            </button>
+            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="results">
+              <i data-lucide="table" class="h-4 w-4"></i>
+              <span>Results Grid</span>
+              <span id="badgeResults" class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
+            </button>
+            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="exceptions">
+              <i data-lucide="alert-circle" class="h-4 w-4"></i>
+              <span>Discrepancies</span>
+              <span id="badgeExceptions" class="ml-auto font-mono text-xs bg-white border border-slate-200 rounded-md px-1.5 py-0.5 font-semibold text-slate-700">0</span>
+            </button>
+            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="data">
+              <i data-lucide="database" class="h-4 w-4"></i>
+              <span>Data Explorer</span>
+            </button>
+            <button class="nav-btn flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-600 hover:text-ink hover:bg-slate-100/60 transition" data-view="multiway">
+              <i data-lucide="git-merge" class="h-4 w-4"></i>
+              <span>Multi-Way Chaining</span>
+              <span id="badgeMultiway" class="ml-auto font-mono text-[10px] bg-sky-50 text-sky-700 border border-sky-200 rounded px-1.5 py-0.5 font-semibold">3-Way</span>
+            </button>
+          </nav>
+        </div>
+
+        <div class="border-t border-slate-200/80 pt-3 px-3">
+          <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Session</p>
+          <p id="sessionDisplay" class="font-mono text-xs text-slate-600 mt-1 truncate">Initializing...</p>
+        </div>
+      </aside>
+
+      <!-- View Containers -->
+      <main class="min-w-0 space-y-4">
+        
+        <!-- VIEW 1: Home / Staging & Controls -->
+        <section id="view-home" class="view-panel space-y-4">
+          <!-- Action Banner -->
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Reconciliation Controls</p>
+                <h2 class="mt-1 text-2xl font-bold text-ink">Autonomous Financial Reconciliation</h2>
+                <p class="mt-1 text-slate-600 text-sm">Stage internal payment ledgers and external bank statements, then run the matching engine.</p>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2.5">
+                <div class="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-1 shadow-sm">
+                  <select id="selectSampleDataset" class="rounded-lg bg-transparent px-2.5 py-1.5 text-xs font-semibold text-ink outline-none cursor-pointer">
+                    <option value="basic">Standard Demo (2-File)</option>
+                    <option value="clean_demo">Clean Demo (100% Match)</option>
+                    <option value="benchmark_3file">3-File Benchmark</option>
+                    <option value="enterprise_ecosystem">5-File Enterprise Ecosystem</option>
+                  </select>
+                  <button id="btnSample" class="flex items-center gap-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 font-semibold text-xs text-ink transition">
+                    <i data-lucide="sparkles" class="h-3.5 w-3.5 text-emerald"></i>
+                    <span>Load</span>
+                  </button>
+                </div>
+                
+                <button id="btnResume" class="hidden flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 font-semibold text-amber-800 hover:bg-amber-100 transition shadow-sm">
+                  <i data-lucide="play-circle" class="h-4 w-4"></i>
+                  <span>Resume</span>
+                </button>
+
+                <button id="btnRestart" class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm" title="Restart Session">
+                  <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
+                  <span class="hidden sm:inline">Restart</span>
+                </button>
+
+                <button id="btnStop" disabled class="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-rose-700 hover:bg-rose-50 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
+                  <i data-lucide="square" class="h-4 w-4"></i>
+                  <span>Stop</span>
+                </button>
+
+                <button id="btnRun" disabled class="flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 font-semibold text-white hover:bg-slate-800 transition disabled:opacity-40 disabled:pointer-events-none shadow-sm">
+                  <i data-lucide="play" class="h-4 w-4 text-emerald"></i>
+                  <span>Run Pairwise</span>
+                </button>
+
+                <button id="btnRunMultiwayHeader" class="hidden flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 font-semibold text-white hover:bg-emerald-800 transition shadow-sm" title="Run 3-Legged Multi-Way Chaining">
+                  <i data-lucide="git-merge" class="h-4 w-4 text-white"></i>
+                  <span>Run Multi-Way (3-Legged)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI Summary Cards -->
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assessed Records</p>
+              <p id="kpiAssessed" class="num mt-2 font-mono text-2xl font-bold text-ink">—</p>
+              <p class="mt-1 text-xs text-slate-400">Total transaction rows</p>
+            </div>
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Match Rate</p>
+              <p id="kpiMatchRate" class="num mt-2 font-mono text-2xl font-bold text-emerald">—</p>
+              <p class="mt-1 text-xs text-slate-400">Multi-attribute precision</p>
+            </div>
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Net Fee Variance</p>
+              <p id="kpiFeeVariance" class="num mt-2 font-mono text-2xl font-bold text-amber-700">—</p>
+              <p class="mt-1 text-xs text-slate-400">Gateway MDR & deductions</p>
+            </div>
+            <div class="glass rounded-2xl p-4">
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Open Exceptions</p>
+              <p id="kpiOpenExceptions" class="num mt-2 font-mono text-2xl font-bold text-rose-700">—</p>
+              <p class="mt-1 text-xs text-slate-400">Classified for AI review</p>
+            </div>
+          </div>
+
+          <!-- Matching Policy & Fee Schedule Configuration -->
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dynamic Policy Control</p>
+                <h3 class="mt-1 text-lg font-bold text-ink">Fee Schedule & Tax Tolerance</h3>
+                <p class="text-xs text-slate-600">Configure custom MDR fee rates and GST percentages for multi-attribute matching.</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="2.0" data-tax="18.0" data-abstol="0.01" data-pcttol="0.0" data-mode="absolute_only">Standard (2% + 18% GST)</button>
+                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="0.2" data-tax="5.0" data-abstol="0.05" data-pcttol="0.05" data-mode="greater">Custom (0.2% + 5% Tax, Greater)</button>
+                <button type="button" class="policy-preset rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition" data-fee="0.0" data-tax="0.0" data-abstol="0.01" data-pcttol="0.0" data-mode="absolute_only">Zero Fee (0% + 0%)</button>
+              </div>
+            </div>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-6 items-end">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Fee / MDR (%)</label>
+                <input id="inputFeeRate" type="number" step="0.01" min="0" max="100" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">GST Tax (%)</label>
+                <input id="inputTaxRate" type="number" step="0.1" min="0" max="100" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tolerance Mode</label>
+                <select id="selectToleranceMode" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink outline-none focus:border-slate-400">
+                  <option value="absolute_only" selected>Absolute Only</option>
+                  <option value="percentage_only">Percentage Only</option>
+                  <option value="greater">Greater (Max)</option>
+                  <option value="lesser">Lesser (Min)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Abs Tol (₹)</label>
+                <input id="inputToleranceAbs" type="number" step="0.01" min="0" max="100" value="0.01" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pct Tol (%)</label>
+                <input id="inputTolerancePct" type="number" step="0.01" min="0" max="10" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-ink outline-none focus:border-slate-400">
+              </div>
+              <div>
+                <button id="btnApplyPolicy" class="w-full rounded-xl bg-ink py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 transition">Save & Apply</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Fee & Tax Segment Rules Panel -->
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dynamic Segment Rules</p>
+                <h3 class="mt-1 text-lg font-bold text-ink">Fee & Tax Rules Engine</h3>
+                <p class="text-xs text-slate-600">Granular rules by percentage range (e.g. 0-40%), item category, payment method, or transaction dates.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="btnOpenAddRule" class="flex items-center gap-1.5 rounded-xl bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm">
+                  <i data-lucide="plus" class="h-3.5 w-3.5"></i> Add Rule
+                </button>
+                <button id="btnClearRules" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition">
+                  <i data-lucide="trash-2" class="h-3.5 w-3.5"></i> Clear All
+                </button>
+              </div>
+            </div>
+
+            <div class="mt-4 overflow-x-auto rounded-xl border border-slate-200/80 bg-white/70">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th class="p-3 w-16 text-center">Priority</th>
+                    <th class="p-3">Rule Label</th>
+                    <th class="p-3 w-32">Matcher</th>
+                    <th class="p-3">Condition Detail</th>
+                    <th class="p-3 text-right w-24">Fee %</th>
+                    <th class="p-3 text-right w-24">GST %</th>
+                    <th class="p-3 w-28">Source</th>
+                  </tr>
+                </thead>
+                <tbody id="rulesTableBody" class="divide-y divide-slate-100 font-mono">
+                  <tr><td colspan="7" class="p-6 text-center text-slate-400 font-sans">No segment rules configured. Standard policy catch-all applies.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Dropzone & Staged Files -->
+          <div class="glass rounded-2xl p-6">
+            <div id="dropzone" class="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-8 text-center hover:border-slate-400 hover:bg-white/80 transition">
+              <div class="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-slate-100 text-slate-600 mb-3">
+                <i data-lucide="upload" class="h-6 w-6"></i>
+              </div>
+              <p class="font-semibold text-base text-ink">Drop statement and ledger files here</p>
+              <p class="mt-1 text-xs text-slate-500">Supports CSV and Excel statements. Or click "Load Sample Data" above.</p>
+              <input id="fileInput" class="hidden" type="file" multiple accept=".csv,.xlsx,.xls">
+            </div>
+
+            <div class="mt-6 flex items-center justify-between">
+              <h3 class="font-bold text-ink">Staged Statement Files</h3>
+              <span id="stagedCount" class="font-mono text-xs font-semibold text-slate-500">0 files staged</span>
+            </div>
+
+            <div id="stagedGrid" class="mt-3 grid gap-3 md:grid-cols-2"></div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: Results Grid -->
+        <section id="view-results" class="view-panel hidden space-y-4">
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Reconciliation Output</p>
+                <h2 class="mt-1 text-2xl font-bold text-ink">Results Grid</h2>
+                <p class="text-slate-600 text-sm">Every reconciled pair and discrepancy with prominent AI Diagnostic analysis.</p>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <input id="resultsSearch" class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-ink outline-none focus:border-slate-400 w-full sm:w-80 shadow-sm" placeholder="Search reference, amount, reason...">
+              </div>
+            </div>
+          </div>
+
+          <div class="glass overflow-hidden rounded-2xl">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-3.5 bg-white/70">
+              <div class="flex rounded-xl bg-slate-100 p-1">
+                <button class="tab-btn active rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="all">All Records</button>
+                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="matched">Matched</button>
+                <button class="tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition" data-filter="exception">Discrepancies</button>
+              </div>
+              <span id="resultsMeta" class="font-mono text-xs text-slate-500 font-semibold">0 records</span>
+            </div>
+
+            <div class="max-h-[64vh] overflow-auto">
+              <table class="w-full min-w-[1050px] text-left text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th class="p-3.5 w-12 text-center">#</th>
+                    <th class="p-3.5 w-28">Status</th>
+                    <th class="p-3.5 w-44">Reference ID</th>
+                    <th class="p-3.5 text-right w-36">Ledger Amount</th>
+                    <th class="p-3.5 text-right w-36">Bank Amount</th>
+                    <th class="p-3.5 text-right w-36">Variance / Fee</th>
+                    <th class="p-3.5">AI Diagnostic Reason & Match Logic</th>
+                  </tr>
+                </thead>
+                <tbody id="resultsTableBody">
+                  <tr><td colspan="7" class="p-12 text-center text-slate-400 font-medium">No reconciliation output yet. Execute reconciliation from the controls tab.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="glass rounded-2xl p-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-emerald">Line intelligence</p><h3 class="mt-1 text-lg font-bold text-ink">Tax and charge matcher</h3><p class="text-xs text-slate-600">Compare GST, tax, MDR, and fee lines across the first two loaded tables without initiating a reconciliation run.</p></div><div class="flex gap-2"><button id="btnTaxMatch" class="rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">Check tax lines</button><button id="btnChargeMatch" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Check charge lines</button></div></div>
+            <div id="lineMatchResults" class="mt-4 overflow-auto text-xs text-slate-500">Load two datasets, then select a line-matching check.</div>
+          </div>
+        </section>
+
+        <!-- VIEW 3: Discrepancies Queue -->
+        <section id="view-exceptions" class="view-panel hidden space-y-4">
+          <div class="glass rounded-2xl p-6">
+            <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Exception Review Queue</p>
+            <h2 class="mt-1 text-2xl font-bold text-ink">Discrepancies & AI QA</h2>
+            <p class="text-slate-600 text-sm">Review classified discrepancy items, inspect verified root-cause evidence, and apply manager decisions.</p>
+          </div>
+
+          <div id="exceptionsList" class="space-y-3">
+            <div class="glass rounded-2xl p-12 text-center text-slate-400 font-medium">No exceptions currently queued for review.</div>
+          </div>
+        </section>
+
+        <!-- VIEW 4: Data Explorer -->
+        <section id="view-data" class="view-panel hidden space-y-4">
+          <div class="glass rounded-2xl p-6">
+            <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Dataset Inspection</p>
+            <h2 class="mt-1 text-2xl font-bold text-ink">Data Explorer</h2>
+            <p class="text-slate-600 text-sm">Browse raw ingested transaction records and column profiles across all loaded statement tables.</p>
+          </div>
+
+          <div class="glass overflow-hidden rounded-2xl">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-3.5 bg-white/70">
+              <div id="tableTabs" class="flex flex-wrap gap-1.5"></div>
+              <span id="tableMeta" class="font-mono text-xs text-slate-500 font-semibold">0 rows</span>
+            </div>
+
+            <div class="max-h-[60vh] overflow-auto">
+              <table id="explorerTable" class="w-full min-w-max text-left text-xs"></table>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-slate-200 p-3.5 bg-white/70">
+              <button id="btnPrevPage" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
+                <i data-lucide="chevron-left" class="h-4 w-4"></i> Previous
+              </button>
+              <span id="pageMeta" class="font-mono text-xs text-slate-600 font-semibold">Page 1 of 1</span>
+              <button id="btnNextPage" class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 transition">
+                Next <i data-lucide="chevron-right" class="h-4 w-4"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 5: Multi-Way Chaining -->
+        <section id="view-multiway" class="view-panel hidden space-y-4">
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Multi-Party Ecosystem Intelligence</p>
+                <h2 class="mt-1 text-2xl font-bold text-ink">Multi-Way Chaining & Cash Position</h2>
+                <p class="text-slate-600 text-sm">3-Legged reconciliation across order sources (e.g. Zomato, Flipkart), gateway ledger hub, and bank statements.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <button id="btnRunMultiway" class="flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm">
+                  <i data-lucide="play" class="h-3.5 w-3.5 text-emerald"></i>
+                  <span>Run Multi-Way Chaining</span>
+                </button>
+                <button id="btnExportJournal" class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-ink hover:bg-slate-50 transition shadow-sm">
+                  <i data-lucide="download" class="h-3.5 w-3.5 text-slate-700"></i>
+                  <span>Export Journal CSV</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Legs Summary Cards -->
+          <div class="grid gap-3 md:grid-cols-2">
+            <div class="glass rounded-2xl p-5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Leg 1 · Sales to Gateway</span>
+                <span id="mwLeg1Rate" class="font-mono text-sm font-bold text-emerald">—</span>
+              </div>
+              <h4 id="mwLeg1Title" class="mt-1 text-base font-bold text-ink">Sales ↔ Gateway Clearing</h4>
+              <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div class="rounded-xl bg-white/70 p-3 border border-slate-100">
+                  <span class="text-slate-400">Matched Volume</span>
+                  <p id="mwLeg1Matched" class="font-mono font-bold text-ink text-sm mt-0.5">—</p>
+                </div>
+                <div class="rounded-xl bg-white/70 p-3 border border-slate-100">
+                  <span class="text-slate-400">Unmatched / At Risk</span>
+                  <p id="mwLeg1Unmatched" class="font-mono font-bold text-rose-600 text-sm mt-0.5">—</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass rounded-2xl p-5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Leg 2 · Gateway to Bank</span>
+                <span id="mwLeg2Rate" class="font-mono text-sm font-bold text-emerald">—</span>
+              </div>
+              <h4 id="mwLeg2Title" class="mt-1 text-base font-bold text-ink">Gateway ↔ Bank Statements</h4>
+              <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div class="rounded-xl bg-white/70 p-3 border border-slate-100">
+                  <span class="text-slate-400">Settled in Bank</span>
+                  <p id="mwLeg2Matched" class="font-mono font-bold text-ink text-sm mt-0.5">—</p>
+                </div>
+                <div class="rounded-xl bg-white/70 p-3 border border-slate-100">
+                  <span class="text-slate-400">In-Transit / Unsettled</span>
+                  <p id="mwLeg2Unmatched" class="font-mono font-bold text-amber-600 text-sm mt-0.5">—</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cash Position & Aging Analysis -->
+          <div class="glass rounded-2xl p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3 gap-2">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-emerald">Treasury Liquidity & Controller Invariant</p>
+                <h3 class="mt-0.5 text-lg font-bold text-ink">Cash Position & Settlement Schedule</h3>
+              </div>
+              <div class="sm:text-right">
+                <span class="text-xs text-slate-500 font-medium">Projected Closing Balance</span>
+                <p id="mwProjectedClosing" class="font-mono text-xl font-bold text-emerald">—</p>
+              </div>
+            </div>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+              <div class="rounded-xl bg-white/80 p-3 border border-slate-100">
+                <span class="text-slate-500">Gross Sales Volume</span>
+                <p id="mwGrossSales" class="font-mono font-bold text-ink text-base mt-1">—</p>
+              </div>
+              <div class="rounded-xl bg-white/80 p-3 border border-slate-100">
+                <span class="text-slate-500">Settled in Bank Accounts</span>
+                <p id="mwSettledBank" class="font-mono font-bold text-emerald text-base mt-1">—</p>
+              </div>
+              <div class="rounded-xl bg-white/80 p-3 border border-slate-100">
+                <span class="text-slate-500">Fees & GST Withheld</span>
+                <p id="mwFeesGst" class="font-mono font-bold text-slate-700 text-base mt-1">—</p>
+              </div>
+              <div class="rounded-xl bg-white/80 p-3 border border-slate-100">
+                <span class="text-slate-500">Exception at Risk</span>
+                <p id="mwExceptionAtRisk" class="font-mono font-bold text-rose-600 text-base mt-1">—</p>
+              </div>
+            </div>
+
+            <div class="mt-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-200/60">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
+                <span>Cash In-Transit Aging Schedule (Total: <span id="mwInTransitTotal" class="font-mono font-bold text-ink">—</span>)</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2 text-xs">
+                <div class="rounded-lg bg-white p-2 text-center border border-slate-200">
+                  <span class="text-slate-400 text-[10px] block uppercase font-bold">T+1 (Normal Flow)</span>
+                  <span id="mwInTransitT1" class="font-mono font-bold text-ink">—</span>
+                </div>
+                <div class="rounded-lg bg-white p-2 text-center border border-slate-200">
+                  <span class="text-slate-400 text-[10px] block uppercase font-bold">T+2 (Delayed)</span>
+                  <span id="mwInTransitT2" class="font-mono font-bold text-amber-600">—</span>
+                </div>
+                <div class="rounded-lg bg-white p-2 text-center border border-slate-200">
+                  <span class="text-slate-400 text-[10px] block uppercase font-bold">T+7+ (Stalled)</span>
+                  <span id="mwInTransitT7" class="font-mono font-bold text-rose-600">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Double-Entry General Ledger Journal Entries -->
+          <div class="glass overflow-hidden rounded-2xl">
+            <div class="p-4 border-b border-slate-200 bg-white/70 flex items-center justify-between">
+              <div>
+                <h3 class="font-bold text-ink">Double-Entry Journal Entries</h3>
+                <p class="text-xs text-slate-500">Balanced audit vouchers with verified debit-credit parity.</p>
+              </div>
+              <span id="mwJournalCount" class="font-mono text-xs font-semibold text-slate-500">0 vouchers</span>
+            </div>
+            <div class="max-h-[50vh] overflow-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold">
+                  <tr>
+                    <th class="p-3 w-32">Voucher ID</th>
+                    <th class="p-3 w-28">Date</th>
+                    <th class="p-3 w-28">Category</th>
+                    <th class="p-3">Description</th>
+                    <th class="p-3">Account Lines</th>
+                    <th class="p-3 text-right w-28">Debit (₹)</th>
+                    <th class="p-3 text-right w-28">Credit (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="mwJournalTableBody" class="divide-y divide-slate-100 font-mono">
+                  <tr><td colspan="7" class="p-8 text-center text-slate-400 font-sans">Run Multi-Way Chaining above to generate general ledger journal vouchers.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- Add Rule Modal Dialog -->
+    <div id="addRuleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <div class="glass w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+          <h3 class="font-bold text-ink text-base">Add Fee & Tax Segment Rule</h3>
+          <button onclick="closeAddRuleModal()" class="rounded-lg p-1 text-slate-400 hover:text-ink"><i data-lucide="x" class="h-4 w-4"></i></button>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Rule Label</label>
+            <input id="newRuleLabel" type="text" placeholder="e.g. First 40% Tier 1 (2% Fee + 18% GST)" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-medium">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Matcher Kind</label>
+              <select id="newRuleKind" onchange="toggleMatcherFields()" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-medium">
+                <option value="row_range_pct">Row Range % (e.g. 0-40%)</option>
+                <option value="column_equals">Column Equals (e.g. category=electronics)</option>
+                <option value="row_range_abs">Row Range Abs (e.g. 1-100)</option>
+                <option value="all">All Records (Catch-All)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Priority (1 = Highest)</label>
+              <input id="newRulePriority" type="number" min="1" max="999" value="1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-slate-400 font-mono">
+            </div>
+          </div>
+          <div id="matcherRangeFields" class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Start %</label>
+              <input id="newRuleStartPct" type="number" step="0.1" min="0" max="100" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">End %</label>
+              <input id="newRuleEndPct" type="number" step="0.1" min="0" max="100" value="40.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+            </div>
+          </div>
+          <div id="matcherColFields" class="hidden grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Column Name</label>
+              <input id="newRuleCol" type="text" placeholder="e.g. category or payment_method" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Target Value</label>
+              <input id="newRuleVal" type="text" placeholder="e.g. electronics or upi" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Fee Rate (%)</label>
+              <input id="newRuleFeeRate" type="number" step="0.01" min="0" max="100" value="2.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">GST Rate (%)</label>
+              <input id="newRuleGstRate" type="number" step="0.1" min="0" max="100" value="18.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Flat Fee (₹)</label>
+              <input id="newRuleFlatFee" type="number" step="0.01" min="0" value="0.0" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono">
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-200">
+          <button onclick="closeAddRuleModal()" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold hover:bg-slate-50 transition">Cancel</button>
+          <button onclick="submitNewRule()" class="rounded-xl bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition">Add Rule</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grounded AI Copilot Drawer -->
+    <aside id="aiDrawer" class="fixed inset-y-3 right-3 z-50 flex w-[min(440px,calc(100vw-24px))] translate-x-[calc(100%+30px)] flex-col rounded-2xl border border-slate-200/90 bg-white/95 shadow-2xl backdrop-blur-2xl transition-transform duration-300 ease-out">
+      <div class="flex items-center justify-between border-b border-slate-200/90 p-4">
+        <div class="flex items-center gap-2.5">
+          <div class="grid h-8 w-8 place-items-center rounded-lg bg-ink text-white">
+            <i data-lucide="bot" class="h-4 w-4"></i>
+          </div>
+          <div>
+            <p class="font-bold text-ink">Reconciliation AI</p>
+            <p class="text-[11px] text-slate-500 font-medium">Grounded in active statement data</p>
+          </div>
+        </div>
+        <button id="btnAiClose" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+          <i data-lucide="x" class="h-4 w-4"></i>
+        </button>
+      </div>
+
+      <div id="chatMessages" class="flex-1 space-y-3 overflow-y-auto p-4">
+        <div class="max-w-[90%] rounded-xl bg-[#F0F9FF] border border-blue-100 p-3.5 text-xs leading-relaxed text-slate-800">
+          Hello. I am your <strong>Reconciliation AI Assistant</strong>. Ask questions about matched orders, fee variances, duplicate transactions, or reasons why specific items differed.
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200/90 p-3.5 space-y-3 bg-slate-50/60">
+        <div class="flex flex-wrap gap-1.5">
+          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="What is the total fee variance?">Total fee variance?</button>
+          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="Why did ORD_3 fail to match?">Why did ORD_3 fail?</button>
+          <button class="quick-chip rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition" data-query="Explain duplicate orders and refunds">Duplicate orders?</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input id="chatInput" class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 shadow-sm" placeholder="Ask about fees, orders, variances...">
+          <button id="btnChatSend" class="grid h-8 w-8 place-items-center rounded-xl bg-ink text-white hover:bg-slate-800 transition">
+            <i data-lucide="send" class="h-3.5 w-3.5"></i>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 left-1/2 z-50 hidden -translate-x-1/2 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white shadow-lg transition-opacity duration-200"></div>
+
+  </div>
+
+  <script>
+    const API = '/api/v2';
+    const $ = s => document.querySelector(s);
+    const $$ = s => [...document.querySelectorAll(s)];
+
+    const State = {
+      sid: null,
+      status: 'IDLE',
+      abortToken: null,
+      stagedFiles: [],
+      rows: [],
+      exceptions: [],
+      filter: 'all',
+      searchQuery: '',
+      tables: {},
+      currentTable: null,
+      page: 1,
+      pollTimer: null
+    };
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function money(v) {
+      if (v == null || v === '') return '—';
+      const n = Number(v);
+      if (!isFinite(n)) return '—';
+      return 'INR ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function showToast(msg) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 2800);
+    }
+
+    async function fetchApi(path, opts = {}) {
+      const res = await fetch(API + path, opts);
+      if (res.status === 404 && path.includes(`/sessions/${State.sid}`)) {
+        await initSession();
+        throw new Error('Session refreshed.');
+      }
+      if (!res.ok) {
+        let detail = '';
+        try { detail = (await res.json()).detail; } catch { }
+        throw new Error(detail || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    async function initSession() {
+      try {
+        const data = await fetchApi('/sessions', { method: 'POST' });
+        State.sid = data.session_id;
+        $('#sessionDisplay').textContent = State.sid;
+        updateStatus('IDLE');
+        connectWS();
+        loadPolicyAndTolerance();
+        loadRules();
+      } catch (err) {
+        updateStatus('OFFLINE');
+        showToast('Could not initialize session: ' + err.message);
+      }
+    }
+
+    function connectWS() {
+      if (!State.sid) return;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws/v2/${State.sid}`);
+      ws.onmessage = ev => {
+        try {
+          const frame = JSON.parse(ev.data);
+          const p = frame.payload || {};
+          if (frame.kind === 'control') {
+            if (p.event === 'STATE_ENTERED') updateStatus(p.state, p.abort_token);
+            if (p.event === 'HALT') updateStatus('HALTED');
+            if (p.event === 'RESUMED') updateStatus(p.state);
+            if (p.event === 'ABORT_CONFIRMED') {
+              updateStatus('ABORTED');
+              showToast('Reconciliation stopped.');
+            }
+          }
+          if (frame.kind === 'chat' && p.text) appendChatBubble('ai', p.text);
+          if (frame.kind === 'artifact' && p.kind === 'report') {
+            loadResults();
+            loadExceptions();
+            loadTables();
+          }
+        } catch { }
+      };
+      ws.onclose = () => setTimeout(connectWS, 2500);
+    }
+
+    function updateStatus(status, abortToken) {
+      State.status = status;
+      if (abortToken) State.abortToken = abortToken;
+      
+      $('#statusText').textContent = status;
+      const dot = $('#statusDot');
+      dot.className = 'h-2.5 w-2.5 rounded-full';
+
+      const isRunning = ['RUNNING', 'INGESTING', 'PROFILING', 'MAPPING_PROPOSED', 'POLICY_GENERATED', 'DRY_RUN', 'EXECUTING', 'QA', 'RESOLVING', 'AGGREGATING'].includes(status);
+      
+      const btnResume = $('#btnResume');
+      if (status === 'HALTED') {
+        if (btnResume) {
+          btnResume.classList.remove('hidden');
+          btnResume.disabled = false;
+        }
+      } else {
+        if (btnResume) {
+          btnResume.classList.add('hidden');
+          btnResume.disabled = true;
+        }
+      }
+
+      if (isRunning) {
+        dot.classList.add('bg-blue-500', 'pulse-dot');
+        $('#btnRun').disabled = true;
+        $('#btnStop').disabled = false;
+      } else {
+        $('#btnStop').disabled = true;
+        $('#btnRun').disabled = State.stagedFiles.length < 2;
+        if (status === 'ARCHIVED') dot.classList.add('bg-emerald');
+        else if (status === 'HALTED') dot.classList.add('bg-amber-500');
+        else if (status === 'ABORTED') dot.classList.add('bg-rose-500');
+        else dot.classList.add('bg-slate-400');
+      }
+    }
+
+    function switchView(viewName) {
+      $$('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
+      $$('.view-panel').forEach(panel => panel.classList.toggle('hidden', panel.id !== `view-${viewName}`));
+      if (viewName === 'results') loadResults();
+      if (viewName === 'exceptions') loadExceptions();
+      if (viewName === 'data') loadTables();
+      if (viewName === 'multiway') loadMultiwayReport();
+    }
+
+    /* Staging & File Management */
+    async function loadSample() {
+      try {
+        const dataset = $('#selectSampleDataset')?.value || 'basic';
+        showToast(`Loading '${dataset}' dataset...`);
+        const res = await fetchApi(`/sessions/${State.sid}/load_sample?dataset=${encodeURIComponent(dataset)}`, { method: 'POST' });
+        if (res.ok && res.files) {
+          State.stagedFiles = res.files;
+          renderStaged();
+          loadTables();
+          updateMultiwayButtonState();
+          if (res.advisory) {
+            showToast(res.advisory);
+          } else {
+            showToast(`Loaded ${res.files.length} tables for ${dataset}.`);
+          }
+        }
+      } catch (err) {
+        showToast('Failed to load sample data: ' + err.message);
+      }
+    }
+
+    function updateMultiwayButtonState() {
+      const tableCount = Object.keys(State.tables || {}).length || State.stagedFiles.length;
+      const isMulti = tableCount >= 3;
+
+      const headerBtn = $('#btnRunMultiwayHeader');
+      if (headerBtn) {
+        if (isMulti) {
+          headerBtn.classList.remove('hidden');
+          headerBtn.disabled = false;
+        } else {
+          headerBtn.classList.add('hidden');
+          headerBtn.disabled = true;
+        }
+      }
+
+      const mwBtn = $('#btnRunMultiway');
+      if (mwBtn) {
+        if (!isMulti) {
+          mwBtn.disabled = true;
+          mwBtn.title = `Requires 3+ tables; currently ${tableCount} staged`;
+          mwBtn.classList.add('opacity-40', 'pointer-events-none');
+        } else {
+          mwBtn.disabled = false;
+          mwBtn.title = '';
+          mwBtn.classList.remove('opacity-40', 'pointer-events-none');
+        }
+      }
+
+      const runBtn = $('#btnRun');
+      if (runBtn) {
+        const span = runBtn.querySelector('span');
+        if (span) {
+          span.textContent = isMulti ? 'Run Pairwise (2 Tables)' : 'Run Pairwise';
+        }
+      }
+    }
+
+    async function handleFiles(files) {
+      const selected = [...files];
+      if (!selected.length) return;
+      try {
+        const form = new FormData();
+        selected.forEach(file => form.append('files', file));
+        const staged = await fetchApi(`/sessions/${State.sid}/files`, { method: 'POST', body: form });
+        State.stagedFiles.push(...staged.files.map((meta, index) => ({ ...meta, rawFile: selected[index] })));
+        renderStaged();
+        showToast(`${selected.length} file(s) staged for AI analysis and data inspection.`);
+        loadTables();
+      } catch (err) { showToast('Could not stage files: ' + err.message); }
+    }
+
+    function renderStaged() {
+      $('#stagedCount').textContent = `${State.stagedFiles.length} files staged`;
+      $('#btnRun').disabled = State.stagedFiles.length < 2 || ['RUNNING', 'EXECUTING'].includes(State.status);
+
+      const grid = $('#stagedGrid');
+      if (!State.stagedFiles.length) {
+        grid.innerHTML = '';
+        return;
+      }
+
+      grid.innerHTML = State.stagedFiles.map((f, idx) => `
+        <div class="glass rounded-xl p-4 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 truncate">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-600 flex-shrink-0">
+              <i data-lucide="file-text" class="h-4 w-4"></i>
+            </div>
+            <div class="truncate">
+              <p class="font-semibold text-xs text-ink truncate">${esc(f.name)}</p>
+              <p class="text-[11px] text-slate-400 font-mono">${f.rows ?? '—'} rows · ${(f.size / 1024).toFixed(1)} KB</p>
+              ${f.columns ? `<p class="mt-1 truncate text-[10px] text-slate-500">${esc(f.columns.join(', '))}</p>` : ''}
+            </div>
+          </div>
+          <div class="flex items-center gap-1"><button onclick="previewFile(${idx})" aria-label="Preview file" class="rounded-lg p-1.5 text-slate-400 hover:bg-sky-50 hover:text-slate-700 transition"><i data-lucide="eye" class="h-4 w-4"></i></button><button onclick="removeFile(${idx})" aria-label="Remove file" class="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition">
+            <i data-lucide="trash-2" class="h-4 w-4"></i>
+          </button></div>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    window.removeFile = async function (idx) {
+      const f = State.stagedFiles[idx];
+      if (f && f.name) {
+        try {
+          await fetchApi(`/sessions/${State.sid}/files/${encodeURIComponent(f.name)}`, { method: 'DELETE' });
+        } catch (e) {
+          console.warn('Failed to delete file from backend session:', e);
+        }
+      }
+      State.stagedFiles.splice(idx, 1);
+      renderStaged();
+      loadTables();
+    };
+
+    window.previewFile = async function (idx) {
+      const file = State.stagedFiles[idx];
+      try {
+        const table = file.table || file.name.replace(/\.[^.]+$/, '');
+        const data = await fetchApi(`/sessions/${State.sid}/ingestion?table=${encodeURIComponent(table)}&page=1&page_size=10`);
+        const page = data.tables[table], cols = data.table_meta[table]?.columns || [];
+        const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4';
+        modal.innerHTML = `<div role="dialog" aria-modal="true" class="max-h-[80vh] w-full max-w-5xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl"><div class="flex justify-between"><div><h3 class="font-bold">${esc(file.name)} preview</h3><p class="text-xs text-slate-500">${page.total} rows · ${cols.length} columns · detected types: ${esc(Object.entries(file.dtypes || {}).map(([k,v]) => k + ' (' + v + ')').join(', '))}</p></div><button class="closePreview rounded-lg border px-3 py-1 text-xs">Close</button></div><table class="mt-4 w-full min-w-max text-xs"><thead class="bg-slate-50"><tr>${cols.map(c => `<th class="p-2 text-left">${esc(c)}</th>`).join('')}</tr></thead><tbody>${page.items.map(row => `<tr>${cols.map(c => `<td class="border-b p-2">${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        modal.querySelector('.closePreview').onclick = () => modal.remove(); document.body.append(modal);
+      } catch (err) { showToast(err.message); }
+    };
+
+    async function runReconciliation() {
+      if (State.stagedFiles.length < 2) return;
+      updateStatus('RUNNING');
+      showToast('Starting reconciliation engine...');
+
+      try {
+        const hasRealUploads = State.stagedFiles.some(f => f.rawFile);
+        if (hasRealUploads) {
+          const fd = new FormData();
+          State.stagedFiles.forEach(f => { if (f.rawFile) fd.append('files', f.rawFile); });
+          await fetchApi(`/sessions/${State.sid}/run`, { method: 'POST', body: fd });
+        } else {
+          await fetchApi(`/sessions/${State.sid}/run`, { method: 'POST' });
+        }
+        startPolling();
+        switchView('results');
+      } catch (err) {
+        updateStatus('IDLE');
+        showToast('Run error: ' + err.message);
+      }
+    }
+
+    async function stopReconciliation() {
+      if (!window.confirm('Stop reconciliation? The current stage will finish safely and an abort event will be added to the audit trail.')) return;
+      try {
+        await fetchApi(`/sessions/${State.sid}/abort`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: State.abortToken || 'user_stop' })
+        });
+        showToast('Stop requested. Waiting for the engine to reach a safe checkpoint.');
+      } catch (err) {
+        showToast('Stop failed: ' + err.message);
+      }
+    }
+
+    function startPolling() {
+      if (State.pollTimer) clearInterval(State.pollTimer);
+      State.pollTimer = setInterval(async () => {
+        try {
+          const ov = await fetchApi(`/sessions/${State.sid}/overview`);
+          updateStatus(ov.state, ov.abort_token);
+          if (typeof updateOpsTelemetry === 'function') updateOpsTelemetry(ov);
+          if (ov.state === 'ARCHIVED' || ov.state === 'ABORT_CONFIRMED' || ov.state === 'HALTED') {
+            clearInterval(State.pollTimer);
+            loadResults();
+            loadExceptions();
+            loadTables();
+          }
+        } catch { }
+      }, 1200);
+    }
+
+    /* Results Grid */
+    async function loadResults() {
+      try {
+        const [res, mapData, exc] = await Promise.all([
+          fetchApi(`/sessions/${State.sid}/results`),
+          fetchApi(`/sessions/${State.sid}/mapping`),
+          fetchApi(`/sessions/${State.sid}/exceptions?page_size=1000`)
+        ]);
+
+        const c = mapData.committed || {};
+        const rows = [];
+
+        (res.matched || []).forEach(m => {
+          const l = Number(m.l_data?.[c.left_amount] ?? m.l_data?.amount);
+          const b = Number(m.r_data?.[c.right_amount] ?? m.r_data?.credit);
+          const v = (isFinite(l) && isFinite(b)) ? l - b : null;
+          rows.push({
+            type: 'matched',
+            ref: m.l_data?.[c.left_key] ?? m.l_rid,
+            l,
+            b,
+            v,
+            reason: m.ai_reason || (v && Math.abs(v) > 0.01 ? `Matched with INR ${Math.abs(v).toFixed(2)} fee variance.` : 'Exact 1:1 match across ledger and bank.')
+          });
+        });
+
+        (exc.queue || []).forEach(x => {
+          const isResolved = ['auto_resolve', 'mark_resolved'].includes(x.action);
+          rows.push({
+            type: isResolved ? 'resolved' : 'exception',
+            ref: x.ref || `RID-${x.rid}`,
+            l: x.side === 'L' ? Number(x.record_data?.[c.left_amount] ?? x.record_data?.amount) : null,
+            b: x.side === 'R' ? Number(x.record_data?.[c.right_amount] ?? x.record_data?.credit) : null,
+            v: Number(x.delta),
+            reason: x.explanation || x.auto_reason || x.reason
+          });
+        });
+
+        State.rows = rows;
+        State.exceptions = exc.queue || [];
+
+        $('#badgeResults').textContent = rows.length;
+        $('#badgeExceptions').textContent = State.exceptions.length;
+
+        $('#kpiAssessed').textContent = rows.length || '—';
+        $('#kpiMatchRate').textContent = res.match_rate != null ? (res.match_rate * 100).toFixed(1) + '%' : '—';
+        $('#kpiFeeVariance').textContent = res.totals ? money(res.totals.fees) : '—';
+        $('#kpiOpenExceptions').textContent = State.exceptions.length || '—';
+
+        renderResultsTable();
+      } catch { }
+    }
+
+    function renderResultsTable() {
+      let list = State.rows;
+      if (State.filter === 'matched') list = list.filter(r => r.type === 'matched');
+      if (State.filter === 'exception') list = list.filter(r => r.type !== 'matched');
+
+      const q = State.searchQuery.trim().toLowerCase();
+      if (q) {
+        list = list.filter(r => `${r.ref} ${r.reason} ${r.type}`.toLowerCase().includes(q));
+      }
+
+      $('#resultsMeta').textContent = `${list.length} visible / ${State.rows.length} total`;
+
+      const tbody = $('#resultsTableBody');
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-12 text-center text-slate-400 font-medium">No records match the current filter.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map((r, idx) => {
+        let tagBg = 'bg-[#F0FDF4] text-emerald-800 border-emerald-200';
+        let tagLabel = 'MATCHED';
+        if (r.type === 'exception') {
+          tagBg = 'bg-[#FDF2F8] text-rose-800 border-rose-200';
+          tagLabel = 'DISCREPANCY';
+        } else if (r.type === 'resolved') {
+          tagBg = 'bg-[#F0F9FF] text-blue-800 border-blue-200';
+          tagLabel = 'RESOLVED';
+        }
+
+        return `
+          <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
+            <td class="p-3.5 text-center font-mono text-slate-400">${idx + 1}</td>
+            <td class="p-3.5"><span class="inline-block rounded-md border ${tagBg} px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">${tagLabel}</span></td>
+            <td class="p-3.5 font-mono font-semibold text-ink">${esc(r.ref)}</td>
+            <td class="p-3.5 text-right font-mono text-slate-700">${money(r.l)}</td>
+            <td class="p-3.5 text-right font-mono text-slate-700">${money(r.b)}</td>
+            <td class="p-3.5 text-right font-mono font-semibold ${r.v > 0 ? 'text-amber-700' : (r.v < 0 ? 'text-rose-700' : 'text-slate-400')}">${money(r.v)}</td>
+            <td class="p-3.5">
+              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-2.5 text-xs text-slate-800 leading-relaxed font-medium">
+                ${esc(r.reason)}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /* Discrepancies Queue */
+    async function loadExceptions() {
+      try {
+        const res = await fetchApi(`/sessions/${State.sid}/exceptions?page_size=1000`);
+        State.exceptions = res.queue || [];
+        $('#badgeExceptions').textContent = State.exceptions.length;
+
+        const list = $('#exceptionsList');
+        if (!State.exceptions.length) {
+          list.innerHTML = '<div class="glass rounded-2xl p-12 text-center text-slate-400 font-medium">No open discrepancies currently queued for review.</div>';
+          return;
+        }
+
+        list.innerHTML = State.exceptions.map(item => {
+          const isResolved = ['auto_resolve', 'mark_resolved'].includes(item.action);
+          const isDeclined = item.action === 'declined';
+          
+          let badge = '<span class="rounded-md border border-amber-200 bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">REVIEW REQUIRED</span>';
+          if (isResolved) badge = '<span class="rounded-md border border-emerald-200 bg-[#F0FDF4] px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">RESOLVED</span>';
+          if (isDeclined) badge = '<span class="rounded-md border border-rose-200 bg-[#FDF2F8] px-2 py-0.5 text-[10px] font-bold uppercase text-rose-800">DECLINED</span>';
+
+          return `
+            <div class="glass rounded-2xl p-5 space-y-3.5">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <span class="font-mono font-bold text-sm text-ink">[${item.side}] ${esc(item.ref)}</span>
+                  <span class="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">${esc(item.reason)}</span>
+                  ${badge}
+                </div>
+                <div class="flex items-center gap-4 text-xs font-mono">
+                  <span>Variance: <strong class="text-rose-700">${money(item.delta)}</strong></span>
+                  <span>Confidence: <strong class="text-ink">${(item.confidence * 100).toFixed(1)}%</strong></span>
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-blue-100 bg-[#F0F9FF] p-3.5 text-xs text-slate-800 leading-relaxed font-medium">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">AI Diagnostic Analysis</p>
+                <p>${esc(item.explanation || item.auto_reason || item.reason)}</p>
+              </div>
+
+              <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button onclick="overrideException(${item.rid}, 'approve')" class="flex items-center gap-1.5 rounded-xl bg-ink px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition">
+                  <i data-lucide="check" class="h-3.5 w-3.5 text-emerald"></i> Approve Resolution
+                </button>
+                <button onclick="overrideException(${item.rid}, 'decline')" class="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 transition">
+                  Flag / Decline
+                </button>
+                <button onclick="overrideException(${item.rid}, 'escalate')" class="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+                  Escalate
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        lucide.createIcons();
+      } catch { }
+    }
+
+    window.overrideException = async function (rid, action) {
+      try {
+        await fetchApi(`/sessions/${State.sid}/exceptions/${rid}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, note: 'Manager override' })
+        });
+        showToast(`Exception #${rid} updated (${action}).`);
+        await loadExceptions();
+        await loadResults();
+      } catch (err) {
+        showToast('Action failed: ' + err.message);
+      }
+    };
+
+    /* Data Explorer */
+    async function loadTables() {
+      try {
+        const res = await fetchApi(`/sessions/${State.sid}/ingestion`);
+        State.tables = res.table_meta || {};
+        const names = Object.keys(State.tables);
+
+        const tabContainer = $('#tableTabs');
+        if (!names.length) {
+          tabContainer.innerHTML = '<span class="text-xs text-slate-400 p-1">No tables loaded.</span>';
+          return;
+        }
+
+        if (!State.currentTable || !State.tables[State.currentTable]) {
+          State.currentTable = names[0];
+        }
+
+        tabContainer.innerHTML = names.map(name => `
+          <button class="table-tab rounded-xl px-3.5 py-1.5 text-xs font-semibold transition ${name === State.currentTable ? 'bg-[#E0F2FE] text-ink' : 'bg-slate-100 text-slate-600 hover:text-ink'}" onclick="selectExplorerTable('${name}')">
+            ${esc(name.toUpperCase())} <span class="font-mono text-[11px] text-slate-400">(${State.tables[name].total_rows})</span>
+          </button>
+        `).join('');
+
+        renderExplorerPage();
+        updateMultiwayButtonState();
+      } catch { }
+    }
+
+    window.selectExplorerTable = function (name) {
+      State.currentTable = name;
+      State.page = 1;
+      loadTables();
+    };
+
+    async function renderExplorerPage() {
+      if (!State.currentTable) return;
+      try {
+        const res = await fetchApi(`/sessions/${State.sid}/ingestion?table=${encodeURIComponent(State.currentTable)}&page=${State.page}&page_size=100`);
+        const p = res.tables[State.currentTable];
+        const cols = State.tables[State.currentTable]?.columns || [];
+
+        $('#tableMeta').textContent = `${p.total} total rows · ${cols.length} columns`;
+        $('#pageMeta').textContent = `Page ${p.page} of ${p.total_pages}`;
+        $('#btnPrevPage').disabled = !p.has_prev;
+        $('#btnNextPage').disabled = !p.has_next;
+
+        $('#explorerTable').innerHTML = `
+          <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+            <tr>
+              <th class="p-3.5 w-12 text-center">#</th>
+              ${cols.map(c => `<th class="p-3.5">${esc(c)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${p.items.map((row, i) => `
+              <tr class="hover:bg-slate-50/80 transition">
+                <td class="p-3.5 text-center font-mono text-slate-400">${(p.page - 1) * p.page_size + i + 1}</td>
+                ${cols.map(c => `<td class="p-3.5 font-mono text-slate-700">${esc(row[c])}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+      } catch { }
+    }
+
+    /* Copilot Chat */
+    function appendChatBubble(role, text) {
+      const container = $('#chatMessages');
+      const bubble = document.createElement('div');
+      bubble.className = `max-w-[90%] rounded-xl p-3.5 text-xs leading-relaxed ${role === 'user' ? 'ml-auto bg-ink text-white' : 'bg-[#F0F9FF] border border-blue-100 text-slate-800'}`;
+      let html = esc(text).replace(/\n/g, '<br>');
+      if (role !== 'user' && text.includes('Confirmation Required')) {
+        html += `
+          <div class="mt-3 flex items-center gap-2 pt-2 border-t border-blue-200/60">
+            <button onclick="sendChat('YES')" class="flex items-center gap-1.5 rounded-lg bg-emerald px-3 py-1.5 font-semibold text-xs text-white shadow-sm hover:opacity-90 transition">
+              <i data-lucide="check" class="h-3.5 w-3.5"></i> Confirm Action
+            </button>
+            <button onclick="sendChat('CANCEL')" class="flex items-center gap-1.5 rounded-lg bg-white border border-slate-300 px-3 py-1.5 font-semibold text-xs text-slate-700 hover:bg-slate-50 transition">
+              <i data-lucide="x" class="h-3.5 w-3.5"></i> Cancel
+            </button>
+          </div>
+        `;
+      }
+      bubble.innerHTML = html;
+      container.appendChild(bubble);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      bubble.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function sendChat(query) {
+      const input = $('#chatInput');
+      const text = (query || input.value).trim();
+      if (!text || !State.sid) return;
+
+      input.value = '';
+      appendChatBubble('user', text);
+
+      try {
+        const res = await fetchApi(`/sessions/${State.sid}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        appendChatBubble('ai', res.response || res.error || 'No response.');
+        if (res.response && res.response.includes('confirmed and executed')) {
+          loadRules();
+          loadResults();
+        }
+      } catch (err) {
+        appendChatBubble('ai', 'Error: ' + err.message);
+      }
+    }
+
+    /* Policy & Segment Rules Engine */
+    async function loadPolicyAndTolerance() {
+      try {
+        const [pol, tol] = await Promise.all([
+          fetchApi(`/sessions/${State.sid}/policy`),
+          fetchApi(`/sessions/${State.sid}/tolerance`)
+        ]);
+        if (pol.active_schedule?.params?.rate != null) {
+          $('#inputFeeRate').value = (pol.active_schedule.params.rate * 100).toFixed(2);
+        }
+        if (pol.active_schedule?.gst_rate != null) {
+          $('#inputTaxRate').value = (pol.active_schedule.gst_rate * 100).toFixed(1);
+        }
+        if (tol.tolerance_abs != null) $('#inputToleranceAbs').value = tol.tolerance_abs;
+        if (tol.tolerance_pct != null) $('#inputTolerancePct').value = tol.tolerance_pct;
+        if (tol.tolerance_mode) $('#selectToleranceMode').value = tol.tolerance_mode;
+      } catch { }
+    }
+
+    async function loadRules() {
+      try {
+        const data = await fetchApi(`/sessions/${State.sid}/rules`);
+        const tbody = $('#rulesTableBody');
+        if (!tbody) return;
+        const rules = data.rules || [];
+        if (!rules.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400 font-sans">No segment rules configured. Standard policy catch-all applies.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rules.map(r => {
+          let detail = '—';
+          const m = r.matcher || {};
+          if (m.kind === 'row_range_pct') detail = `Rows ${m.start_pct ?? 0}% to ${m.end_pct ?? 100}%`;
+          else if (m.kind === 'column_equals') detail = `${esc(m.column)} == "${esc(m.value)}"`;
+          else if (m.kind === 'column_in') detail = `${esc(m.column)} IN [${(m.values || []).map(esc).join(', ')}]`;
+          else if (m.kind === 'row_range_abs') detail = `Rows ${m.start_row ?? 1} to ${m.end_row ?? 'max'}`;
+          else if (m.kind === 'all') detail = 'All rows (catch-all)';
+
+          return `
+            <tr class="hover:bg-slate-50/80 transition">
+              <td class="p-3 text-center font-bold text-slate-700">${r.priority ?? 1}</td>
+              <td class="p-3 font-sans font-semibold text-ink">${esc(r.label || r.rule_id)}</td>
+              <td class="p-3"><span class="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">${esc(m.kind || 'all')}</span></td>
+              <td class="p-3 font-mono text-slate-600">${detail}</td>
+              <td class="p-3 text-right font-bold text-slate-700">${((r.fee_rate || 0) * 100).toFixed(2)}%</td>
+              <td class="p-3 text-right font-bold text-slate-700">${((r.gst_rate || 0) * 100).toFixed(1)}%</td>
+              <td class="p-3 font-sans text-slate-400 text-[11px]">${esc(r.source || 'user')}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch { }
+    }
+
+    window.openAddRuleModal = function() {
+      $('#addRuleModal')?.classList.remove('hidden');
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    };
+    window.closeAddRuleModal = function() {
+      $('#addRuleModal')?.classList.add('hidden');
+    };
+    window.toggleMatcherFields = function() {
+      const k = $('#newRuleKind')?.value;
+      $('#matcherRangeFields')?.classList.toggle('hidden', k !== 'row_range_pct');
+      $('#matcherColFields')?.classList.toggle('hidden', k !== 'column_equals');
+    };
+    window.submitNewRule = async function() {
+      try {
+        const k = $('#newRuleKind').value;
+        const matcher = { kind: k };
+        if (k === 'row_range_pct') {
+          matcher.start_pct = parseFloat($('#newRuleStartPct').value) || 0;
+          matcher.end_pct = parseFloat($('#newRuleEndPct').value) || 100;
+        } else if (k === 'column_equals') {
+          matcher.column = $('#newRuleCol').value.trim();
+          matcher.value = $('#newRuleVal').value.trim();
+        }
+        const rule = {
+          rule_id: 'rule_' + Date.now().toString(36),
+          label: $('#newRuleLabel').value.trim() || 'Segment Rule',
+          matcher: matcher,
+          fee_rate: (parseFloat($('#newRuleFeeRate').value) || 0) / 100.0,
+          gst_rate: (parseFloat($('#newRuleGstRate').value) || 0) / 100.0,
+          flat_fee: parseFloat($('#newRuleFlatFee').value) || 0.0,
+          priority: parseInt($('#newRulePriority').value) || 1,
+          source: 'user_explicit'
+        };
+        const cur = await fetchApi(`/sessions/${State.sid}/rules`);
+        const rules = cur.rules || [];
+        rules.push(rule);
+        await fetchApi(`/sessions/${State.sid}/rules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rules })
+        });
+        closeAddRuleModal();
+        loadRules();
+        showToast('Segment rule added successfully.');
+      } catch (err) {
+        showToast('Failed to add rule: ' + err.message);
+      }
+    };
+    window.clearAllRules = async function() {
+      try {
+        await fetchApi(`/sessions/${State.sid}/rules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rules: [] })
+        });
+        loadRules();
+        showToast('All segment rules cleared.');
+      } catch (err) {
+        showToast('Failed to clear rules: ' + err.message);
+      }
+    };
+
+    /* Multi-Way Chaining */
+    async function runMultiway() {
+      const tableCount = Object.keys(State.tables || {}).length || State.stagedFiles.length;
+      if (tableCount < 3) {
+        showToast(`Multi-way reconciliation requires 3+ tables. Only ${tableCount} staged. Use 'Run Pairwise' for 2-table reconciliation.`);
+        return;
+      }
+      try {
+        switchView('multiway');
+        showToast('Initiating 3-legged multi-way reconciliation...');
+        const res = await fetchApi(`/sessions/${State.sid}/multiway-run`, { method: 'POST' });
+        if (res.ok && res.report) {
+          renderMultiwayReport(res.report);
+          showToast('Multi-way chaining completed.');
+        }
+      } catch (err) {
+        showToast('Multi-way run failed: ' + err.message);
+      }
+    }
+
+    async function loadMultiwayReport() {
+      try {
+        const res = await fetchApi(`/sessions/${State.sid}/multiway`);
+        if (res.ok && res.report) {
+          renderMultiwayReport(res.report);
+        }
+      } catch { }
+    }
+
+    function renderMultiwayReport(rpt) {
+      if (!rpt) return;
+      const leg1 = (rpt.legs || [])[0] || {};
+      const leg2 = (rpt.legs || [])[1] || {};
+      const cp = rpt.cash_position || {};
+
+      $('#mwLeg1Rate').textContent = leg1.match_rate != null ? (leg1.match_rate * 100).toFixed(1) + '%' : '—';
+      $('#mwLeg1Title').textContent = `${leg1.source_table || 'Sales'} ↔ ${leg1.target_table || 'Gateway'}`;
+      $('#mwLeg1Matched').textContent = money(leg1.matched_value);
+      $('#mwLeg1Unmatched').textContent = money(leg1.unmatched_value);
+
+      $('#mwLeg2Rate').textContent = leg2.match_rate != null ? (leg2.match_rate * 100).toFixed(1) + '%' : '—';
+      $('#mwLeg2Title').textContent = `${leg2.source_table || 'Gateway'} ↔ ${leg2.target_table || 'Bank'}`;
+      $('#mwLeg2Matched').textContent = money(leg2.matched_value);
+      $('#mwLeg2Unmatched').textContent = money(leg2.unmatched_value);
+
+      $('#mwProjectedClosing').textContent = money(cp.projected_closing);
+      $('#mwGrossSales').textContent = money(cp.gross_sales);
+      $('#mwSettledBank').textContent = money(cp.settled_in_bank);
+      $('#mwFeesGst').textContent = money((cp.fees_withheld || 0) + (cp.gst_withheld || 0));
+      $('#mwExceptionAtRisk').textContent = money(cp.exception_value_at_risk);
+
+      $('#mwInTransitTotal').textContent = money(cp.in_transit_total);
+      $('#mwInTransitT1').textContent = money(cp.in_transit_t1);
+      $('#mwInTransitT2').textContent = money(cp.in_transit_t2);
+      $('#mwInTransitT7').textContent = money(cp.in_transit_t7_plus);
+
+      const vouchers = rpt.journal_entries || [];
+      $('#mwJournalCount').textContent = `${vouchers.length} vouchers`;
+      const tbody = $('#mwJournalTableBody');
+      if (!vouchers.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400 font-sans">No journal vouchers generated.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = vouchers.map(v => {
+        const linesHtml = (v.lines || []).map(l => `
+          <div class="flex items-center justify-between text-[11px] py-0.5 border-b border-slate-50 last:border-0">
+            <span class="${l.debit > 0 ? 'text-slate-800 font-medium' : 'text-slate-500 pl-4'}">${esc(l.account)}</span>
+            <span class="font-mono text-slate-600">${l.debit > 0 ? 'Dr: ' + money(l.debit) : 'Cr: ' + money(l.credit)}</span>
+          </div>
+        `).join('');
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition align-top">
+            <td class="p-3 font-bold text-ink">${esc(v.je_id)}</td>
+            <td class="p-3 font-mono text-slate-500">${esc(v.date)}</td>
+            <td class="p-3"><span class="rounded bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 text-[10px] font-bold">${esc(v.leg)}</span></td>
+            <td class="p-3 font-sans text-slate-600 max-w-xs">${esc(v.description)}</td>
+            <td class="p-3">${linesHtml}</td>
+            <td class="p-3 text-right font-bold text-ink">${money(v.total_debit)}</td>
+            <td class="p-3 text-right font-bold text-ink">${money(v.total_credit)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function resumeReconciliation() {
+      try {
+        showToast('Resuming reconciliation from checkpoint...');
+        const res = await fetchApi(`/sessions/${State.sid}/resume`, { method: 'POST' });
+        updateStatus(res.state || 'RUNNING');
+        startPolling();
+      } catch (err) {
+        showToast('Failed to resume: ' + err.message);
+      }
+    }
+
+    async function restartSession() {
+      try {
+        showToast('Restarting reconciliation session...');
+        await fetchApi(`/sessions/${State.sid}/restart`, { method: 'POST' });
+        State.stagedFiles = [];
+        State.rows = [];
+        State.exceptions = [];
+        renderStaged();
+        updateStatus('IDLE');
+        showToast('Session restarted. Ready to stage fresh data.');
+      } catch (err) {
+        showToast('Restart failed: ' + err.message);
+      }
+    }
+
+    /* Event Listeners */
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initSession();
+
+      // Navigation
+      $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+
+      // Staging
+      const drop = $('#dropzone');
+      const fileInput = $('#fileInput');
+      drop.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', e => {
+        handleFiles([...e.target.files]);
+        e.target.value = '';
+      });
+      drop.addEventListener('dragover', e => e.preventDefault());
+      drop.addEventListener('drop', e => {
+        e.preventDefault();
+        handleFiles([...e.dataTransfer.files]);
+      });
+
+      // Actions
+      $('#btnSample').addEventListener('click', loadSample);
+      $('#btnRun').addEventListener('click', runReconciliation);
+      $('#btnStop').addEventListener('click', stopReconciliation);
+      $('#btnResume')?.addEventListener('click', resumeReconciliation);
+      $('#btnRestart')?.addEventListener('click', restartSession);
+      $('#btnRunMultiway')?.addEventListener('click', runMultiway);
+      $('#btnRunMultiwayHeader')?.addEventListener('click', runMultiway);
+      $('#btnOpenAddRule')?.addEventListener('click', openAddRuleModal);
+      $('#btnClearRules')?.addEventListener('click', clearAllRules);
+
+      $('#btnExport').addEventListener('click', () => {
+        if (State.sid) window.open(`${API}/sessions/${State.sid}/export.csv`, '_blank');
+      });
+      $('#btnExportJson')?.addEventListener('click', () => {
+        if (State.sid) window.open(`${API}/sessions/${State.sid}/export/report.json`, '_blank');
+      });
+      $('#btnExportAudit')?.addEventListener('click', () => {
+        if (State.sid) window.open(`${API}/sessions/${State.sid}/export/audit.jsonl`, '_blank');
+      });
+      $('#btnExportJournal')?.addEventListener('click', () => {
+        if (State.sid) window.open(`${API}/sessions/${State.sid}/export/journal.csv`, '_blank');
+      });
+
+      // Policy Controls & Presets
+      $$('.policy-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+          $('#inputFeeRate').value = btn.dataset.fee;
+          $('#inputTaxRate').value = btn.dataset.tax;
+          if (btn.dataset.abstol) $('#inputToleranceAbs').value = btn.dataset.abstol;
+          if (btn.dataset.pcttol) $('#inputTolerancePct').value = btn.dataset.pcttol;
+          if (btn.dataset.mode) $('#selectToleranceMode').value = btn.dataset.mode;
+          applyPolicy();
+        });
+      });
+
+      async function applyPolicy() {
+        try {
+          const fee = parseFloat($('#inputFeeRate').value || '2.0') / 100.0;
+          const tax = parseFloat($('#inputTaxRate').value || '18.0') / 100.0;
+          const absTol = parseFloat($('#inputToleranceAbs').value || '0.01');
+          const pctTol = parseFloat($('#inputTolerancePct').value || '0.0');
+          const mode = $('#selectToleranceMode').value || 'absolute_only';
+
+          await fetchApi(`/sessions/${State.sid}/policy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fee_rate: fee, gst_rate: tax, tolerance: absTol, window_days: 3, flat_fee: 0.0 })
+          });
+          await fetchApi(`/sessions/${State.sid}/tolerance`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ abs_tol: absTol, pct_tol: pctTol, mode: mode })
+          });
+          showToast(`Policy updated: ${(fee * 100).toFixed(2)}% fee, ${(tax * 100).toFixed(1)}% tax, ${mode} tolerance (₹${absTol}, ${pctTol}%).`);
+        } catch (err) {
+          showToast('Failed to update policy: ' + err.message);
+        }
+      }
+
+      $('#btnApplyPolicy').addEventListener('click', applyPolicy);
+
+      // Filter Tabs & Search
+      $$('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          $$('.tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          State.filter = btn.dataset.filter;
+          renderResultsTable();
+        });
+      });
+
+      $('#resultsSearch').addEventListener('input', e => {
+        State.searchQuery = e.target.value;
+        renderResultsTable();
+      });
+
+      // Pagination
+      $('#btnPrevPage').addEventListener('click', () => {
+        if (State.page > 1) { State.page--; renderExplorerPage(); }
+      });
+      $('#btnNextPage').addEventListener('click', () => {
+        State.page++; renderExplorerPage();
+      });
+
+      async function runLineMatch(kind) {
+        try {
+          const result = await fetchApi(`/sessions/${State.sid}/line-matching?kind=${kind}`), s = result.summary || {};
+          $('#lineMatchResults').innerHTML = `<p class="mb-3 font-mono text-xs text-slate-600">${s.matched || 0} matched · ${s.exceptions || 0} exceptions · source ${money(s.total_left)} · counterparty ${money(s.total_right)}</p><table class="w-full min-w-[700px]"><thead class="bg-slate-50"><tr><th class="p-2 text-left">Reference</th><th class="p-2 text-right">Source</th><th class="p-2 text-right">Counterparty</th><th class="p-2 text-right">Variance</th><th class="p-2 text-left">AI finding</th></tr></thead><tbody>${(result.rows || []).map(r => `<tr><td class="border-b p-2 font-mono">${esc(r.reference)}</td><td class="border-b p-2 text-right">${money(r.left_total)}</td><td class="border-b p-2 text-right">${money(r.right_total)}</td><td class="border-b p-2 text-right">${money(r.variance)}</td><td class="border-b p-2">${esc(r.ai_reason)}</td></tr>`).join('')}</tbody></table>`;
+        } catch (err) { $('#lineMatchResults').textContent = err.message; }
+      }
+      $('#btnTaxMatch').addEventListener('click', () => runLineMatch('tax'));
+      $('#btnChargeMatch').addEventListener('click', () => runLineMatch('charge'));
+
+      // AI Drawer
+      $('#btnAiOpen').addEventListener('click', () => {
+        $('#aiDrawer').classList.remove('translate-x-[calc(100%+30px)]');
+      });
+      $('#btnAiClose').addEventListener('click', () => {
+        $('#aiDrawer').classList.add('translate-x-[calc(100%+30px)]');
+      });
+
+      $('#btnChatSend').addEventListener('click', () => sendChat());
+      $('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+      $$('.quick-chip').forEach(chip => {
+        chip.addEventListener('click', () => sendChat(chip.dataset.query));
+      });
+
+      // Live Operations Panel initialization
+      const ops = document.createElement('section');
+      ops.className = 'mt-5 rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm';
+      ops.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[.12em] text-emerald-700">Live Operations</p>
+            <h3 class="mt-1 text-lg font-bold text-ink">Execution Flow</h3>
+          </div>
+          <div class="flex gap-3 items-center">
+            <button id="opsAudit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 transition">View Audit</button>
+            <span id="opsElapsed" class="font-mono text-xs text-slate-500">00:00</span>
+          </div>
+        </div>
+        <div class="mt-4 grid gap-3 lg:grid-cols-[1fr_1.3fr]">
+          <div class="rounded-xl border border-slate-200 bg-sky-50 p-4">
+            <div id="opsFlow" class="space-y-2 text-xs"></div>
+            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div id="opsProgress" class="h-full w-0 bg-emerald transition-all"></div>
+            </div>
+            <p id="opsStatus" class="mt-2 font-mono text-xs text-slate-600">Ready to stage data</p>
+          </div>
+          <div class="rounded-xl border border-slate-800 bg-slate-950 shadow-inner overflow-hidden flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3.5 py-2 text-[11px] text-slate-400">
+              <div class="flex items-center gap-1.5">
+                <span class="h-2.5 w-2.5 rounded-full bg-rose-500/80"></span>
+                <span class="h-2.5 w-2.5 rounded-full bg-amber-500/80"></span>
+                <span class="h-2.5 w-2.5 rounded-full bg-emerald-500/80"></span>
+                <span class="ml-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-400">Live Engine Telemetry</span>
+              </div>
+              <span id="opsLiveBadge" class="font-mono text-[10px] text-slate-500">IDLE</span>
+            </div>
+            <pre id="opsTerminal" class="max-h-56 overflow-auto p-3.5 font-mono text-[11.5px] leading-relaxed text-slate-300 select-text">$ console ready — awaiting pipeline run...</pre>
+          </div>
+        </div>
+        <div id="opsAuditOut" class="mt-3 hidden max-h-36 overflow-auto rounded-xl border border-slate-200 bg-white p-3 font-mono text-[11px] text-slate-600"></div>
+      `;
+      $('#view-home')?.append(ops);
+
+      $('#opsAudit').onclick = async () => {
+        try {
+          const audit = await fetchApi(`/sessions/${State.sid}/audit`);
+          const out = $('#opsAuditOut');
+          out.classList.toggle('hidden');
+          out.textContent = `Integrity: ${audit.verified ? 'VERIFIED' : 'NEEDS REVIEW'}\n` +
+            audit.records.slice(-15).map(r => `${r.event || 'EVENT'}  ${r.ts || ''}  ${r.action || ''}`).join('\n');
+        } catch (_) { }
+      };
+
+      renderOpsFlow('IDLE');
+    });
+
+    const STAGES = ['INGESTING', 'PROFILING', 'MAPPING_PROPOSED', 'POLICY_GENERATED', 'EXECUTING', 'QA', 'RESOLVING', 'ARCHIVED'];
+    let opsStarted = 0;
+
+    function renderOpsFlow(state) {
+      const flow = $('#opsFlow');
+      if (!flow) return;
+      const index = Math.max(0, STAGES.indexOf(state));
+      flow.innerHTML = STAGES.map((name, i) => `
+        <div class="flex items-center gap-2 ${i <= index ? 'font-semibold text-slate-900' : 'text-slate-400'}">
+          <span class="h-2 w-2 rounded-full ${i < index ? 'bg-emerald' : (i === index && state !== 'IDLE' ? 'bg-blue-600' : 'bg-slate-300')}"></span>
+          ${name.replace('_', ' ')}
+        </div>
+      `).join('');
+      const prog = $('#opsProgress');
+      if (prog) prog.style.width = `${Math.max(0, index) / (STAGES.length - 1) * 100}%`;
+      const statusEl = $('#opsStatus');
+      if (statusEl) statusEl.textContent = state === 'ABORT_CONFIRMED' ? 'Stopped safely; audit event recorded.' : (state === 'IDLE' ? 'Ready to stage data' : `Processing: ${state.replace('_', ' ')}`);
+    }
+
+    function formatTelemetryLine(x) {
+      const p = x.payload || {};
+      const ev = p.event || x.kind || 'TRACE';
+      const d = p.detail || {};
+      const rawTs = x.ts ? new Date(x.ts) : new Date();
+      const ts = `${String(rawTs.getHours()).padStart(2, '0')}:${String(rawTs.getMinutes()).padStart(2, '0')}:${String(rawTs.getSeconds()).padStart(2, '0')}`;
+
+      switch (ev) {
+        case 'STATE_ENTERED':
+          return `[${ts}] ── STAGE ──> Entering stage: ${p.state || 'UNKNOWN'}${p.detail ? ' — ' + p.detail : ''}`;
+        case 'INGESTION_COMPLETED':
+          const tSummary = Object.entries(d.tables || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+          return `[${ts}] [INGEST] Ingested ${d.total_rows || 0} rows across ${Object.keys(d.tables || {}).length} tables [${tSummary}]`;
+        case 'PROFILING_COMPLETED':
+          return `[${ts}] [PROFILE] Profiling complete: ${d.column_count || 0} attributes profiled across ${d.table_count || 0} schemas; PII masked`;
+        case 'MAPPING_PROPOSED':
+          return `[${ts}] [MAPPING] Linked schema keys: ${d.key_linkage || 'key'} (${d.left_table} ↔ ${d.right_table}) | confidence: ${(Number(d.confidence || 0) * 100).toFixed(0)}%`;
+        case 'POLICY_CALIBRATED':
+          return `[${ts}] [POLICY] Fee parameters: ${d.fee_rate} MDR + ${d.gst_rate} GST | tol: ${d.tolerance} (${d.mode}) | ${d.active_rules || 1} active rule(s)`;
+        case 'DRY_RUN_EVALUATED':
+          return `[${ts}] [DRY-RUN] Calibrated baseline across ${d.sample_size || 0} samples → projected match rate: ${d.projected_match_rate} (${d.duration_s || 0}s)`;
+        case 'dry_run_done':
+          return `[${ts}] [DRY-RUN] Baseline calibrated at ${((d.baseline || 0) * 100).toFixed(1)}% match rate (${d.s || 0}s)`;
+        case 'EXECUTION_MATCHING_COMPLETED':
+          return `[${ts}] [MATCH] Reconciled ${d.matched_pairs} pairs across ${d.left_rows} left & ${d.right_rows} right records (${d.unmatched_count} exceptions) in ${d.duration_s}s`;
+        case 'INSPECTION_METRICS':
+          return `[${ts}] [INSPECT] Match rate: ${d.match_rate} (target floor: ${d.threshold}) → Status: ${d.status}`;
+        case 'REVISION_OPTIMIZATION':
+          return `[${ts}] [REVISION] Adaptive calibration cycle #${d.iteration}: expanded tolerance threshold to ${d.calibrated_tolerance}`;
+        case 'REVISION_REGRESSION_REJECTED':
+          return `[${ts}] [REVISION] Revision cycle #${d.iteration} rejected: tolerance expansion reverted to preserve match precision`;
+        case 'QA_CLASSIFICATION_COMPLETED':
+          const catStr = (d.categories || []).length ? ` [${d.categories.join(', ')}]` : '';
+          return `[${ts}] [QA] Classified ${d.exceptions_analyzed} discrepancies via Bayesian evidence ranking${catStr}`;
+        case 'AUTONOMOUS_RESOLUTION_COMPLETED':
+          return `[${ts}] [RESOLVE] Policy dispatch: ${d.auto_resolved} auto-resolved, ${d.escalated} escalated to audit queue, ${d.pending} pending`;
+        case 'RECONCILIATION_FINALIZED':
+          return `[${ts}] ✔ [FINALIZED] Reconciled at ${d.match_rate} match rate | Gross: ${d.total_sales_volume} | Settled: ${d.net_bank_settled} | ${d.audit_integrity}`;
+        case 'MULTIWAY_INITIATED':
+          return `[${ts}] [3-WAY] Multi-way settlement chaining initiated across ${(d.sales_sources || []).join(', ')} ↔ ${d.hub} ↔ ${(d.banks || []).join(', ')}`;
+        case 'MULTIWAY_LEG1_COMPLETED':
+          return `[${ts}] [3-WAY:LEG 1] Sales ↔ Hub: ${d.match_rate} match rate (${d.matched} orders matched, ${d.volume})`;
+        case 'MULTIWAY_LEG2_COMPLETED':
+          return `[${ts}] [3-WAY:LEG 2] Hub ↔ Bank: ${d.match_rate} match rate (${d.settled_in_bank} settled deposits, ${d.in_transit} in-transit)`;
+        case 'MULTIWAY_CASH_BALANCED':
+          return `[${ts}] [TREASURY] Cash Position Invariant: ${d.projected_closing} (unexplained: ${d.unexplained_variance}) → ${d.status}`;
+        case 'HALT':
+          return `[${ts}] ⏸ [HALT] Gate review checkpoint: ${d.reason || 'Operator review required'}`;
+        case 'RESUMED':
+          return `[${ts}] ▶ [RESUME] Gate checkpoint approved — resuming execution pipeline`;
+        case 'ABORT_CONFIRMED':
+          return `[${ts}] ⏹ [ABORT] Pipeline stopped safely. Cryptographic audit checkpoint committed.`;
+        default:
+          const det = Object.keys(d).length ? ' ' + JSON.stringify(d) : '';
+          return `[${ts}] [${ev}]${det}`;
+      }
+    }
+
+    async function updateOpsTelemetry(ov) {
+      renderOpsFlow(ov.state);
+      const liveBadge = $('#opsLiveBadge');
+      if (liveBadge) {
+        if (ov.running) {
+          liveBadge.textContent = '● STREAMING';
+          liveBadge.className = 'font-mono text-[10px] font-semibold text-emerald-400 animate-pulse';
+        } else if (ov.state === 'ARCHIVED') {
+          liveBadge.textContent = '✔ COMPLETE';
+          liveBadge.className = 'font-mono text-[10px] font-semibold text-emerald-400';
+        } else if (ov.state === 'HALT') {
+          liveBadge.textContent = '⏸ PAUSED';
+          liveBadge.className = 'font-mono text-[10px] font-semibold text-amber-400';
+        } else {
+          liveBadge.textContent = 'IDLE';
+          liveBadge.className = 'font-mono text-[10px] text-slate-500';
+        }
+      }
+      if (!opsStarted && ov.running) opsStarted = Date.now();
+      if (opsStarted) {
+        const secs = Math.floor((Date.now() - opsStarted) / 1000);
+        const el = $('#opsElapsed');
+        if (el) el.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+      }
+      try {
+        const trace = await fetchApi(`/sessions/${State.sid}/trace`);
+        const term = $('#opsTerminal');
+        if (term) {
+          const events = (trace.events || [])
+            .filter(x => x.payload?.event !== 'STATE_EXITED')
+            .slice(-18);
+          if (events.length) {
+            term.textContent = events.map(formatTelemetryLine).join('\n');
+          } else {
+            term.textContent = '$ console ready — awaiting data staging or reconciliation command...';
+          }
+          term.scrollTop = term.scrollHeight;
+        }
+      } catch (_) { }
+    }
+  </script>
+</body>
+
+</html>
