@@ -197,13 +197,7 @@ def conversational_chat(
     payload = {
         "system_instruction": {
             "parts": [{
-                "text": (
-                    system_instruction
-                    + "\n\nCRITICAL INSTRUCTION: You MUST wrap your final user-facing reply in XML tags <response> and </response>. "
-                    "Output EVERYTHING requested by the user directly, thoroughly, and completely. NEVER state that a metric, standard deviation, or calculation is not available. "
-                    "If the user asks for standard deviation, average standard deviation, variance, or statistical dispersion, provide the exact numbers from the pre-calculated statistical profiles above. "
-                    "Do NOT output internal scratchpad notes, check lists, or meta-analysis (e.g. 'I need to check the provided context', 'Looking through:') outside <thought>. ONLY the final text inside <response> will be shown to the user."
-                )
+                "text": system_instruction
             }]
         },
         "contents": formatted_contents,
@@ -222,29 +216,6 @@ def conversational_chat(
         d = json.loads(r.read())
 
     raw_reply = d["candidates"][0]["content"]["parts"][0]["text"].strip()
-    
-    # Extract structural delimiter
-    match = re.search(r"<response>([\s\S]*?)</response>", raw_reply, flags=re.IGNORECASE)
-    if match:
-        raw_reply = match.group(1).strip()
-    elif "<response>" in raw_reply.lower():
-        idx = raw_reply.lower().find("<response>") + len("<response>")
-        raw_reply = raw_reply[idx:].strip()
-    else:
-        # Fallback if the model failed to output the tag
-        raw_reply = re.sub(r"<thought>[\s\S]*?</thought>", "", raw_reply, flags=re.IGNORECASE)
-        raw_reply = re.sub(r"<scratchpad>[\s\S]*?</scratchpad>", "", raw_reply, flags=re.IGNORECASE).strip()
-        # Clean unclosed <thought> block if token limit or formatting failed
-        if "<thought>" in raw_reply.lower() and "</thought>" not in raw_reply.lower():
-            raw_reply = re.sub(r"<thought>[\s\S]*$", "", raw_reply, flags=re.IGNORECASE).strip()
-
-    # Clean any leaked scratchpad chain-of-thought prefix
-    raw_reply = re.sub(
-        r"^(?:I need to check the provided context[\s\S]*?(?:report|context)\.\s*)",
-        "",
-        raw_reply,
-        flags=re.IGNORECASE,
-    ).strip()
 
     u = d.get("usageMetadata", {})
     t_in = u.get("promptTokenCount", sum(len(m.get("content", "")) for m in messages) // 4)

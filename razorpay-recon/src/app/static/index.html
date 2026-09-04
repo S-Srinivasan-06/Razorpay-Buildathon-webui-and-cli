@@ -1339,7 +1339,8 @@
           body: JSON.stringify({ message: text })
         });
         appendChatBubble('ai', res.response || res.error || 'No response.');
-        if (res.response && res.response.includes('confirmed and executed')) {
+        if (res.response && (res.response.includes('confirmed and executed') || /tax|gst|rule/i.test(res.response))) {
+          loadPolicyAndTolerance();
           loadRules();
           loadResults();
         }

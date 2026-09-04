@@ -58,6 +58,14 @@ class AuditLog:
     def __enter__(self) -> "AuditLog":
         return self
 
+    def __iter__(self):
+        with self._lock:
+            return iter(list(self.records))
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self.records)
+
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()
 

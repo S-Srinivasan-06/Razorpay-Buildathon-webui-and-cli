@@ -175,20 +175,116 @@ def build_grounded_context(pipe: Any) -> str:
     lines.append("   - NEVER state that standard deviation or statistical metrics are not available or not calculated.")
     lines.append("4. NEVER output prompt restatements, context analysis bullets, or internal scratchpad calculation thoughts.")
     lines.append("5. Answer the user's question directly, clearly, and conversationally in professional Markdown.")
-    lines.append("6. If the user asks to reconcile or test custom fee/tax rates or segment rules:")
-    lines.append("   - Compute the exact expected net deductions and compare with session bank credits.")
-    lines.append("5. To execute or propose actions, you may emit one or more of the following XML action tags:")
-    lines.append("   - <action>RUN_RECONCILIATION</action> : Runs reconciliation on active datasets.")
-    lines.append("   - <action>SET_POLICY:fee=<rate>,gst=<rate>,tol=<amount></action> : Updates flat fee/tax schedule (zero-by-default).")
-    lines.append("   - <action>SET_TOLERANCE:abs=<amount>,pct=<pct>,mode=<mode></action> : Sets tolerance mode (greater, lesser, percentage_only, absolute_only).")
-    lines.append("   - <action>VERIFY_TAX</action> : Validates tax lines against active segment rules.")
-    lines.append("   - <action>VERIFY_CHARGES</action> : Validates gateway charges against active segment rules.")
-    lines.append("   - <action>SET_RULES:rules=[{\"rule_id\":\"r1\",\"label\":\"Label\",\"fee_rate\":0.02,\"gst_rate\":0.18,\"matcher\":{\"kind\":\"all\"}}]</action> : Replaces all segment rules (JSON array of rule objects).")
-    lines.append("   - <action>ADD_RULE:label=<label>,fee=<rate>,gst=<rate>,kind=<all|column_equals|row_range_pct>,col=<col>,val=<val>,priority=<n></action> : Adds one segment rule.")
-    lines.append("   Example ADD_RULE: <action>ADD_RULE:label=Electronics,fee=0.018,gst=0.12,kind=column_equals,col=category,val=electronics,priority=1</action>")
-    lines.append("   Example SET_RULES with two segment ranges: <action>SET_RULES:rules=[{\"rule_id\":\"r1\",\"label\":\"First 40%\",\"fee_rate\":0.02,\"gst_rate\":0.18,\"matcher\":{\"kind\":\"row_range_pct\",\"start_pct\":0,\"end_pct\":40}},{\"rule_id\":\"r2\",\"label\":\"Remaining 60%\",\"fee_rate\":0.015,\"gst_rate\":0.12,\"matcher\":{\"kind\":\"row_range_pct\",\"start_pct\":40,\"end_pct\":100}}]</action>")
+    lines.append("6. If the user mentions or asks to update fee/tax rates, explain the active rates and calculations.")
+    lines.append("7. Output clean, direct conversational Markdown.")
 
     return "\n".join(lines)
+
+
+def extract_tax_remark(text: str) -> Optional[float]:
+    """Detect if user vaguely remarks or specifies a tax/GST rate, and return the decimal rate."""
+    t = text.strip().lower()
+    if "first " in t and "next " in t:
+        return None
+    if not any(k in t for k in ("tax", "gst", "vat")):
+        return None
+
+    # Pattern 1: e.g. '5% tax', '18% gst'
+    m_pct = re.search(r"(\d+(?:\.\d+)?)\s*%\s*(?:tax(?:es)?|gst|vat)", t)
+    if m_pct:
+        return round(float(m_pct.group(1)) / 100.0, 4)
+
+    # Pattern 2: e.g. 'tax is 5%', 'tax of 5%', 'tax deduction of 5%', 'the tax rate is 18%', 'tax: 12%', 'taxes are 5%'
+    m_val = re.search(r"(?:tax(?:es)?|gst|vat)(?:[\w\s]{0,25}?)[:=]?\s*(\d+(?:\.\d+)?)\s*(%?)", t)
+    if m_val:
+        val = float(m_val.group(1))
+        has_pct = m_val.group(2) == "%" or "%" in t
+        return round(val / 100.0, 4) if (val > 1.0 or has_pct) else round(val, 4)
+
+    return None
+
+
+def extract_fee_remark(text: str) -> Optional[float]:
+    """Detect if user specifies a gateway fee/MDR rate, and return the decimal rate."""
+    t = text.strip().lower()
+    if "first " in t and "next " in t:
+        return None
+    if not any(k in t for k in ("fee", "mdr", "charge", "processing")):
+        return None
+
+    m_pct = re.search(r"(\d+(?:\.\d+)?)\s*%\s*(?:fee(?:s)?|mdr|charge(?:s)?|processing)", t)
+    if m_pct:
+        return round(float(m_pct.group(1)) / 100.0, 4)
+
+    m_val = re.search(r"(?:fee(?:s)?|mdr|charge(?:s)?|processing)(?:[\w\s]{0,25}?)[:=]?\s*(\d+(?:\.\d+)?)\s*(%?)", t)
+    if m_val:
+        val = float(m_val.group(1))
+        has_pct = m_val.group(2) == "%" or "%" in t
+        return round(val / 100.0, 4) if (val > 1.0 or has_pct) else round(val, 4)
+
+    return None
+
+
+def apply_tax_edit(pipe: Any, tax_rate: float, fee_rate: Optional[float] = None, sid: str = "", instruction: str = "") -> None:
+    """Directly update reconciliation policy and segment tax rules across the session."""
+    from app.core.contracts import FeeTaxRule, SegmentMatcher
+    from datetime import datetime, timezone
+    import uuid
+
+    current_fee = fee_rate if fee_rate is not None else (
+        pipe.schedule.params.get("rate", 0.0) if getattr(pipe, "schedule", None) and hasattr(pipe.schedule, "params") else 0.0
+    )
+    tol = float(pipe.cfg.get("tolerance_abs", pipe.cfg.get("tolerance", 0.01)))
+
+    # 1. Update policy schedule
+    pipe.set_policy(fee_rate=current_fee, gst_rate=tax_rate, tolerance=tol)
+    pipe.cfg["tax_rate"] = tax_rate
+    pipe.cfg["gst_rate"] = tax_rate
+    if fee_rate is not None:
+        pipe.cfg["fee_rate"] = fee_rate
+
+    # 2. Update or create segment rules
+    if getattr(pipe, "rules", None) and len(pipe.rules) > 0:
+        for r in pipe.rules:
+            r.gst_rate = tax_rate
+            if fee_rate is not None:
+                r.fee_rate = fee_rate
+    else:
+        new_rule = FeeTaxRule(
+            rule_id=f"rule_tax_{int(tax_rate*100)}pct_{uuid.uuid4().hex[:4]}",
+            label=f"Tax Rule ({tax_rate*100:.1f}% GST)",
+            matcher=SegmentMatcher(kind="all"),
+            fee_rate=current_fee,
+            gst_rate=tax_rate,
+            priority=1,
+            source="ai_interpreted",
+        )
+        pipe.rules = [new_rule]
+
+    # 3. Synchronize with global session registry
+    try:
+        from app.server.api_v2 import V2_SESSIONS
+        if sid in V2_SESSIONS:
+            V2_SESSIONS[sid]["pipe"] = pipe
+            V2_SESSIONS[sid]["policy"] = {
+                "fee_rate": current_fee,
+                "gst_rate": tax_rate,
+                "tolerance": tol,
+            }
+    except Exception:
+        pass
+
+    # 4. Record audit event
+    from app.core.audit import audit_for
+    audit_for(sid).append({
+        "event": "TAX_RULE_UPDATED_BY_AI",
+        "gst_rate": tax_rate,
+        "gst_pct": round(tax_rate * 100, 2),
+        "fee_rate": current_fee,
+        "fee_pct": round(current_fee * 100, 2),
+        "instruction": instruction,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
 
 
 class ReconChatSession:
@@ -213,10 +309,17 @@ class ReconChatSession:
         """Update or re-bind the active Pipeline reference."""
         self.pipe = pipe
 
-    def _fallback_answer(self, query: str) -> str:
+    def _fallback_answer(self, query: str, tax_rate: Optional[float] = None, fee_rate: Optional[float] = None) -> str:
         """Generate a direct grounded response from active pipeline data if the external LLM is unreachable."""
         if not self.pipe:
             return "Reconciliation session data is not loaded."
+        
+        if tax_rate is not None:
+            fee_info = f" (and fee rate at **{fee_rate*100:.2f}%**)" if fee_rate is not None else ""
+            return (
+                f"✅ **Tax Rule Updated**: The active tax (GST) rate has been set to **{tax_rate*100:.1f}%**{fee_info} across the reconciliation policy and segment rules. "
+                f"All subsequent fee, tax, and counterparty line matches will apply this rate."
+            )
         
         q = query.lower()
         pipe = self.pipe
@@ -464,12 +567,17 @@ class ReconChatSession:
             self.history.append({"role": "model", "content": cancel_reply})
             return {"ok": True, "response": cancel_reply, "cost_usd": 0.0, "session_id": self.sid}
 
-        # Handle natural-language rule instructions with ambiguity checks (§1.2)
-        # Generalised triggers — no longer includes placeholder "for electronics"
-        _RULE_TRIGGERS = ("first ", "next ", "last ", "remaining ", "rows have", "rows use",
-                          "tax is", "tax are", "fee is", "fees are",
-                          "if method is", "for category", "column equals", "column is")
-        if any(trigger in clean_msg for trigger in _RULE_TRIGGERS):
+        # Check for vague or explicit tax remarks from user — edit tax rules directly
+        tax_rate = extract_tax_remark(user_message)
+        fee_rate = extract_fee_remark(user_message)
+        tax_updated = False
+        if tax_rate is not None:
+            apply_tax_edit(self.pipe, tax_rate, fee_rate=fee_rate, sid=self.sid, instruction=user_message)
+            tax_updated = True
+
+        # Handle multi-slice segment rule instructions with confirmation gate
+        _MULTI_SLICE_TRIGGERS = ("first ", "next ", "last ", "remaining ")
+        if not tax_updated and any(trigger in clean_msg for trigger in _MULTI_SLICE_TRIGGERS):
             from app.engine.rule_compiler import compile_rules_from_text
             compiled = compile_rules_from_text(user_message)
             if compiled.has_ambiguity and compiled.clarifying_question:
@@ -501,132 +609,27 @@ class ReconChatSession:
             }
 
         context = build_grounded_context(self.pipe)
+        if tax_updated:
+            context += f"\n\n[Active Tax Rule Update Notice: You have just updated the active tax (GST) rate to {tax_rate*100:.1f}% based on the user's remark. Acknowledge this update clearly.]"
         self.history.append({"role": "user", "content": user_message})
 
         try:
             reply, cost = llm_client.conversational_chat(self.history, system_instruction=context)
-            action_msgs = []
-            pending_queue_this_turn: List[Dict[str, Any]] = []
-
-            # Multi-action parsing loop (§1.3) — each action tracked in ordered queue
-            for action_match in re.finditer(r"<action>(.*?)</action>", reply, flags=re.IGNORECASE | re.DOTALL):
-                action_text = action_match.group(1).strip()
-                action_kind = ""
-                payload: Dict[str, Any] = {}
-
-                if action_text == "RUN_RECONCILIATION":
-                    action_kind = "RUN_RECONCILIATION"
-                elif action_text.startswith("SET_POLICY:"):
-                    action_kind = "SET_POLICY"
-                    params = dict(kv.split("=", 1) for kv in action_text.replace("SET_POLICY:", "").split(",") if "=" in kv)
-                    payload = {
-                        "fee_rate": float(params.get("fee", 0.0)),
-                        "gst_rate": float(params.get("gst", 0.0)),
-                        "tolerance": float(params.get("tol", 0.01)),
-                    }
-                elif action_text.startswith("SET_TOLERANCE:"):
-                    action_kind = "SET_TOLERANCE"
-                    params = dict(kv.split("=", 1) for kv in action_text.replace("SET_TOLERANCE:", "").split(",") if "=" in kv)
-                    payload = {
-                        "abs_tol": float(params.get("abs", 0.01)),
-                        "pct_tol": float(params.get("pct", 0.0)),
-                        "mode": str(params.get("mode", "absolute_only")),
-                    }
-                elif action_text == "VERIFY_TAX":
-                    action_kind = "VERIFY_TAX"
-                elif action_text == "VERIFY_CHARGES":
-                    action_kind = "VERIFY_CHARGES"
-                elif action_text.startswith("ADD_RULE:"):
-                    action_kind = "ADD_RULES"
-                    params = dict(kv.split("=", 1) for kv in action_text.replace("ADD_RULE:", "").split(",") if "=" in kv)
-                    from app.core.contracts import FeeTaxRule, SegmentMatcher
-                    matcher_kind = params.get("kind", "all")
-                    matcher_params: Dict[str, Any] = {"kind": matcher_kind}
-                    if matcher_kind == "column_equals":
-                        matcher_params["column"] = params.get("col", "")
-                        matcher_params["value"] = params.get("val", "")
-                    elif matcher_kind == "row_range_pct":
-                        matcher_params["start_pct"] = float(params.get("start", 0))
-                        matcher_params["end_pct"] = float(params.get("end", 100))
-                    new_rule = FeeTaxRule(
-                        rule_id=f"rule_llm_{uuid.uuid4().hex[:6]}",
-                        label=params.get("label", "LLM Rule"),
-                        matcher=SegmentMatcher(**matcher_params),
-                        fee_rate=float(params.get("fee", 0.0)),
-                        gst_rate=float(params.get("gst", 0.0)),
-                        priority=int(params.get("priority", 1)),
-                        source="ai_interpreted",
-                    )
-                    payload = {"rules": [new_rule.model_dump(mode="json")]}
-                elif action_text.startswith("SET_RULES:"):
-                    action_kind = "SET_RULES"
-                    rules_json = action_text[len("SET_RULES:"):].strip()
-                    if rules_json.startswith("rules="):
-                        rules_json = rules_json[len("rules="):]
-                    try:
-                        payload = {"rules": json.loads(rules_json) if rules_json else []}
-                    except Exception:
-                        payload = {"rules": []}
-
-                if action_kind:
-                    state_changing = action_kind in ("RUN_RECONCILIATION", "SET_POLICY", "SET_TOLERANCE", "ADD_RULES", "SET_RULES", "ADD_RULE")
-                    auto_confirm = bool(re.search(r"\b(force|confirm|immediately|now|proceed)\b", clean_msg))
-
-                    if state_changing and not auto_confirm:
-                        token = uuid.uuid4().hex[:8]
-                        pending = {"kind": action_kind, "payload": payload, "token": token}
-                        self.pending_action = pending
-                        self.pending_actions[token] = pending
-                        pending_queue_this_turn.append(pending)
-                        action_msgs.append(
-                            f"\n\n> ⚠️ **Confirmation Required**: I am prepared to execute `{action_kind}` with parameters `{payload}`.\n"
-                            f"> Would you like me to proceed? (Reply **YES** to confirm all, or **CANCEL** to abort)."
-                        )
-                    else:
-                        try:
-                            res = execute_agent_action(self.sid, self.pipe, action_kind, payload, source="chat")
-                            # Sync pipe reference if fresh pipeline was created
-                            new_pipe = res.get("pipe") if isinstance(res, dict) else None
-                            if new_pipe and new_pipe is not self.pipe:
-                                self.pipe = new_pipe
-                            action_msgs.append(f"\n\n*[System: Executed `{action_kind}` successfully.]*")
-                        except Exception as e:
-                            action_msgs.append(f"\n\n*[System: Failed `{action_kind}`: {e}]*")
-
-            # Update ordered queue for multi-action YES to confirm all from this turn
-            if pending_queue_this_turn:
-                self.pending_actions_queue = pending_queue_this_turn
-
-            # Strip XML action tags from visible response
-            clean_reply = re.sub(r"<action>.*?</action>", "", reply, flags=re.IGNORECASE | re.DOTALL).strip()
-            clean_reply += "".join(action_msgs)
-
-            # Ensure complete output: if user asked for statistical/standard deviation metrics
-            # and LLM returned a refusal, internal reasoning, or omitted standard deviations:
-            is_stats_query = any(w in clean_msg for w in ("std", "standard deviation", "deviation", "variance", "dispersion", "statistic", "stats", "distribution"))
-            is_refusal = any(ph in clean_reply.lower() for ph in [
-                "not available in the current reconciliation report",
-                "metric is not available",
-                "none of these sections provide",
-                "i need to check the provided context",
-                "information is not present in the dataset",
-                "cannot provide",
-                "not available",
-                "looking through:",
-            ])
-            if is_stats_query and (is_refusal or "standard deviation" not in clean_reply.lower()):
-                clean_reply = self._fallback_answer(user_message)
-
-            self.history.append({"role": "model", "content": clean_reply})
+            # Direct return of LLM response without any parsing or filtering
+            self.history.append({"role": "model", "content": reply})
             return {
                 "ok": True,
-                "response": clean_reply,
+                "response": reply,
                 "cost_usd": cost,
                 "session_id": self.sid,
             }
         except Exception:
             # Fallback to local grounded dataset engine
-            clean_reply = self._fallback_answer(user_message)
+            clean_reply = self._fallback_answer(
+                user_message,
+                tax_rate=tax_rate if tax_updated else None,
+                fee_rate=fee_rate if tax_updated else None,
+            )
             self.history.append({"role": "model", "content": clean_reply})
             return {
                 "ok": True,

@@ -312,3 +312,112 @@ def test_multiway_endpoints_resilience_and_no_404_session_wiping() -> None:
     assert r_missing_sess.status_code == 404
     assert r_missing_sess.json()["detail"] == "session not found"
 
+
+# -----------------------------------------------------------------------------
+# 9. AI Direct Tax Rule Editing on Vague Remarks & No LLM Parsing
+# -----------------------------------------------------------------------------
+def test_ai_direct_tax_rule_editing_on_vague_remark(monkeypatch) -> None:
+    """Ensure AI directly edits tax rules on vague remarks without confirmation gates."""
+    from app.core import llm_client
+    from app.engine.chatbot import ReconChatSession, extract_tax_remark
+    from app.core.audit import audit_for
+
+    # Verify extract_tax_remark catches various vague and explicit tax remarks
+    assert extract_tax_remark("the tax is 5%") == 0.05
+    assert extract_tax_remark("taxes are 5%") == 0.05
+    assert extract_tax_remark("tax of 12%") == 0.12
+    assert extract_tax_remark("what if the gst is 18%?") == 0.18
+    assert extract_tax_remark("tax: 5%") == 0.05
+    assert extract_tax_remark("assume 5% tax deduction") == 0.05
+
+    sid = f"test_tax_edit_{uuid.uuid4().hex[:6]}" if "uuid" in dir() else "test_tax_edit_ai_1"
+    import uuid
+    sid = f"test_tax_edit_{uuid.uuid4().hex[:6]}"
+
+    pipe = Pipeline(sid, auto_ack=True)
+    pipe.tables = {
+        "payments": [{"order_id": "ORD_1", "amount": 1000.0}],
+        "bank": [{"utr": "ORD_1", "credit": 950.0}],
+    }
+    pipe.cfg = {"tolerance_abs": 0.01, "left_table": "payments", "right_table": "bank"}
+    V2_SESSIONS[sid] = {"pipe": pipe, "policy": {}, "files": {}}
+
+    # Mock conversational_chat so test runs deterministically offline
+    monkeypatch.setattr(
+        llm_client,
+        "conversational_chat",
+        lambda messages, system_instruction, timeout=25.0: (
+            "I have updated the tax rate to 5.0% for your reconciliation session.",
+            0.0001,
+        ),
+    )
+
+    chat_session = ReconChatSession(sid, pipe)
+
+    # 1. Vague remark: "the tax is 5%"
+    res = chat_session.chat("the tax is 5%")
+    assert res["ok"] is True
+    # Tax rule should be immediately updated in schedule and rules without asking for YES confirmation
+    assert pipe.schedule.gst_rate == 0.05
+    assert pipe.cfg["gst_rate"] == 0.05
+    assert pipe.cfg["tax_rate"] == 0.05
+    assert len(pipe.rules) >= 1
+    assert pipe.rules[0].gst_rate == 0.05
+
+    # Confirmation gate was NOT triggered
+    assert chat_session.pending_action is None
+    assert "Reply YES" not in res["response"]
+
+    # Audit trail contains TAX_RULE_UPDATED_BY_AI event
+    audit_events = [e["payload"] for e in audit_for(sid) if e.get("payload", {}).get("event") == "TAX_RULE_UPDATED_BY_AI"]
+    assert len(audit_events) >= 1
+    assert audit_events[-1]["gst_rate"] == 0.05
+
+    # 2. Subsequent vague remark: "what if tax is 12%?"
+    monkeypatch.setattr(
+        llm_client,
+        "conversational_chat",
+        lambda messages, system_instruction, timeout=25.0: (
+            "Tax rule has been modified to 12.0%.",
+            0.0001,
+        ),
+    )
+    res2 = chat_session.chat("what if tax is 12%?")
+    assert res2["ok"] is True
+    assert pipe.schedule.gst_rate == 0.12
+    assert pipe.rules[0].gst_rate == 0.12
+    assert pipe.cfg["gst_rate"] == 0.12
+
+
+def test_no_llm_output_parsing_verbatim(monkeypatch) -> None:
+    """Ensure LLM response is returned completely verbatim without regex or tag parsing."""
+    from app.core import llm_client
+    from app.engine.chatbot import ReconChatSession
+    import uuid
+
+    sid = f"test_raw_{uuid.uuid4().hex[:6]}"
+    pipe = Pipeline(sid, auto_ack=True)
+    pipe.tables = {"tbl": [{"id": 1, "amount": 500}]}
+    pipe.cfg = {"tolerance_abs": 0.01}
+
+    raw_complex_response = (
+        "Here is the detailed reconciliation breakdown:\n\n"
+        "```json\n"
+        '{"status": "matched", "tax_impact": 0.05}\n'
+        "```\n\n"
+        "Special chars & formatting: <note>Check variance</note> | $1,234.56 | 99.8% match rate."
+    )
+
+    monkeypatch.setattr(
+        llm_client,
+        "conversational_chat",
+        lambda messages, system_instruction, timeout=25.0: (raw_complex_response, 0.0002),
+    )
+
+    session = ReconChatSession(sid, pipe)
+    res = session.chat("Show me the report details")
+    assert res["ok"] is True
+    # Response matches raw LLM response completely without any stripping or parsing
+    assert res["response"] == raw_complex_response
+
+
