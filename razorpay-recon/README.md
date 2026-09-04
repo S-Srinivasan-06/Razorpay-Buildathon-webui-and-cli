@@ -4,7 +4,6 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 > **Enterprise-Grade Autonomous Financial Reconciliation Engine** featuring Multi-Way 3-Legged Settlement Chaining, Mathematical Cash Conservation Invariants, Cryptographic SHA-256 Audit Trails, and Grounded AI Intelligence powered by **Gemma 4 31B**.
 
@@ -177,9 +176,3 @@ tests/e2e/test_file_lifecycle_and_chat.py::test_chat_statistics PASSED  [ 23%]
 - [System Architecture & Blueprint](docs/ARCHITECTURE.md)
 - [Security, Audit Trails & Compliance](docs/SECURITY_AND_AUDIT.md)
 - [Hardening Post-Mortem & Invariant Proofs](docs/HARDENING_POST_MORTEM.md)
-
----
-
-## 📄 License
-
-Licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.

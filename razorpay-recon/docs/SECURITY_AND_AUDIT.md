@@ -1,7 +1,6 @@
 # Security, Cryptographic Audit & Compliance Architecture
 
-**Project**: Razorpay Autonomous Financial Reconciliation Agent  
-**Standard**: SOC-2 / ISO 27001 Financial Ledger Compliance  
+**Project**: Razorpay Autonomous Financial Reconciliation Agent
 **Scope**: Tamper-Evident Hashing, PII Masking, Confirmation Gates, and Audit Verification  
 
 ---
