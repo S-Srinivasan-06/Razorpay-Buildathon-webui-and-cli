@@ -1132,6 +1132,7 @@
           }
         } catch { }
         if (isSessionNotFound) {
+          sessionStorage.removeItem('recon_sid');
           await initSession();
           throw new Error('Session expired and was refreshed.');
         }
@@ -1146,14 +1147,57 @@
 
     async function initSession() {
       try {
-        const data = await fetchApi('/sessions', { method: 'POST' });
-        State.sid = data.session_id;
+        // 1. Recover existing session ID from browser sessionStorage
+        let existingSid = sessionStorage.getItem('recon_sid');
+        let sessionRecovered = false;
+
+        if (existingSid) {
+          try {
+            const ov = await fetchApi(`/sessions/${existingSid}/overview`);
+            State.sid = existingSid;
+            sessionRecovered = true;
+            if (ov && ov.state) updateStatus(ov.state, ov.abort_token);
+          } catch (e) {
+            existingSid = null;
+            sessionStorage.removeItem('recon_sid');
+          }
+        }
+
+        // 2. Generate new session only if no existing active session
+        if (!sessionRecovered) {
+          const data = await fetchApi('/sessions', { method: 'POST' });
+          State.sid = data.session_id;
+          sessionStorage.setItem('recon_sid', State.sid);
+          updateStatus('IDLE');
+        }
+
         $('#sessionDisplay').textContent = State.sid;
-        updateStatus('IDLE');
         connectWS();
         loadPolicyAndTolerance();
         loadRules();
         updateMultiwayButtonState();
+
+        // 3. Reload grids and state if recovered across page refresh
+        if (sessionRecovered) {
+          try {
+            await loadTables();
+            if ((!State.stagedFiles || !State.stagedFiles.length) && State.tables && Object.keys(State.tables).length) {
+              State.stagedFiles = Object.entries(State.tables).map(([name, meta]) => ({
+                name: `${name}.csv`,
+                rows: meta.total_rows || 0,
+                columns: meta.columns || [],
+                size: (meta.total_rows || 0) * 128,
+              }));
+              renderStaged();
+            }
+            await Promise.all([
+              loadResults(),
+              loadExceptions(),
+              loadMultiwayReport(),
+            ]);
+            updateMultiwayButtonState();
+          } catch (_) { }
+        }
       } catch (err) {
         updateStatus('OFFLINE');
         showToast('Could not initialize session: ' + err.message);
@@ -1162,8 +1206,12 @@
 
     function connectWS() {
       if (!State.sid) return;
+      if (State.ws) {
+        try { State.ws.onclose = null; State.ws.close(); } catch (_) { }
+      }
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws/v2/${State.sid}`);
+      State.ws = ws;
       ws.onmessage = ev => {
         try {
           const frame = JSON.parse(ev.data);
@@ -1185,7 +1233,11 @@
           }
         } catch { }
       };
-      ws.onclose = () => setTimeout(connectWS, 2500);
+      ws.onclose = () => {
+        if (State.ws === ws) {
+          setTimeout(connectWS, 2500);
+        }
+      };
     }
 
     function updateStatus(status, abortToken) {
