@@ -317,12 +317,13 @@ def run_cli(
         start_chat_repl(pipe, sid)
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
+def run_server(host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> None:
     """Launch the FastAPI server and open the web console in the default browser.
     
     Args:
         host: Network interface host to bind to.
         port: Network port to listen on.
+        reload: Enable uvicorn auto-reloading on code changes.
     """
     import threading
     import uvicorn
@@ -336,6 +337,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
         "app.server.main:app",
         host=host,
         port=port,
+        reload=reload,
         log_config={
             "version": 1,
             "disable_existing_loggers": False,
@@ -382,6 +384,7 @@ def main() -> None:
     parser.add_argument("--cli", action="store_true", help="Force CLI mode (skip auto-server)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Server host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="Server port (default: 8000)")
+    parser.add_argument("--reload", action="store_true", help="Enable uvicorn hot reloading for development")
     
     args = parser.parse_args()
 
@@ -401,7 +404,7 @@ def main() -> None:
             return
 
     if args.server:
-        run_server(host=args.host, port=args.port)
+        run_server(host=args.host, port=args.port, reload=args.reload)
     elif args.files:
         run_cli(
             files=args.files,
@@ -418,7 +421,7 @@ def main() -> None:
         # Default: launch web console when no files are provided
         print("# ⚡ Razorpay Reconciliation Agent", flush=True)
         print("No files specified — launching web console...\n", flush=True)
-        run_server(host=args.host, port=args.port)
+        run_server(host=args.host, port=args.port, reload=args.reload)
 
 
 if __name__ == "__main__":
