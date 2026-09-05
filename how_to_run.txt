@@ -3,27 +3,28 @@
                             HOW TO RUN
 ================================================================================
 
-All project source code, datasets, tests, documentation, and Docker configuration
-are located directly in the project root.
+All project code, bundled datasets, tests, documentation, and Docker configuration
+are located directly at the root of this repository.
 
-You can run the application using Docker (1-click, zero setup) or using Python locally.
+Choose either Docker Compose (1-click, zero setup) or Local Python below.
 
 --------------------------------------------------------------------------------
-METHOD 1: DOCKER COMPOSE (FASTEST & RECOMMENDED - ZERO SETUP)
+METHOD 1: DOCKER COMPOSE (FASTEST & RECOMMENDED — ZERO SETUP)
 --------------------------------------------------------------------------------
 Prerequisites: Docker & Docker Desktop installed and running.
 
-1. Open your terminal in the repository root directory.
+1. Open your terminal in this repository directory.
 
-2. Start the containerized application:
+2. Build and launch the containerized application:
      docker-compose up --build
 
-3. Open your browser and go to:
+3. Open your browser and navigate to:
      http://localhost:8000
 
-   - The Web Console dashboard will load immediately.
-   - All audit logs, uploads, and outputs persist automatically across container
-     restarts in Docker volume 'recon_data'.
+   - The dark-mode Single-Page Web Console dashboard loads immediately.
+   - Click "Load Sample Data" to load the bundled Banana or Supply Chain demos.
+   - All session uploads, audit logs, and outputs persist automatically across
+     restarts inside Docker volume 'recon_data'.
 
 To stop the server:
      Press Ctrl + C (or run: docker-compose down)
@@ -31,69 +32,89 @@ To stop the server:
 --------------------------------------------------------------------------------
 METHOD 2: LOCAL PYTHON (VIRTUAL ENVIRONMENT)
 --------------------------------------------------------------------------------
-Prerequisites: Python 3.10, 3.11, or 3.12+ installed.
+Prerequisites: Python 3.10, 3.11, 3.12, 3.13, or 3.14 installed.
 
 1. Open your terminal in the repository root directory.
 
 2. Create and activate a virtual environment:
+
    - On Windows (PowerShell):
-       python -m venv .venv
+       python -m venv --clear .venv
        .venv\Scripts\Activate.ps1
+
    - On Windows (Command Prompt):
-       python -m venv .venv
+       python -m venv --clear .venv
        .venv\Scripts\activate.bat
+
    - On Linux / macOS:
-       python3 -m venv .venv
+       python3 -m venv --clear .venv
        source .venv/bin/activate
 
-3. Install required dependencies:
-     pip install -r requirements.txt
+   *Note for PowerShell:* If script execution is restricted on your system, run:
+       Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 
-4. (Optional) Set your Gemini API key for live AI features:
+3. Install dependencies:
+     pip install -r requirements.txt
+     (or: python -m pip install -r requirements.txt)
+
+4. (Optional) Set your Gemini API key for live AI assistant features:
    - Copy the example environment file:
        cp .env.example .env
-   - Edit .env and enter your key:
+   - Edit .env and paste your key:
        GEMINI_API_KEY=your_key_here
        LLM_MODEL=gemma-4-31b-it
-   *Note: The engine works 100% offline in deterministic mode without any API key!*
+
+   *Note: The reconciliation engine runs 100% offline in deterministic mode
+   without requiring any API key or external network access!*
 
 5. Launch the Web Console Server:
      python -m src.app.server.main --host 127.0.0.1 --port 8000
-   OR:
-     python src/cli.py --server --host 127.0.0.1 --port 8000
-
-   - Open your browser and navigate to:
+   - Open your browser and go to:
        http://127.0.0.1:8000
 
 --------------------------------------------------------------------------------
 METHOD 3: RUN VIA TERMINAL COMMAND LINE (CLI)
 --------------------------------------------------------------------------------
-You can run automated reconciliations directly from the command line:
+You can execute automated reconciliations directly from the command line:
 
-1. Standard Two-File Reconciliation (payments vs bank):
-     python src/cli.py datasets/payments.csv datasets/bank.csv
+1. Clean 3-Way Reconciliation Demo (Banana Supply & Inventory - 3 Files):
+     python src/cli.py datasets/banana_supply_inventory/banana_orders.csv datasets/banana_supply_inventory/banana_gateway_ledger.csv datasets/banana_supply_inventory/banana_bank_statement.csv --multiway
 
-2. Multi-Partner Ecosystem Reconciliation (5-File Supply Chain):
-     python src/cli.py datasets/supply_chain_ecosystem/razorpay_x_ledger.csv datasets/supply_chain_ecosystem/hdfc_corporate_statement.csv datasets/supply_chain_ecosystem/icici_current_statement.csv datasets/supply_chain_ecosystem/urban_nest_po.csv datasets/supply_chain_ecosystem/megadist_invoice.csv
+2. Standard Tax Demo with Exactly 21 Discrepancies (Banana Supply & Inventory - Standard Tax):
+     python src/cli.py datasets/banana_supply_inventory_standard_tax/banana_orders.csv datasets/banana_supply_inventory_standard_tax/banana_bank_statement.csv --fee-rate 0.02 --gst-rate 0.18
 
-3. Pure Offline / Deterministic Mode (Zero-LLM, sub-second execution):
+3. 3-Way Reconciliation with Standard Tax (Banana Supply & Inventory - 3 Files):
+     python src/cli.py datasets/banana_supply_inventory_standard_tax/banana_orders.csv datasets/banana_supply_inventory_standard_tax/banana_gateway_ledger.csv datasets/banana_supply_inventory_standard_tax/banana_bank_statement.csv --fee-rate 0.02 --gst-rate 0.18
+
+4. Multi-Partner Ecosystem Reconciliation (5-File Supply Chain):
+     python src/cli.py datasets/supply_chain_ecosystem/razorpay_x_ledger.csv datasets/supply_chain_ecosystem/hdfc_corporate_statement.csv datasets/supply_chain_ecosystem/icici_current_statement.csv datasets/supply_chain_ecosystem/urban_nest_po.csv datasets/supply_chain_ecosystem/megadist_invoice.csv --multiway
+
+5. Pure Offline / Deterministic Mode (Zero-LLM, sub-second execution):
      python src/cli.py datasets/payments.csv datasets/bank.csv --deterministic
 
-4. Benchmark Evaluation Against Ground Truth:
+6. Benchmark Evaluation Against Ground Truth (Precision, Recall, F1):
      python src/cli.py datasets/payments.csv datasets/bank.csv --truth datasets/ground_truth.jsonl
 
-5. Interactive Grounded AI Chatbot in Terminal:
+7. Interactive Grounded AI Chatbot in Terminal:
      python src/cli.py datasets/payments.csv datasets/bank.csv --chat
 
-6. Export Output as Machine-Readable JSON:
+8. Export Output as Machine-Readable Structured JSON:
      python src/cli.py datasets/payments.csv datasets/bank.csv --json
+
+9. Clear all session logs, audit trails, and uploads:
+     python src/cli.py --clear-logs
+
+*(Note: Both 'src/cli.py' and 'src/main.py' can be used interchangeably).*
 
 --------------------------------------------------------------------------------
 METHOD 4: RUNNING THE AUTOMATED TEST SUITE
 --------------------------------------------------------------------------------
-Run the 42 test suites (unit, integration, end-to-end):
+Execute the 42 isolated test suites (unit, integration, end-to-end):
 
      pytest tests/ -v
+
+Test runs use ephemeral directory isolation to ensure no temporary test files
+ever pollute the local workspace data folders.
 
 --------------------------------------------------------------------------------
 DIRECTORY OVERVIEW
@@ -102,8 +123,9 @@ DIRECTORY OVERVIEW
     app/core/           - State machine, SHA-256 audit, PII masking, LLM gateway
     app/engine/         - Matching engine, fee/tax rules, multiway chaining
     app/server/         - FastAPI server, REST API v2, WebSocket stream
-    app/static/         - Single-Page Web UI (index.html)
+    app/static/         - Single-Page Web Console UI (index.html)
     cli.py              - Unified terminal CLI runner
+    main.py             - Backward-compatible entrypoint wrapper
   datasets/             - Bundled benchmark datasets (payments, bank, 5-file ecosystem)
   data/                 - Runtime artifacts outside src (uploads, logs, audit, outputs)
   tests/                - Isolated test suite (tests/unit, tests/integration, tests/e2e)

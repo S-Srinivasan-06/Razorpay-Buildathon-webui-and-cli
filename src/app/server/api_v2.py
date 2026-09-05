@@ -1023,6 +1023,16 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
     # Dataset-specific file lists
     DATASET_FILES: Dict[str, List[str]] = {
         "basic": ["payments.csv", "bank.csv"],
+        "banana_supply": [
+            "banana_supply_inventory/banana_orders.csv",
+            "banana_supply_inventory/banana_gateway_ledger.csv",
+            "banana_supply_inventory/banana_bank_statement.csv",
+        ],
+        "banana_standard_tax": [
+            "banana_supply_inventory_standard_tax/banana_orders.csv",
+            "banana_supply_inventory_standard_tax/banana_gateway_ledger.csv",
+            "banana_supply_inventory_standard_tax/banana_bank_statement.csv",
+        ],
         "supply_chain": [
             "supply_chain_ecosystem/urban_nest_po.csv",
             "supply_chain_ecosystem/megadist_invoice.csv",
@@ -1108,9 +1118,12 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
         advisory = (f"Loaded {len(loaded_files)} tables: UrbanNest POs → MegaDist Invoices → "
                     f"Razorpay X Ledger → HDFC/ICICI Bank Statements. "
                     f"Use 'Run Multi-Way Chaining' to reconcile all 5 legs and detect the 10 injected discrepancies.")
+    elif dataset in ("banana_standard_tax",):
+        advisory = (f"Loaded {len(loaded_files)} tables for Banana Supply & Inventory with Standard Tax. "
+                    f"Apply standard policy (2% fee + 18% GST) to surface exactly 21 discrepancies, or run 3-way chaining.")
     elif len(loaded_files) > 2:
-        advisory = (f"Loaded {len(loaded_files)} tables. Use 'Run Multi-Way Chaining' for full "
-                    f"3-way reconciliation (Sales ↔ Gateway ↔ Banks) or 'Run' for standard pairwise.")
+        advisory = (f"Loaded {len(loaded_files)} tables for Banana Supply & Inventory (3 Files). "
+                    f"Use 'Run Multi-Way Chaining' for clean 3-way reconciliation (Orders ↔ Gateway ↔ Bank).")
         
     if sid in CHAT_SESSIONS:
         CHAT_SESSIONS[sid].set_pipe(pipe)
@@ -1173,6 +1186,17 @@ async def run(sid: str, files: Optional[List[UploadFile]] = File(None)) -> Dict[
         except Exception as e:
             import traceback
             traceback.print_exc()
+            from app.core.channels import validate_and_route
+            from app.core.contracts import MessageKind
+            validate_and_route(
+                sid,
+                MessageKind.CONTROL,
+                {
+                    "event": "HALT",
+                    "detail": {"error": str(e)},
+                },
+                "system",
+            )
 
     threading.Thread(target=work, daemon=True).start()
     return {"ok": True, "files": [p.name for p in paths]}

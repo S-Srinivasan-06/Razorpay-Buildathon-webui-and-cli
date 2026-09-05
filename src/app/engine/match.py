@@ -148,7 +148,7 @@ def _sim(a: Any, b: Any) -> float:
     return round(1 - _lev(a_str, b_str) / max(len(a_str), len(b_str), 1), 3)
 
 
-def _busdays(d1: datetime.date, d2: datetime.date) -> int:
+def _busdays(d1: Any, d2: Any) -> int:
     """Calculate the number of business days (Monday through Friday) between two dates.
     
     Excludes weekend days to avoid falsely penalizing banking clearing delays.
@@ -161,19 +161,32 @@ def _busdays(d1: datetime.date, d2: datetime.date) -> int:
     Returns:
         Integer count of business days between d1 and d2.
     """
-    a, b = sorted((d1, d2))
+    if d1 is None or d2 is None or pd.isna(d1) or pd.isna(d2):
+        return 0
     try:
+        a, b = sorted((d1, d2))
         return int(np.busday_count(a, b))
     except Exception:
         # Fallback closed-form computation if dates are edge-case objects
-        diff_days = (b - a).days
-        full_weeks, extra_days = divmod(diff_days, 7)
-        return full_weeks * 5 + min(extra_days, 5)
+        try:
+            diff_days = abs((d2 - d1).days)
+            full_weeks, extra_days = divmod(diff_days, 7)
+            return full_weeks * 5 + min(extra_days, 5)
+        except Exception:
+            return 0
 
 
-def _d(v: Any) -> datetime.date:
-    """Parse an arbitrary timestamp or date string into a standard date object."""
-    return pd.to_datetime(v).date()
+def _d(v: Any) -> Optional[datetime.date]:
+    """Parse an arbitrary timestamp or date string into a standard date object, or None if missing/invalid."""
+    if v is None or v == "" or pd.isna(v):
+        return None
+    try:
+        ts = pd.to_datetime(v)
+        if pd.isna(ts):
+            return None
+        return ts.date() if hasattr(ts, "date") else None
+    except Exception:
+        return None
 
 
 def fee_explains(
@@ -282,15 +295,20 @@ def score_pair(
     # 3. Date window scoring in business days
     ddiff = None
     if cfg.get("left_date") and cfg.get("right_date"):
-        ddiff = _busdays(_d(l[cfg["left_date"]]), _d(r[cfg["right_date"]]))
-        comps["date"] = max(0.0, 1 - ddiff / win)
-        w["date"] = REG["w_match_date"]
+        dl = _d(l.get(cfg["left_date"]))
+        dr = _d(r.get(cfg["right_date"]))
+        if dl is not None and dr is not None:
+            ddiff = _busdays(dl, dr)
+            comps["date"] = max(0.0, 1 - ddiff / win)
+            w["date"] = REG["w_match_date"]
+        else:
+            fallback_events.append("date_component_skipped")
 
     # 4. Semantic similarity scoring
-    if key == 1.0:
+    if key == 1.0 or (key >= 0.80 and (raw_matched or fee_x)):
         comps["semantic"], w["semantic"] = 1.0, REG["w_match_semantic"]
-    elif key < 0.35:
-        comps["semantic"], w["semantic"] = 0.0, REG["w_match_semantic"]
+    elif key < 0.35 or not (raw_matched or fee_x):
+        comps["semantic"], w["semantic"] = key if (raw_matched or fee_x) else 0.0, REG["w_match_semantic"]
     else:
         sem, fb = dispatch_tool_call(sid, SEM_TOOL, {"left": l, "right": r})
         if isinstance(sem, SemResult):

@@ -25,6 +25,16 @@ class RuleCompilerResult(BaseModel):
     clarifying_question: Optional[str] = None
 
 
+def _extract_global_tds_rate(text: str) -> float:
+    """Extract a flat TDS rate stated anywhere in the instruction (e.g. '...and 1% TDS').
+
+    TDS is typically a single blanket withholding policy rather than a per-segment
+    rate, so one match is applied uniformly to every rule this call compiles.
+    """
+    m = re.search(r"(\d+(?:\.\d+)?)\s*%\s*tds", text, re.IGNORECASE)
+    return float(m.group(1)) / 100.0 if m else 0.0
+
+
 def compile_rules_from_text(instruction: str) -> RuleCompilerResult:
     """Compile natural language text into segment rules with ambiguity validation.
     
@@ -35,6 +45,7 @@ def compile_rules_from_text(instruction: str) -> RuleCompilerResult:
         RuleCompilerResult containing parsed rules or ambiguity questions.
     """
     text = instruction.strip()
+    tds_rate = _extract_global_tds_rate(text)
     rules: List[FeeTaxRule] = []
     
     # 1. Percentage Range Pattern: e.g. "first 20% rows have 2% fee and 18% gst, the next 80% have 1.5% fee and 18% gst"
@@ -102,6 +113,10 @@ def compile_rules_from_text(instruction: str) -> RuleCompilerResult:
                     f"What fee and tax rate should apply to the remaining {100 - total_covered:.1f}% of rows?"
                 ),
             )
+        if tds_rate:
+            for r in rules:
+                r.tds_rate = tds_rate
+                r.label += f" + {tds_rate*100:.1f}% TDS"
         return RuleCompilerResult(rules=rules, coverage_pct=total_covered, has_ambiguity=False)
 
     # 2. Column / Method Equality Pattern: e.g. "if method is upi use 0% fee, if credit_card use 1.8% fee"
@@ -149,6 +164,10 @@ def compile_rules_from_text(instruction: str) -> RuleCompilerResult:
                 source="ai_interpreted",
             )
             rules.append(rule)
+        if tds_rate:
+            for r in rules:
+                r.tds_rate = tds_rate
+                r.label += f" + {tds_rate*100:.1f}% TDS"
         return RuleCompilerResult(rules=rules, coverage_pct=100.0, has_ambiguity=False)
 
     if cat_matches:
@@ -169,6 +188,10 @@ def compile_rules_from_text(instruction: str) -> RuleCompilerResult:
                 source="ai_interpreted",
             )
             rules.append(rule)
+        if tds_rate:
+            for r in rules:
+                r.tds_rate = tds_rate
+                r.label += f" + {tds_rate*100:.1f}% TDS"
         return RuleCompilerResult(rules=rules, coverage_pct=100.0, has_ambiguity=False)
 
     # 3. Simple Flat Global Policy fallback if mentioned
@@ -185,7 +208,12 @@ def compile_rules_from_text(instruction: str) -> RuleCompilerResult:
             priority=1,
             source="ai_interpreted",
         )
-        return RuleCompilerResult(rules=[rule], coverage_pct=100.0, has_ambiguity=False)
+        rules = [rule]
+        if tds_rate:
+            for r in rules:
+                r.tds_rate = tds_rate
+                r.label += f" + {tds_rate*100:.1f}% TDS"
+        return RuleCompilerResult(rules=rules, coverage_pct=100.0, has_ambiguity=False)
 
     return RuleCompilerResult(
         rules=[],

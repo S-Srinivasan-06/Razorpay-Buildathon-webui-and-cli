@@ -270,17 +270,7 @@
           <button id="btnExport" title="Export Reconciled CSV"
             class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
             <i data-lucide="download" class="h-3.5 w-3.5 text-slate-700"></i>
-            <span class="hidden sm:inline">CSV</span>
-          </button>
-          <button id="btnExportJson" title="Export Report JSON"
-            class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
-            <i data-lucide="file-json" class="h-3.5 w-3.5 text-slate-700"></i>
-            <span class="hidden sm:inline">Report JSON</span>
-          </button>
-          <button id="btnExportAudit" title="Export Audit Trail JSONL"
-            class="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 font-medium hover:bg-slate-50 text-ink transition text-xs">
-            <i data-lucide="shield-check" class="h-3.5 w-3.5 text-slate-700"></i>
-            <span class="hidden sm:inline">Audit JSONL</span>
+            <span class="hidden sm:inline">Export CSV</span>
           </button>
         </div>
       </div>
@@ -358,7 +348,8 @@
                 <div class="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-1 shadow-sm">
                   <select id="selectSampleDataset"
                     class="rounded-lg bg-transparent px-2.5 py-1.5 text-xs font-semibold text-ink outline-none cursor-pointer">
-                    <option value="basic">Banana Supply &amp; Inventory Demo (2 Files)</option>
+                    <option value="banana_supply">Banana Supply &amp; Inventory (3 Files)</option>
+                    <option value="banana_standard_tax">Banana Supply &amp; Inventory with Standard Tax (3 Files)</option>
                     <option value="supply_chain">UrbanNest &mdash; MegaDist Supply Chain (5 Files)</option>
                   </select>
                   <button id="btnSample"
@@ -2234,12 +2225,6 @@
       });
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') closeInspectModal();
-      });
-      $('#btnExportJson')?.addEventListener('click', () => {
-        if (State.sid) window.open(`${API}/sessions/${State.sid}/export/report.json`, '_blank');
-      });
-      $('#btnExportAudit')?.addEventListener('click', () => {
-        if (State.sid) window.open(`${API}/sessions/${State.sid}/export/audit.jsonl`, '_blank');
       });
       $('#btnExportJournal')?.addEventListener('click', () => {
         if (State.sid) window.open(`${API}/sessions/${State.sid}/export/journal.csv`, '_blank');

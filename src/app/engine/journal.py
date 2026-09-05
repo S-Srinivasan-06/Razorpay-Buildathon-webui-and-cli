@@ -74,27 +74,33 @@ def generate_journal_entries(
     # matched_pairs may be raw dicts with 'gateway_fee' and 'gst', or MapResult-like objects.
     _bp_base = 0.0
     _bp_gst = 0.0
+    _bp_tds = 0.0
     for mp in matched_pairs:
         if isinstance(mp, dict):
             _bp_base += float(mp.get("gateway_fee", 0.0))
             _bp_gst += float(mp.get("gst", 0.0))
+            _bp_tds += float(mp.get("tds", 0.0))
         else:
             _bp_base += float(getattr(mp, "gateway_fee", 0.0))
             _bp_gst += float(getattr(mp, "gst", 0.0))
+            _bp_tds += float(getattr(mp, "tds", 0.0))
     
     if total_fees > 0 and matched_gross > 0:
-        if _bp_base > 0 or _bp_gst > 0:
+        if _bp_base > 0 or _bp_gst > 0 or _bp_tds > 0:
             # Use per-rule totals from breakdowns
             base_fee = round(_bp_base, 2)
             gst_itc = round(_bp_gst, 2)
+            tds_recv = round(_bp_tds, 2)
         else:
             # Fallback: assume 18% GST split only when no breakdown detail is available
             base_fee = round(total_fees / 1.18, 2)
             gst_itc = round(total_fees - base_fee, 2)
+            tds_recv = 0.0
         net_bank_matched = round(matched_gross - total_fees, 2)
     else:
         base_fee = 0.0
         gst_itc = 0.0
+        tds_recv = 0.0
         net_bank_matched = matched_gross
 
     if matched_gross > 0:
@@ -110,6 +116,10 @@ def generate_journal_entries(
         if gst_itc > 0:
             lines.append(
                 JournalEntryLine(account="GST Input Tax Credit (ITC) Receivable", debit=gst_itc, credit=0.0)
+            )
+        if tds_recv > 0:
+            lines.append(
+                JournalEntryLine(account="TDS Receivable (Advance Tax Asset)", debit=tds_recv, credit=0.0)
             )
         
         # Credit Gateway Clearing Account for total gross settled

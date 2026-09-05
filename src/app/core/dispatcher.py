@@ -170,6 +170,9 @@ def dispatch_tool_call(
         except Exception as e:
             err = e
             _count_failure(sid, tool.name)
+            # On network timeout or unreachable endpoint, break immediately to avoid compounding latency
+            if isinstance(e, (TimeoutError, OSError)):
+                break
 
     # 5. All retries failed — invoke deterministic fallback
     validate_and_route(

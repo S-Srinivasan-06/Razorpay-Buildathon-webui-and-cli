@@ -168,27 +168,41 @@ def run_multiway_chaining(
         "system"
     )
 
+    # Build cross-reference dictionary across sales tables if PO/Invoice chaining is present
+    sales_alias_map: Dict[str, str] = {}
+    for s_name in sales_tables:
+        for row in tables.get(s_name, []):
+            p_val = str(row.get("ref_po_id") or row.get("po_id") or "").strip().upper()
+            i_val = str(row.get("invoice_no") or row.get("invoice_id") or row.get("linked_invoice") or "").strip().upper()
+            if p_val and i_val:
+                sales_alias_map[p_val] = i_val
+                sales_alias_map[i_val] = p_val
+
     # ---- Hub column resolution ----
     sample_hub = hub_rows[0] if hub_rows else {}
-    hub_order_col = _find_col(sample_hub, ["order_id", "order_ref", "reference_id", "id", "ref"]) or "order_id"
-    hub_gross_col = _find_col(sample_hub, ["gross_inr", "gross_amount", "gross", "order_amount", "amount", "total"]) or "gross_amount"
+    hub_order_col = _find_col(sample_hub, ["linked_invoice", "invoice_no", "order_id", "order_ref", "reference_id", "id", "ref"]) or "order_id"
+    hub_utr_col = _find_col(sample_hub, ["settlement_utr", "utr_number", "ref_utr", "utr", "payout_utr", "bank_ref"])
+    hub_gross_col = _find_col(sample_hub, ["principal_amt", "gross_inr", "gross_amount", "gross", "order_amount", "amount", "total"]) or "gross_amount"
     # Exclude "profit" to avoid matching 'razorpay_net_profit' as a net settlement column
     hub_net_col = _find_col(
         sample_hub,
-        ["net_settled_inr", "net_settlement_amount", "settlement_amount", "net_settled", "net_credit", "net_amount"],
+        ["net_payout_supplier", "net_settled_inr", "net_settlement_amount", "settlement_amount", "net_settled", "net_credit", "net_amount"],
         exclude=["profit"],
     )
-    hub_fee_col = _find_col(sample_hub, ["gateway_fee_inr", "gateway_fee", "merchant_fee_collected", "fee", "charges", "mdr"])
-    hub_gst_col = _find_col(sample_hub, ["gst_on_fee_inr", "tax_gst", "gst_on_fee", "gst", "tax"], exclude=["goods_tax_rate", "food_tax_rate"])
+    hub_fee_col = _find_col(sample_hub, ["platform_fee_amt", "gateway_fee_inr", "gateway_fee", "merchant_fee_collected", "fee", "charges", "mdr"])
+    hub_gst_col = _find_col(sample_hub, ["tds_deducted", "gst_on_fee_inr", "tax_gst", "gst_on_fee", "gst", "tax"], exclude=["goods_tax_rate", "food_tax_rate"])
     hub_bank_charge_col = _find_col(sample_hub, ["bank_gateway_charge", "bank_charge", "interchange"])
-    hub_date_col = _find_col(sample_hub, ["settlement_date", "clearing_date", "created_at", "transaction_date", "date"]) or "date"
+    hub_date_col = _find_col(sample_hub, ["created_at", "payout_date", "settlement_date", "clearing_date", "transaction_date", "date"]) or "date"
 
-    # Index hub rows by order reference
+    # Index hub rows by order reference and alternative identifiers
     hub_by_order: Dict[str, Dict[str, Any]] = {}
     for r in hub_rows:
-        order_val = str(r.get(hub_order_col, "")).strip().upper()
-        if order_val:
-            hub_by_order[order_val] = r
+        for k in (hub_order_col, "linked_invoice", "rzp_txn_id", "order_id", "order_ref", "id"):
+            order_val = str(r.get(k, "")).strip().upper()
+            if order_val:
+                hub_by_order[order_val] = r
+                if order_val in sales_alias_map:
+                    hub_by_order[sales_alias_map[order_val]] = r
 
     # Track matched pairs and exceptions for journal entry generation
     multiway_matched: List[Dict[str, Any]] = []
@@ -208,14 +222,17 @@ def run_multiway_chaining(
     for s_name in sales_tables:
         s_rows = tables.get(s_name, [])
         for s_idx, s in enumerate(s_rows):
-            s_order_col = _find_col(s, ["order_ref", "order_id", "id", "ref"]) or "order_id"
-            s_amt_col = _find_col(s, ["gross_inr", "gross_amount", "gross", "order_total", "amount", "total"]) or "amount"
+            s_order_col = _find_col(s, ["invoice_no", "po_id", "ref_po_id", "order_ref", "order_id", "id", "ref"]) or "order_id"
+            s_amt_col = _find_col(s, ["invoice_total", "total_payable", "gross_inr", "gross_amount", "gross", "order_total", "amount", "total"]) or "amount"
             order_id = str(s.get(s_order_col, "")).strip().upper()
             amt = float(s.get(s_amt_col, 0.0) or 0.0)
             total_sales_gross += amt
 
-            if order_id in hub_by_order:
-                hub_rec = hub_by_order[order_id]
+            hub_rec = hub_by_order.get(order_id)
+            if not hub_rec and order_id in sales_alias_map:
+                hub_rec = hub_by_order.get(sales_alias_map[order_id])
+
+            if hub_rec:
                 hub_gross = float(hub_rec.get(hub_gross_col, 0.0) or 0.0)
 
                 # Reconstruct gross from net + fee if gross column is missing/zero
@@ -233,6 +250,7 @@ def run_multiway_chaining(
                     # Compute fee/gst breakdown for journal entries
                     h_fee = float(hub_rec.get(hub_fee_col, 0.0) or 0.0) if hub_fee_col else 0.0
                     h_gst = float(hub_rec.get(hub_gst_col, 0.0) or 0.0) if hub_gst_col else 0.0
+                    h_tds = 0.0
                     if h_fee == 0.0 and (rules or schedule):
                         brk = compute_deduction_breakdown(
                             amt, rules=rules, schedule=schedule,
@@ -240,12 +258,14 @@ def run_multiway_chaining(
                         )
                         h_fee = brk["gateway_fee"]
                         h_gst = brk["gst"]
+                        h_tds = brk["tds"]
                     multiway_matched.append({
                         "order_ref": order_id,
                         "gross": amt,
-                        "net": round(amt - h_fee - h_gst, 2),
+                        "net": round(amt - h_fee - h_gst - h_tds, 2),
                         "gateway_fee": h_fee,
                         "gst": h_gst,
+                        "tds": h_tds,
                     })
                 else:
                     sales_unmatched_count += 1
@@ -299,22 +319,21 @@ def run_multiway_chaining(
     for b_name in bank_tables:
         b_rows = tables.get(b_name, [])
         for b in b_rows:
-            # Prioritize columns that contain the actual order reference matching hub_by_order
-            ref_val = ""
-            for cand_col in ("order_reference", "order_ref", "order_id", "utr", "transaction_ref", "bank_ref", "ref"):
-                col = _find_col(b, [cand_col])
-                if col and str(b.get(col, "")).strip():
-                    val = str(b.get(col, "")).strip().upper()
-                    if val in hub_by_order:
-                        ref_val = val
-                        break
-            if not ref_val:
-                b_ref_col = _find_col(b, ["order_reference", "order_ref", "order_id", "utr", "transaction_ref", "bank_ref", "ref"]) or "utr"
-                ref_val = str(b.get(b_ref_col, "")).strip().upper()
-
-            b_credit_col = _find_col(b, ["credit_inr", "credit", "deposit_amount", "deposit", "net_amount", "amount"]) or "credit"
-            b_debit_col = _find_col(b, ["debit_inr", "debit", "withdrawal", "refund"])
+            b_credit_col = _find_col(b, ["credit_amt", "deposit_amt", "credit_inr", "credit", "deposit_amount", "deposit", "net_amount", "amount"]) or "credit"
+            b_debit_col = _find_col(b, ["debit_amt", "withdrawal_amt", "debit_inr", "debit", "withdrawal", "refund"])
             credit_val = float(b.get(b_credit_col, 0.0) or 0.0)
+
+            ref_vals: Set[str] = set()
+            for cand_col in ("ref_utr", "utr_number", "settlement_utr", "order_reference", "order_ref", "order_id", "utr", "transaction_ref", "bank_ref", "ref"):
+                c = _find_col(b, [cand_col])
+                if c and str(b.get(c, "")).strip():
+                    ref_vals.add(str(b.get(c)).strip().upper())
+
+            desc = str(b.get("description") or b.get("narration") or "").strip().upper()
+            if desc:
+                for token in re.findall(r"[A-Z0-9_\-]+", desc):
+                    if len(token) >= 5:
+                        ref_vals.add(token)
 
             if b_debit_col and float(b.get(b_debit_col, 0.0) or 0.0) > 0:
                 total_refund_debits += float(b.get(b_debit_col, 0.0))
@@ -322,9 +341,9 @@ def run_multiway_chaining(
                 total_refund_debits += abs(credit_val)
             else:
                 total_bank_credits += credit_val
-                if ref_val:
-                    bank_credits_by_ref[ref_val] = b
-                else:
+                for r_val in ref_vals:
+                    bank_credits_by_ref[r_val] = b
+                if not ref_vals:
                     unmatched_bank_rows.append(b)
 
     # Match Hub records to Bank deposits
@@ -335,6 +354,7 @@ def run_multiway_chaining(
     in_transit_t7_plus = 0.0
     total_fees_withheld = 0.0
     total_gst_withheld = 0.0
+    total_tds_withheld = 0.0
     total_bank_charges = 0.0
     gateway_variance_count = 0
     gateway_variance_value = 0.0
@@ -343,11 +363,14 @@ def run_multiway_chaining(
 
     for h_idx, h in enumerate(hub_rows):
         order_ref = str(h.get(hub_order_col, "")).strip().upper()
+        h_utr = str(h.get(hub_utr_col, "")).strip().upper() if hub_utr_col else ""
+        h_txn = str(h.get("rzp_txn_id", "")).strip().upper()
         h_gross = float(h.get(hub_gross_col, 0.0) or 0.0)
         h_fee = float(h.get(hub_fee_col, 0.0) or 0.0) if hub_fee_col else 0.0
         h_gst = float(h.get(hub_gst_col, 0.0) or 0.0) if hub_gst_col else 0.0
         h_bank_charge = float(h.get(hub_bank_charge_col, 0.0) or 0.0) if hub_bank_charge_col else 0.0
         h_date_str = str(h.get(hub_date_col, "2026-03-01"))[:10]
+        h_tds = 0.0
 
         # Reconstruct gross from net + fee if gross column is missing/zero
         if h_gross <= 0.0:
@@ -360,8 +383,21 @@ def run_multiway_chaining(
         if h_gross <= 0.0:
             continue
 
+        # File didn't provide a fee and there's no bank-charge override column —
+        # let the rules/schedule engine derive fee, GST, and TDS from gross,
+        # mirroring the Leg 1 fallback so both legs stay consistent.
+        if h_fee == 0.0 and h_bank_charge == 0.0 and (rules or schedule):
+            brk = compute_deduction_breakdown(
+                h_gross, rules=rules, schedule=schedule,
+                row=h, total_rows=len(hub_rows), row_idx=h_idx,
+            )
+            h_fee = brk["gateway_fee"]
+            h_gst = brk["gst"]
+            h_tds = brk["tds"]
+
         total_fees_withheld += h_fee
         total_gst_withheld += h_gst
+        total_tds_withheld += h_tds
         total_bank_charges += h_bank_charge
 
         # Compute expected net using the resolution chain
@@ -370,22 +406,30 @@ def run_multiway_chaining(
             hub_bank_charge_col, rules, schedule, len(hub_rows), h_idx,
         )
 
-        # Check if matched in bank
-        bank_match = bank_credits_by_ref.get(order_ref)
+        # Check if matched in bank across UTR, order reference, or transaction id
+        bank_match = None
+        matched_bank_key = None
+        for k in (h_utr, order_ref, h_txn):
+            if k and k in bank_credits_by_ref:
+                bank_match = bank_credits_by_ref[k]
+                matched_bank_key = k
+                break
+
         if bank_match:
-            b_credit_col = _find_col(bank_match, ["credit_inr", "credit", "deposit_amount", "deposit", "net_amount", "amount"]) or "credit"
+            b_credit_col = _find_col(bank_match, ["credit_amt", "deposit_amt", "credit_inr", "credit", "deposit_amount", "deposit", "net_amount", "amount"]) or "credit"
             b_credit = float(bank_match.get(b_credit_col, 0.0) or 0.0)
 
             if abs(h_net - b_credit) <= tolerance:
                 fully_reconciled_count += 1
                 settled_in_bank_value += b_credit
-                matched_bank_refs.add(order_ref)
+                matched_bank_refs.add(matched_bank_key or order_ref)
                 multiway_matched.append({
                     "order_ref": order_ref,
                     "gross": h_gross,
                     "net": b_credit,
                     "gateway_fee": h_fee,
                     "gst": h_gst,
+                    "tds": h_tds,
                 })
             else:
                 gateway_variance_count += 1
@@ -451,7 +495,7 @@ def run_multiway_chaining(
     )
 
     # Independent cross-check: gross sales minus all deductions minus refunds minus exceptions
-    effective_deductions = total_bank_charges if (hub_bank_charge_col and total_bank_charges > 0) else (total_fees_withheld + total_gst_withheld)
+    effective_deductions = total_bank_charges if (hub_bank_charge_col and total_bank_charges > 0) else (total_fees_withheld + total_gst_withheld + total_tds_withheld)
     expected_closing_independent = round(
         opening_balance
         + total_sales_gross
@@ -482,6 +526,7 @@ def run_multiway_chaining(
         in_transit_t7_plus=round(in_transit_t7_plus, 2),
         fees_withheld=round(total_fees_withheld, 2),
         gst_withheld=round(total_gst_withheld, 2),
+        tds_withheld=round(total_tds_withheld, 2),
         refund_chargeback_reserve=round(total_refund_debits, 2),
         exception_value_at_risk=round(exception_at_risk, 2),
         projected_closing=round(projected_closing, 2),
@@ -508,7 +553,7 @@ def run_multiway_chaining(
     totals = {
         "gross": round(total_sales_gross, 2),
         "net": round(settled_in_bank_value, 2),
-        "fees": round(total_fees_withheld + total_gst_withheld, 2),
+        "fees": round(total_fees_withheld + total_gst_withheld + total_tds_withheld, 2),
         "matched_value": round(sales_matched_value, 2),
         "exception_value": round(exception_at_risk, 2),
     }

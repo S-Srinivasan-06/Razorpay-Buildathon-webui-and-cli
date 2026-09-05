@@ -293,7 +293,8 @@ class Pipeline:
             for c in df.columns:
                 if c == "_rid":
                     continue
-                s = df[c].astype(str)
+                s_non_null = df[c].dropna().astype(str)
+                s_str = df[c].fillna("").astype(str)
                 num = pd.to_numeric(df[c], errors="coerce").notna().mean()
                 dat = pd.to_datetime(df[c], errors="coerce", format="mixed").notna().mean()
                 self.profiles[name].append(
@@ -304,10 +305,10 @@ class Pipeline:
                         date_ratio=float(dat),
                         cardinality=float(df[c].nunique() / max(len(df), 1)),
                         null_rate=float(df[c].isna().mean()),
-                        min_len=int(s.str.len().min() or 0),
-                        max_len=int(s.str.len().max() or 0),
-                        sample_values=s.head(3).tolist(),
-                        pii_likelihood=max((pii_score(c, v) for v in s.head(5)), default=0.0),
+                        min_len=int(s_non_null.str.len().min()) if len(s_non_null) > 0 else 0,
+                        max_len=int(s_non_null.str.len().max()) if len(s_non_null) > 0 else 0,
+                        sample_values=[str(x) for x in (s_non_null.head(3).tolist() if len(s_non_null) > 0 else s_str.head(3).tolist())],
+                        pii_likelihood=max((pii_score(c, str(v)) for v in s_str.head(5)), default=0.0),
                     )
                 )
         self._trace(
@@ -807,8 +808,9 @@ class Pipeline:
                 expected_net = deductions["expected_net"]
                 ctx["rule_label"] = deductions.get("rule_label")
                 ctx["tolerance_str"] = f"₹{row_tol:.2f} ({mode})"
-                ctx["fee_match"] = abs(expected_net - rv) <= row_tol and (deductions.get("gateway_fee", 0) > 0 or deductions.get("total_deductions", 0) > 0)
-                ctx["tax_match"] = (deductions.get("tds", 0) > 0 or deductions.get("gst", 0) > 0) and abs(expected_net - rv) <= row_tol
+                net_matches = abs(expected_net - rv) <= row_tol
+                ctx["fee_match"] = net_matches and deductions.get("gateway_fee", 0) > 0
+                ctx["tax_match"] = net_matches and (deductions.get("tds", 0) > 0 or deductions.get("gst", 0) > 0)
 
                 # Currency conversion / FX rate match (e.g. USD to INR conversion corridor)
                 if a > 0 and rv > 0:
@@ -818,14 +820,14 @@ class Pipeline:
                     ctx["fx_match"] = (1.0 / fx_max <= ratio <= 1.0 / fx_min) or (fx_min <= ratio <= fx_max)
 
                 ctx["partial"] = rv < a and not ctx["fee_match"] and not ctx["tax_match"]
-                if self.cfg.get("left_date"):
-                    dd = match._busdays(
-                        match._d(l[self.cfg["left_date"]]),
-                        match._d(cands[0][self.cfg["right_date"]]),
-                    )
-                    ctx["date_only_mismatch"] = dd > self.cfg["window_days"] and (
-                        abs(a - rv) <= row_tol or ctx["fee_match"]
-                    )
+                if self.cfg.get("left_date") and self.cfg.get("right_date") and cands:
+                    dl = match._d(l.get(self.cfg["left_date"]))
+                    dr = match._d(cands[0].get(self.cfg["right_date"]))
+                    if dl is not None and dr is not None:
+                        dd = match._busdays(dl, dr)
+                        ctx["date_only_mismatch"] = dd > self.cfg["window_days"] and (
+                            abs(a - rv) <= row_tol or ctx["fee_match"]
+                        )
             if not cands:
                 # Corroborate fuzzy key similarity with amount/fee consistency
                 a = float(l[self.cfg["left_amount"]]) if self.cfg.get("left_amount") else None

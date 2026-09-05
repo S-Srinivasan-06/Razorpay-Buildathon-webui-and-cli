@@ -134,6 +134,10 @@ def run_cli(
     deterministic: bool = False,
     chat: bool = False,
     out_dir: Optional[Path] = None,
+    multiway: bool = False,
+    fee_rate: Optional[float] = None,
+    gst_rate: Optional[float] = None,
+    tolerance: float = 0.01,
 ) -> None:
     """Execute reconciliation pipeline in terminal CLI mode and render results.
     
@@ -144,6 +148,11 @@ def run_cli(
         as_json: If True, prints output as structured JSON.
         deterministic: If True, disables external LLM calls and forces heuristic paths.
         chat: If True, launches interactive grounded chat REPL upon completion.
+        out_dir: Custom directory to save reconciliation outputs.
+        multiway: If True, forces 3-way multi-party settlement chaining engine.
+        fee_rate: Standard gateway fee rate percentage (e.g. 0.02 for 2%).
+        gst_rate: Standard GST rate percentage on fee (e.g. 0.18 for 18%).
+        tolerance: Amount matching tolerance threshold in INR (default: 0.01).
     """
     sid = uuid.uuid4().hex[:8]
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -174,36 +183,73 @@ def run_cli(
     print(f"- **Ingesting**: `{', '.join(str(f) for f in files)}`", flush=True)
     if truth:
         print(f"- **Ground Truth Benchmark**: `{truth}`", flush=True)
-    
+
+    is_multiway = multiway or len(files) >= 3
+    if multiway and len(files) < 3:
+        print("> ❌ **Error**: Multi-way reconciliation requires at least 3 datasets (Sales, Gateway Hub, Bank).", file=sys.stderr, flush=True)
+        sys.exit(1)
+
     t0 = time.time()
     pipe = Pipeline(sid=sid, auto_ack=auto_ack)
-    report = pipe.run(files, truth)
+    if fee_rate is not None or gst_rate is not None:
+        pipe.set_policy(fee_rate=fee_rate or 0.0, gst_rate=gst_rate or 0.0, tolerance=tolerance)
+        print(f"- **Policy Applied**: Fee Rate = {(fee_rate or 0.0)*100:.1f}%, GST Rate = {(gst_rate or 0.0)*100:.1f}%, Tolerance = INR {tolerance:.2f}", flush=True)
+
+    if is_multiway:
+        print("- **Engine**: 3-Way Multi-Party Settlement Chaining Engine", flush=True)
+        pipe.ingest(files)
+        from app.engine.multiway import run_multiway_chaining
+        mw_report = run_multiway_chaining(
+            sid,
+            pipe.tables,
+            rules=pipe.rules,
+            schedule=pipe.schedule,
+            tolerance=tolerance,
+        )
+        pipe.multiway_report = mw_report
+        report = None
+    else:
+        report = pipe.run(files, truth)
+        mw_report = None
+
     elapsed = time.time() - t0
 
     if as_json:
-        out = {
-            "session_id": sid,
-            "input_data": pipe.tables,
-            "report": report.model_dump(mode="json") if report else None,
-            "exceptions": [
-                {
-                    "rid": item["rec"].rid,
-                    "side": item["rec"].side,
-                    "ref": item["rec"].ref,
-                    "reason": item["rec"].reason.value if hasattr(item["rec"].reason, "value") else str(item["rec"].reason),
-                    "action": item.get("action", "pending"),
-                    "confidence": item.get("conf", 0.0),
-                    "delta": item["rec"].delta,
-                    "explanation": item.get("explanation") or getattr(item["rec"], "explanation", None),
-                    "evidence": [p.value if hasattr(p, "value") else str(p) for p in item.get("pieces", [])]
+        if is_multiway and mw_report:
+            out = {
+                "session_id": sid,
+                "mode": "multiway_chaining",
+                "input_data": pipe.tables,
+                "multiway_report": mw_report.model_dump(mode="json"),
+                "audit": {
+                    "records_count": len(audit_for(sid).records),
+                    "verified": audit_for(sid).verify()
                 }
-                for item in pipe.queue
-            ],
-            "audit": {
-                "records_count": len(audit_for(sid).records),
-                "verified": audit_for(sid).verify()
             }
-        }
+        else:
+            out = {
+                "session_id": sid,
+                "input_data": pipe.tables,
+                "report": report.model_dump(mode="json") if report else None,
+                "exceptions": [
+                    {
+                        "rid": item["rec"].rid,
+                        "side": item["rec"].side,
+                        "ref": item["rec"].ref,
+                        "reason": item["rec"].reason.value if hasattr(item["rec"].reason, "value") else str(item["rec"].reason),
+                        "action": item.get("action", "pending"),
+                        "confidence": item.get("conf", 0.0),
+                        "delta": item["rec"].delta,
+                        "explanation": item.get("explanation") or getattr(item["rec"], "explanation", None),
+                        "evidence": [p.value if hasattr(p, "value") else str(p) for p in item.get("pieces", [])]
+                    }
+                    for item in pipe.queue
+                ],
+                "audit": {
+                    "records_count": len(audit_for(sid).records),
+                    "verified": audit_for(sid).verify()
+                }
+            }
         print(json.dumps(out, indent=2), flush=True)
         if chat:
             start_chat_repl(pipe, sid)
@@ -217,15 +263,80 @@ def run_cli(
             continue
         cols = [k for k in rows[0].keys() if not k.startswith("_")]
         headers = ["#"] + cols
-        data_rows = [[i] + [r.get(c, "") for c in cols] for i, r in enumerate(rows, 1)]
-        print(f"\n### Table: `{tbl_name}` ({len(rows)} records)\n", flush=True)
+        data_rows = [[i] + [r.get(c, "") for c in cols] for i, r in enumerate(rows[:15], 1)]
+        suffix = f" (showing first 15 of {len(rows)} records)" if len(rows) > 15 else f" ({len(rows)} records)"
+        print(f"\n### Table: `{tbl_name}`{suffix}\n", flush=True)
         print(format_markdown_table(headers, data_rows), flush=True)
 
     # 2. Formatted Markdown Summary
-    print("\n---\n", flush=True)
-    print("## Reconciliation Report", flush=True)
-    
-    if report:
+    if is_multiway and mw_report:
+        print("\n---\n", flush=True)
+        print("## Multi-Way Chaining Reconciliation Report", flush=True)
+
+        mw_headers = ["Metric", "Value"]
+        mw_rows = [
+            ["Consolidated Match Rate", f"{mw_report.consolidated_match_rate:.1%}"],
+            ["Total Orders Evaluated", str(mw_report.total_orders_evaluated)],
+            ["Fully Reconciled Across All Legs", str(mw_report.fully_reconciled_count)],
+            ["Pending Bank Clearing / In-Transit", str(mw_report.pending_bank_clearing_count)],
+            ["Gateway Fee/Amount Variances", str(mw_report.gateway_variance_count)],
+            ["Dropped by Gateway", str(mw_report.dropped_by_gateway_count)],
+            ["Execution Time", f"{elapsed:.2f}s"],
+        ]
+        print("\n### Chaining Performance & Invariant Proofs\n", flush=True)
+        print(format_markdown_table(mw_headers, mw_rows), flush=True)
+
+        leg_headers = ["Leg", "Source Table", "Target Table", "Matched", "Unmatched", "Match Rate", "Matched Volume (INR)"]
+        leg_rows = [
+            [
+                leg.leg_name,
+                leg.source_table,
+                leg.target_table,
+                str(leg.matched_count),
+                str(leg.unmatched_count),
+                f"{leg.match_rate:.1%}",
+                f"₹{leg.matched_value:,.2f}",
+            ]
+            for leg in mw_report.legs
+        ]
+        print("\n### Settlement Chaining Legs\n", flush=True)
+        print(format_markdown_table(leg_headers, leg_rows), flush=True)
+
+        cp = mw_report.cash_position
+        cp_headers = ["Cash Flow & Settlement Component", "Amount (INR)"]
+        cp_rows = [
+            ["Opening Bank Balance", f"₹{cp.opening_balance:,.2f}"],
+            ["Gross Merchant Sales", f"₹{cp.gross_sales:,.2f}"],
+            ["Expected Gateway Settlements", f"₹{cp.expected_settlements:,.2f}"],
+            ["Settled in Operating Bank", f"₹{cp.settled_in_bank:,.2f}"],
+            ["Gateway Fees Withheld", f"₹{cp.fees_withheld:,.2f}"],
+            ["GST on Fees Withheld", f"₹{cp.gst_withheld:,.2f}"],
+            ["Total In-Transit / Pending Clearing", f"₹{cp.in_transit_total:,.2f}"],
+            ["Exception Value at Risk", f"₹{cp.exception_value_at_risk:,.2f}"],
+            ["Projected Closing Balance", f"₹{cp.projected_closing:,.2f}"],
+        ]
+        print("\n### Consolidated Cash Position & Settlement Aging\n", flush=True)
+        print(format_markdown_table(cp_headers, cp_rows), flush=True)
+
+        if mw_report.journal_entries:
+            jv_headers = ["Voucher ID", "Account", "Debit (INR)", "Credit (INR)"]
+            jv_rows = []
+            for jv in mw_report.journal_entries[:12]:
+                for line in jv.lines:
+                    jv_rows.append([
+                        jv.je_id,
+                        line.account,
+                        f"₹{line.debit:,.2f}" if line.debit > 0 else "—",
+                        f"₹{line.credit:,.2f}" if line.credit > 0 else "—",
+                    ])
+            suffix_jv = f" (showing first 12 of {len(mw_report.journal_entries)} vouchers)" if len(mw_report.journal_entries) > 12 else ""
+            print(f"\n### Double-Entry General Ledger Journal Vouchers{suffix_jv}\n", flush=True)
+            print(format_markdown_table(jv_headers, jv_rows), flush=True)
+
+    elif report:
+        print("\n---\n", flush=True)
+        print("## Reconciliation Report", flush=True)
+        
         perf_headers = ["Metric", "Value"]
         perf_rows = [
             ["Match Rate", f"{report.match_rate:.1%}"],
@@ -260,19 +371,19 @@ def run_cli(
         print(f"\n### Exception Queue Summary ({report.honest_exception_count} Total)\n", flush=True)
         print(format_markdown_table(q_headers, q_rows), flush=True)
     
-    if pipe.queue:
-        print("\n### Classified Discrepancies & Diagnostics\n", flush=True)
-        exc_headers = ["#", "Side", "Reference", "Discrepancy Class", "Action Status", "Delta (INR)", "Diagnostic & Root Cause"]
-        exc_rows = []
-        for i, item in enumerate(pipe.queue, 1):
-            rec = item["rec"]
-            action = item.get("action", "pending")
-            action_badge = "APPROVED [NO ERROR]" if action == "auto_resolve" else "REQUIRES ACTION [ERROR]"
-            delta_str = f"₹{rec.delta:,.2f}" if rec.delta is not None else "—"
-            reason_str = rec.reason.value if hasattr(rec.reason, "value") else str(rec.reason)
-            explanation = item.get("explanation") or getattr(rec, "explanation", "") or "No diagnostic available."
-            exc_rows.append([str(i), rec.side, str(rec.ref or "N/A"), reason_str, action_badge, delta_str, explanation])
-        print(format_markdown_table(exc_headers, exc_rows), flush=True)
+        if pipe.queue:
+            print("\n### Classified Discrepancies & Diagnostics\n", flush=True)
+            exc_headers = ["#", "Side", "Reference", "Discrepancy Class", "Action Status", "Delta (INR)", "Diagnostic & Root Cause"]
+            exc_rows = []
+            for i, item in enumerate(pipe.queue, 1):
+                rec = item["rec"]
+                action = item.get("action", "pending")
+                action_badge = "APPROVED [NO ERROR]" if action == "auto_resolve" else "REQUIRES ACTION [ERROR]"
+                delta_str = f"₹{rec.delta:,.2f}" if rec.delta is not None else "—"
+                reason_str = rec.reason.value if hasattr(rec.reason, "value") else str(rec.reason)
+                explanation = item.get("explanation") or getattr(rec, "explanation", "") or "No diagnostic available."
+                exc_rows.append([str(i), rec.side, str(rec.ref or "N/A"), reason_str, action_badge, delta_str, explanation])
+            print(format_markdown_table(exc_headers, exc_rows), flush=True)
 
     # 3. Cryptographic Audit Ledger Section
     audit_log = audit_for(sid)
@@ -290,11 +401,13 @@ def run_cli(
     # 4. Save Output Artifacts to Disk
     target_out = out_dir if out_dir else (OUTPUT_DIR / sid)
     target_out.mkdir(parents=True, exist_ok=True)
-    rep_path = target_out / "final_report.json"
+    rep_path = target_out / ("multiway_report.json" if is_multiway else "final_report.json")
     csv_path = target_out / "reconciliation_output.csv"
     aud_path = target_out / "audit_chain.jsonl"
     
-    if report:
+    if is_multiway and mw_report:
+        rep_path.write_text(mw_report.model_dump_json(indent=2), encoding="utf-8")
+    elif report:
         rep_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
     csv_str = export_reconciliation_csv_string(pipe)
     csv_path.write_text(csv_str, encoding="utf-8")
@@ -307,7 +420,7 @@ def run_cli(
     out_rows = [
         ["Session Output Directory", f"`{target_out}`"],
         ["Reconciliation Output CSV", f"`{csv_path}`"],
-        ["Final Report JSON", f"`{rep_path}`"],
+        ["Report JSON", f"`{rep_path}`"],
         ["Cryptographic Audit Ledger", f"`{aud_path}`"],
     ]
     print(format_markdown_table(out_headers, out_rows), flush=True)
@@ -378,6 +491,10 @@ def main() -> None:
     parser.add_argument("--deterministic", "--no-llm", action="store_true", help="Run in pure deterministic mode without external LLM calls")
     parser.add_argument("--json", action="store_true", help="Output final report as formatted JSON")
     parser.add_argument("--chat", "-i", action="store_true", help="Start continuous interactive chatbot REPL after reconciliation")
+    parser.add_argument("--multiway", "--3way", action="store_true", help="Run 3-way reconciliation chaining across sales, gateway, and bank statements")
+    parser.add_argument("--fee-rate", type=float, default=None, help="Standard gateway fee rate percentage (e.g. 0.02 for 2%%)")
+    parser.add_argument("--gst-rate", type=float, default=None, help="Standard GST rate on gateway fee (e.g. 0.18 for 18%%)")
+    parser.add_argument("--tolerance", type=float, default=0.01, help="Tolerance threshold for amount matching in INR (default: 0.01)")
     parser.add_argument("--clear-logs", action="store_true", help="Delete all session logs, audit trails, and uploads")
     parser.add_argument("--out-dir", type=Path, default=None, help="Custom directory to save reconciliation outputs (default: data/outputs/<session_id>/)")
     parser.add_argument("--server", action="store_true", help="Launch FastAPI REST/WebSocket server with web console")
@@ -414,6 +531,10 @@ def main() -> None:
             deterministic=args.deterministic,
             chat=args.chat,
             out_dir=args.out_dir,
+            multiway=args.multiway,
+            fee_rate=args.fee_rate,
+            gst_rate=args.gst_rate,
+            tolerance=args.tolerance,
         )
     elif args.cli:
         parser.print_help()

@@ -339,6 +339,7 @@ class CashPosition(BaseModel):
     in_transit_t7_plus: float
     fees_withheld: float
     gst_withheld: float
+    tds_withheld: float = 0.0
     refund_chargeback_reserve: float
     exception_value_at_risk: float
     projected_closing: float

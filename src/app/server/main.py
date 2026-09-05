@@ -236,31 +236,43 @@ async def run(sid: str, files: List[UploadFile] = File(...)) -> Dict[str, bool]:
         CHAT_SESSIONS[sid].set_pipe(pipe)
 
     def work():
-        pipe.run(paths)
-        if getattr(pipe, "queue", None) is not None:
+        try:
+            pipe.run(paths)
+            if getattr(pipe, "queue", None) is not None:
+                validate_and_route(
+                    sid,
+                    MessageKind.ARTIFACT,
+                    {
+                        "kind": "exceptions",
+                        "rows": [
+                            {
+                                "rid": i["rec"].rid,
+                                "side": i["rec"].side,
+                                "ref": i["rec"].ref,
+                                "reason": i["rec"].reason.value,
+                                "delta": i["rec"].delta,
+                                "confidence": round(i["conf"], 3),
+                                "action": i["action"],
+                                "pieces": [p.value if hasattr(p, "value") else p for p in i["pieces"]],
+                            }
+                            for i in pipe.queue
+                        ],
+                        "summary": {"count": len(pipe.queue)},
+                        "confidence_threshold": REG["exception_auto_resolve_confidence"],
+                        "fallback_events": pipe.fb,
+                    },
+                    "server",
+                )
+        except Exception as e:
+            logger.exception(f"[{sid}] Pipeline execution crashed: {e}")
             validate_and_route(
                 sid,
-                MessageKind.ARTIFACT,
+                MessageKind.CONTROL,
                 {
-                    "kind": "exceptions",
-                    "rows": [
-                        {
-                            "rid": i["rec"].rid,
-                            "side": i["rec"].side,
-                            "ref": i["rec"].ref,
-                            "reason": i["rec"].reason.value,
-                            "delta": i["rec"].delta,
-                            "confidence": round(i["conf"], 3),
-                            "action": i["action"],
-                            "pieces": [p.value if hasattr(p, "value") else p for p in i["pieces"]],
-                        }
-                        for i in pipe.queue
-                    ],
-                    "summary": {"count": len(pipe.queue)},
-                    "confidence_threshold": REG["exception_auto_resolve_confidence"],
-                    "fallback_events": pipe.fb,
+                    "event": "HALT",
+                    "detail": {"error": str(e)},
                 },
-                "server",
+                "system",
             )
 
     threading.Thread(target=work, daemon=True).start()

@@ -86,7 +86,7 @@ def _extract_json(text: str) -> Dict[str, Any]:
     return json.loads(text)
 
 
-def json_chat(tool_name: str, args: Dict[str, Any], timeout: float = 25.0) -> Dict[str, Any]:
+def json_chat(tool_name: str, args: Dict[str, Any], timeout: float = 6.0) -> Dict[str, Any]:
     """Invoke an LLM tool with temperature=0.0 and enforce a strict JSON output contract.
     
     Sends a structured prompt requesting only raw JSON without preamble or markdown,
@@ -144,7 +144,15 @@ def json_chat(tool_name: str, args: Dict[str, Any], timeout: float = 25.0) -> Di
     with urllib.request.urlopen(req, timeout=timeout) as r:
         d = json.loads(r.read())
 
-    raw_msg = d["candidates"][0]["content"]["parts"][0]["text"]
+    parts = d["candidates"][0]["content"].get("parts", [])
+    raw_msg = ""
+    for part in reversed(parts):
+        if not part.get("thought") and "text" in part:
+            raw_msg = part["text"]
+            break
+    if not raw_msg and parts:
+        raw_msg = parts[-1].get("text", "")
+
     u = d.get("usageMetadata", {})
     _last["estimated"] = "usageMetadata" not in d
     _last["in"] = u.get("promptTokenCount", len(prompt) // 4)
@@ -215,7 +223,14 @@ def conversational_chat(
     with urllib.request.urlopen(req, timeout=timeout) as r:
         d = json.loads(r.read())
 
-    raw_reply = d["candidates"][0]["content"]["parts"][0]["text"].strip()
+    parts = d["candidates"][0]["content"].get("parts", [])
+    raw_reply = ""
+    for part in reversed(parts):
+        if not part.get("thought") and "text" in part:
+            raw_reply = part["text"].strip()
+            break
+    if not raw_reply and parts:
+        raw_reply = parts[-1].get("text", "").strip()
 
     u = d.get("usageMetadata", {})
     t_in = u.get("promptTokenCount", sum(len(m.get("content", "")) for m in messages) // 4)

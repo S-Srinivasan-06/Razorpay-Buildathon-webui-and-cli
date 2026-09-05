@@ -170,7 +170,8 @@ def generate_explanation(
             f"(RIDs {targets}) net of payment gateway deductions.{rule_tag}{tol_tag}"
         )
     elif cat == HypothesisCategory.FEE_DEDUCTION:
-        return f"Approved [No Error]: Net bank deposit variance matches payment gateway fee policy.{rule_tag}{tol_tag}"
+        tax_note = " (inclusive of applicable GST/TDS)" if ctx.get("tax_match") else ""
+        return f"Approved [No Error]: Net bank deposit variance matches payment gateway fee policy{tax_note}.{rule_tag}{tol_tag}"
     elif cat == HypothesisCategory.TAX_WITHHOLDING:
         return f"Approved [No Error]: Variance matches configured tax withholding / GST deduction policy.{rule_tag}{tol_tag}"
     elif cat == HypothesisCategory.CURRENCY_CONVERSION:

@@ -74,14 +74,15 @@ class StateMachine:
         """Forcefully enter a state without lifecycle validation checks."""
         self.state = state
         self._token = secrets.token_hex(4)
+        detail_dict = {"info": str(detail)} if isinstance(detail, str) else (detail or {})
         validate_and_route(
             self.sid,
             MessageKind.CONTROL,
             {
                 "event": "STATE_ENTERED",
                 "state": state.value,
-                "token": self._token,
-                "detail": detail,
+                "abort_token": self._token,
+                "detail": detail_dict,
             },
             "system",
         )
@@ -127,7 +128,12 @@ class StateMachine:
             validate_and_route(
                 self.sid,
                 MessageKind.CONTROL,
-                {"event": "STATE_EXITED", "state": self.state.value},
+                {
+                    "event": "STATE_EXITED",
+                    "state": self.state.value,
+                    "abort_token": self._token,
+                    "detail": {},
+                },
                 "system",
             )
         self.enter(to, detail)
