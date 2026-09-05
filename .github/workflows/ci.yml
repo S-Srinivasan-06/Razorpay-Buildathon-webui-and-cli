@@ -27,9 +27,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r razorpay-recon/requirements.txt
+          pip install -r requirements.txt
 
       - name: Run Pytest Test Suite
-        working-directory: razorpay-recon
         run: |
           pytest tests/ -v
+

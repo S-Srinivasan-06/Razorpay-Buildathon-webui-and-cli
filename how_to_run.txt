@@ -3,9 +3,8 @@
                             HOW TO RUN
 ================================================================================
 
-All project source code, assets, tests, documentation, and Docker configuration
-are located inside the folder:
-  razorpay-recon/
+All project source code, datasets, tests, documentation, and Docker configuration
+are located directly in the project root.
 
 You can run the application using Docker (1-click, zero setup) or using Python locally.
 
@@ -14,8 +13,7 @@ METHOD 1: DOCKER COMPOSE (FASTEST & RECOMMENDED - ZERO SETUP)
 --------------------------------------------------------------------------------
 Prerequisites: Docker & Docker Desktop installed and running.
 
-1. Open your terminal in this directory and navigate into the folder:
-     cd razorpay-recon
+1. Open your terminal in the repository root directory.
 
 2. Start the containerized application:
      docker-compose up --build
@@ -35,8 +33,7 @@ METHOD 2: LOCAL PYTHON (VIRTUAL ENVIRONMENT)
 --------------------------------------------------------------------------------
 Prerequisites: Python 3.10, 3.11, or 3.12+ installed.
 
-1. Open your terminal in this directory and navigate into the folder:
-     cd razorpay-recon
+1. Open your terminal in the repository root directory.
 
 2. Create and activate a virtual environment:
    - On Windows (PowerShell):
@@ -61,7 +58,9 @@ Prerequisites: Python 3.10, 3.11, or 3.12+ installed.
    *Note: The engine works 100% offline in deterministic mode without any API key!*
 
 5. Launch the Web Console Server:
-     python src/main.py --server --host 127.0.0.1 --port 8000
+     python -m src.app.server.main --host 127.0.0.1 --port 8000
+   OR:
+     python src/cli.py --server --host 127.0.0.1 --port 8000
 
    - Open your browser and navigate to:
        http://127.0.0.1:8000
@@ -71,52 +70,42 @@ METHOD 3: RUN VIA TERMINAL COMMAND LINE (CLI)
 --------------------------------------------------------------------------------
 You can run automated reconciliations directly from the command line:
 
-1. Navigate into the folder:
-     cd razorpay-recon
+1. Standard Two-File Reconciliation (payments vs bank):
+     python src/cli.py datasets/payments.csv datasets/bank.csv
 
-2. Standard Two-File Reconciliation (payments vs bank):
-     python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv
+2. Multi-Partner Ecosystem Reconciliation (5-File Supply Chain):
+     python src/cli.py datasets/supply_chain_ecosystem/razorpay_x_ledger.csv datasets/supply_chain_ecosystem/hdfc_corporate_statement.csv datasets/supply_chain_ecosystem/icici_current_statement.csv datasets/supply_chain_ecosystem/urban_nest_po.csv datasets/supply_chain_ecosystem/megadist_invoice.csv
 
-3. Multi-Way Reconciliation (3-File Banana Store Benchmark):
-     python src/main.py src/assets/sample_datasets/banana_multiway_3file/merchant_sales.csv src/assets/sample_datasets/banana_multiway_3file/gateway_settlements.csv src/assets/sample_datasets/banana_multiway_3file/bank_statement.csv
+3. Pure Offline / Deterministic Mode (Zero-LLM, sub-second execution):
+     python src/cli.py datasets/payments.csv datasets/bank.csv --deterministic
 
-4. Multi-Partner Ecosystem Reconciliation (5-File Supply Chain):
-     python src/main.py src/assets/sample_datasets/supply_chain_ecosystem/razorpay_x_ledger.csv src/assets/sample_datasets/supply_chain_ecosystem/hdfc_corporate_statement.csv src/assets/sample_datasets/supply_chain_ecosystem/icici_current_statement.csv src/assets/sample_datasets/supply_chain_ecosystem/urban_nest_po.csv src/assets/sample_datasets/supply_chain_ecosystem/megadist_invoice.csv
+4. Benchmark Evaluation Against Ground Truth:
+     python src/cli.py datasets/payments.csv datasets/bank.csv --truth datasets/ground_truth.jsonl
 
-5. Pure Offline / Deterministic Mode (Zero-LLM, sub-second execution):
-     python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --deterministic
+5. Interactive Grounded AI Chatbot in Terminal:
+     python src/cli.py datasets/payments.csv datasets/bank.csv --chat
 
-6. Benchmark Evaluation Against Ground Truth:
-     python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --truth src/assets/sample_datasets/ground_truth.jsonl
-
-7. Interactive Grounded AI Chatbot in Terminal:
-     python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --chat
-
-8. Export Output as Machine-Readable JSON:
-     python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --json
+6. Export Output as Machine-Readable JSON:
+     python src/cli.py datasets/payments.csv datasets/bank.csv --json
 
 --------------------------------------------------------------------------------
 METHOD 4: RUNNING THE AUTOMATED TEST SUITE
 --------------------------------------------------------------------------------
 Run the 42 test suites (unit, integration, end-to-end):
 
-1. Navigate into the folder:
-     cd razorpay-recon
-
-2. Run pytest:
      pytest tests/ -v
 
 --------------------------------------------------------------------------------
-DIRECTORY OVERVIEW INSIDE 'razorpay-recon/'
+DIRECTORY OVERVIEW
 --------------------------------------------------------------------------------
   src/                  - Core application source code
     app/core/           - State machine, SHA-256 audit, PII masking, LLM gateway
     app/engine/         - Matching engine, fee/tax rules, multiway chaining
     app/server/         - FastAPI server, REST API v2, WebSocket stream
-    app/data/           - Benchmark & enterprise dataset generators
-    assets/             - Bundled benchmark datasets (payments, bank, 3-file, 5-file)
-    static/             - Single-Page Web UI (index.html)
-    main.py             - Unified CLI & Web Console entry point
+    app/static/         - Single-Page Web UI (index.html)
+    cli.py              - Unified terminal CLI runner
+  datasets/             - Bundled benchmark datasets (payments, bank, 5-file ecosystem)
+  data/                 - Runtime artifacts outside src (uploads, logs, audit, outputs)
   tests/                - Isolated test suite (tests/unit, tests/integration, tests/e2e)
   docs/                 - Architecture, Security & Audit, Hardening Post-Mortem
   Dockerfile            - Multi-stage slim Docker build

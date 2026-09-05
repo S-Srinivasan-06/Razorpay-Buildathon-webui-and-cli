@@ -11,9 +11,15 @@ import json
 import logging
 import os
 from pathlib import Path
+import sys
 import threading
 from typing import Any, Dict, List, Optional, Set
 import uuid
+
+# Ensure src/ is in sys.path for direct module execution
+_SRC_DIR = Path(__file__).resolve().parent.parent.parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket
 from pydantic import BaseModel
@@ -435,4 +441,18 @@ def abort(sid: str, body: Dict[str, Any]) -> Dict[str, bool]:
     """Request pipeline abort using the active state abort token."""
     SESSIONS[sid]["pipe"].sm.request_abort(body["token"])
     return {"ok": True}
+
+
+if __name__ == "__main__":
+    import argparse
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="Razorpay Reconciliation Web Server")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    parser.add_argument("--reload", action="store_true", help="Enable uvicorn auto-reload")
+    args = parser.parse_args()
+
+    uvicorn.run(app, host=args.host, port=args.port)
+
 

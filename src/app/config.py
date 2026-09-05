@@ -68,3 +68,8 @@ def _load_env_file() -> None:
 
 # Load environment variables into os.environ on startup
 _load_env_file()
+
+# API Keys & LLM Configuration
+DEFAULT_API_KEY = os.getenv("GEMINI_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "gemma-4-31b-it")
+
