@@ -27,9 +27,10 @@ BASE_URL = "http://127.0.0.1:8000"
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-SAMPLE_DIR = ROOT_DIR / "src" / "assets" / "sample_datasets"
+SAMPLE_DIR = ROOT_DIR / "datasets"
 if not SAMPLE_DIR.exists():
     SAMPLE_DIR = ROOT_DIR / "src" / "sample_data"
+
 
 
 def test_api_v2_full_suite() -> None:

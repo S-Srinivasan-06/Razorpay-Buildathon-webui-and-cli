@@ -12,38 +12,37 @@ APP_DIR = Path(__file__).resolve().parent
 BASE_DIR = APP_DIR.parent
 PROJECT_ROOT = BASE_DIR.parent if (BASE_DIR.parent / "src").is_dir() else BASE_DIR
 
-# Runtime data directory (logs, audit trails, uploads, outputs)
+# Runtime data directory (logs, audit trails, uploads, outputs) outside src
 DATA_DIR = Path(os.getenv("RECON_DATA_DIR", PROJECT_ROOT / "data"))
 UPLOAD_DIR = Path(os.getenv("RECON_UPLOAD_DIR", DATA_DIR / "uploads"))
 LOGS_DIR = Path(os.getenv("RECON_LOGS_DIR", DATA_DIR / "logs"))
 AUDIT_DIR = Path(os.getenv("RECON_AUDIT_DIR", DATA_DIR / "audit"))
 OUTPUT_DIR = Path(os.getenv("RECON_OUTPUT_DIR", DATA_DIR / "outputs"))
 
-# Static assets and sample datasets
+# Sample datasets located at root-level datasets/ outside src
 ASSETS_DIR = Path(
     os.getenv(
         "RECON_ASSETS_DIR",
-        BASE_DIR / "assets" / "sample_datasets"
-        if (BASE_DIR / "assets" / "sample_datasets").exists()
+        PROJECT_ROOT / "datasets"
+        if (PROJECT_ROOT / "datasets").exists()
         else BASE_DIR / "sample_data",
     )
 )
+
+# Static frontend assets strictly located in src/app/static
 STATIC_DIR = Path(
     os.getenv(
         "RECON_STATIC_DIR",
-        BASE_DIR / "static" if (BASE_DIR / "static").exists() else APP_DIR / "static",
+        APP_DIR / "static",
     )
 )
-CONSTANTS_FILE = Path(
-    os.getenv("RECON_CONSTANTS_FILE", BASE_DIR / "constants_v0.yaml")
-)
 
-# Ensure all working directories exist upon module import
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
-AUDIT_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# Ensure all working runtime directories exist upon module import
+for _directory in (DATA_DIR, UPLOAD_DIR, LOGS_DIR, AUDIT_DIR, OUTPUT_DIR):
+    try:
+        os.makedirs(str(_directory), exist_ok=True)
+    except OSError:
+        pass
 
 
 def _load_env_file() -> None:
@@ -59,17 +58,13 @@ def _load_env_file() -> None:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         k, v = line.split("=", 1)
-                        k, v = k.strip(), v.strip().strip("'\"")
+                        k, v = k.strip(), v.strip()
                         if k and k not in os.environ:
                             os.environ[k] = v
             except Exception:
-                # Silently handle unreadable or malformed .env files
                 pass
+            break
 
 
-# Automatically load local .env definitions on startup
+# Load environment variables into os.environ on startup
 _load_env_file()
-
-# Default LLM API key lookup prioritizing standard LLM / Gemini variable names
-DEFAULT_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY", "")
-

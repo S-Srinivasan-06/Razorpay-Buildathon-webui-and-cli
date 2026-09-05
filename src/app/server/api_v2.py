@@ -1047,6 +1047,8 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
             frame.insert(0, "_rid", range(1, len(frame) + 1))
             pipe.tables[f.stem] = frame.where(pd.notna(frame), None).to_dict("records")
             loaded_files.append({"filename": fname, "table": f.stem, "rows": len(frame), "columns": list(frame.columns)})
+        import shutil
+        shutil.rmtree(gen_dir, ignore_errors=True)
         return {"ok": True, "files": loaded_files, "session_id": sid, "advisory": "Run Multi-Way Chaining"}
 
     if dataset == "enterprise_ecosystem" and not (sample_dir / "enterprise_ecosystem").exists():
@@ -1063,6 +1065,8 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
             frame.insert(0, "_rid", range(1, len(frame) + 1))
             pipe.tables[f.stem] = frame.where(pd.notna(frame), None).to_dict("records")
             loaded_files.append({"filename": fname, "table": f.stem, "rows": len(frame), "columns": list(frame.columns)})
+        import shutil
+        shutil.rmtree(gen_dir, ignore_errors=True)
         return {"ok": True, "files": loaded_files, "session_id": sid, "advisory": "Run Multi-Way Chaining"}
 
     if dataset not in DATASET_FILES:

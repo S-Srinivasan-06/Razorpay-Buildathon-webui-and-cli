@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-41%20passed-brightgreen.svg)](razorpay-recon/tests/)
+[![Tests](https://img.shields.io/badge/tests-41%20passed-brightgreen.svg)](tests/)
 
 > **Enterprise-Grade Autonomous Financial Reconciliation Engine** featuring Multi-Way 5-Legged Supply Chain Chaining, Mathematical Cash Conservation Invariants, Cryptographic SHA-256 Audit Trails, and Grounded AI Intelligence powered by **Gemma 4 31B**.
 
@@ -33,7 +33,6 @@ Open **http://localhost:8000** — the full Web Console is ready.
 ### Option B: Local Python
 
 ```bash
-cd razorpay-recon
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -59,160 +58,165 @@ Two demo suites are included and can be loaded with **one click** from the Web C
 
 ```bash
 # CLI equivalent
-python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv
+python src/main.py src/assets/sample_datasets/payments.csv \
+                   src/assets/sample_datasets/bank.csv
 ```
 
 ---
 
-### 2. UrbanNest / MegaDist Supply Chain Ecosystem *(5 Files)*
-> Full multi-partner supply chain reconciliation across 5 counterparties.
+### 2. UrbanNest — MegaDist Supply Chain Ecosystem *(5 Files)*
+> Full B2B supply chain financing demo — UrbanNest (buyer) → MegaDist (supplier) via Razorpay X → HDFC + ICICI settlement.
 
-```
-Purchase Orders ──▶ Invoices ──▶ Razorpay X Ledger ──▶ Bank Settlements
- (UrbanNest)      (MegaDist)     (Financing Hub)      (HDFC & ICICI)
-```
+| File | Rows | Role |
+|------|------|------|
+| `supply_chain_ecosystem/urban_nest_po.csv` | 100 | Buyer's Purchase Orders |
+| `supply_chain_ecosystem/megadist_invoice.csv` | 100 | Supplier's Invoices |
+| `supply_chain_ecosystem/razorpay_x_ledger.csv` | 100 | Razorpay X Financing Hub |
+| `supply_chain_ecosystem/hdfc_corporate_statement.csv` | 51 | HDFC Bank (odd txns + 1 duplicate) |
+| `supply_chain_ecosystem/icici_current_statement.csv` | 50 | ICICI Bank (even txns) |
 
-| File | Rows | Role | Counterparty |
-|------|------|------|--------------|
-| `urban_nest_po.csv` | 100 | Buyer Purchase Orders | UrbanNest Retail |
-| `megadist_invoice.csv` | 100 | Supplier Tax Invoices | MegaDist Supplies |
-| `razorpay_x_ledger.csv` | 100 | Financing & Payout Hub | Razorpay X |
-| `hdfc_corporate_statement.csv` | 51 | Primary Settlement Bank | HDFC Bank |
-| `icici_current_statement.csv` | 50 | Secondary Settlement Bank | ICICI Bank |
+**10 injected discrepancies** covering all major reconciliation failure modes:
 
-**10 injected enterprise discrepancies covering all failure modes:**
-1. PO gross amount inflated +₹500 (Invoice rows 4–6)
-2. Duplicate PO IDs reused (PO rows 97–100)
-3. Orders stuck in `PENDING` approval (PO rows 1–3)
-4. Invoice reference typos (`PO-` vs `PO-I-`) (Invoice rows 91–95)
-5. Missing invoice linkage / dropped by gateway (Razorpay rows 96–100)
-6. Fee rate overcharge 2.5% vs 1.5% contract (Razorpay rows 16–20)
-7. Failed settlement transaction status (Razorpay rows 11–15)
-8. Same UTR credited twice across cycles (HDFC row 50)
-9. Net deposit shortfall / bank charge variance (ICICI row 45)
-10. Settlement temporal drift T+5 vs T+1 SLA (ICICI rows 26–30)
+| # | Discrepancy | Location |
+|---|-------------|----------|
+| 1 | PO amount inflated by ₹500 | PO rows 4–6 |
+| 2 | Duplicate PO IDs (re-invoiced) | PO rows 97–100 |
+| 3 | PENDING approval status | PO rows 1–3 |
+| 4 | Invoice `ref_po_id` typos | Invoice rows 91–95 |
+| 5 | `linked_invoice` = null (dropped) | Razorpay rows 96–100 |
+| 6 | Fee rate 2.5% instead of 1.5% | Razorpay rows 16–20 |
+| 7 | Transaction status = FAILED | Razorpay rows 11–15 |
+| 8 | Same UTR credited twice | HDFC row 50 |
+| 9 | ₹50 bank processing fee shortfall | ICICI row 45 |
+| 10 | Settlement T+5 instead of T+1 | ICICI rows 26–30 |
 
 ```bash
-# CLI equivalent (5-way reconciliation)
-python src/main.py \
-  src/assets/sample_datasets/supply_chain_ecosystem/razorpay_x_ledger.csv \
-  src/assets/sample_datasets/supply_chain_ecosystem/hdfc_corporate_statement.csv \
-  src/assets/sample_datasets/supply_chain_ecosystem/icici_current_statement.csv \
-  src/assets/sample_datasets/supply_chain_ecosystem/urban_nest_po.csv \
-  src/assets/sample_datasets/supply_chain_ecosystem/megadist_invoice.csv
+# Run Multi-Way Chaining from the Web Console → "Run Multi-Way" tab
+# Or load via API:
+# POST /api/v2/sessions/{sid}/load_sample?dataset=supply_chain
 ```
 
 ---
 
-### 3. Banana Multi-Way 3-File Benchmark *(Merchant → Gateway → Bank)*
+## 🏛️ Architecture Highlights
+
+| Pillar | Implementation | Reference |
+|--------|---------------|-----------|
+| **7-Step Autonomous Pipeline** | FSM: Ingesting → Profiling → Mapping → Policy → Matching → QA → Aggregating | [`src/app/pipeline.py`](src/app/pipeline.py) |
+| **SHA-256 Audit Trail** | Forward-chained tamper-evident ledger + Merkle Root seal | [`src/app/core/audit.py`](src/app/core/audit.py) |
+| **Multi-Way 5-Leg Chaining** | PO ↔ Invoice ↔ Razorpay Hub ↔ HDFC ↔ ICICI with cash conservation | [`src/app/engine/multiway.py`](src/app/engine/multiway.py) |
+| **Grounded AI Assistant** | Gemma 4 31B chatbot strictly grounded in session tables | [`src/app/engine/chatbot.py`](src/app/engine/chatbot.py) |
+| **Dynamic Fee & Tax Rules** | Priority segment rules with GST splits and `row_range_pct` | [`src/app/engine/rule_compiler.py`](src/app/engine/rule_compiler.py) |
+| **Deterministic Matching** | Exact key + fuzzy token + T+0..T+7 drift + subset-sum split | [`src/app/engine/matching.py`](src/app/engine/matching.py) |
+| **PII Masking** | PAN, phone, email, account number redaction before LLM | [`src/app/core/masking.py`](src/app/core/masking.py) |
+
+---
+
+## 📂 Repository Structure
+
+```text
+razorpay-recon/
+├── .github/workflows/ci.yml          # Multi-Python CI (3.10, 3.11, 3.12)
+├── docs/
+│   ├── ARCHITECTURE.md               # 14-state FSM, Event Bus, Domain Design
+│   ├── SECURITY_AND_AUDIT.md         # SHA-256 Merkle proofs, PII redaction
+│   └── HARDENING_POST_MORTEM.md      # 17-bug post-mortem & invariant proofs
+├── src/
+│   ├── app/
+│   │   ├── core/                     # FSM, Audit, Contracts, Masking, LLM client
+│   │   ├── engine/                   # Matching, Fee, Multiway, Rules, QA, Chatbot
+│   │   ├── server/                   # FastAPI REST API v2 + WebSocket telemetry
+│   │   ├── data/                     # Ecosystem & benchmark dataset generators
+│   │   ├── config.py                 # Filesystem path & environment resolution
+│   │   └── pipeline.py               # 7-step autonomous orchestrator
+│   ├── assets/
+│   │   └── sample_datasets/
+│   │       ├── payments.csv          # Banana demo — dispatch orders
+│   │       ├── bank.csv              # Banana demo — bank credits
+│   │       ├── ground_truth.jsonl    # Banana demo — match ground truth
+│   │       └── supply_chain_ecosystem/
+│   │           ├── urban_nest_po.csv
+│   │           ├── megadist_invoice.csv
+│   │           ├── razorpay_x_ledger.csv
+│   │           ├── hdfc_corporate_statement.csv
+│   │           └── icici_current_statement.csv
+│   ├── static/index.html             # Single-Page Web Console UI
+│   ├── constants_v0.yaml             # Governance thresholds & fee schedules
+│   └── main.py                       # Unified CLI + Web Console entry point
+├── tests/
+│   ├── unit/                         # Contracts, FSM halts, YAML registry
+│   ├── integration/                  # Audit chains, multiway invariants, rules
+│   ├── e2e/                          # FastAPI TestClient + enterprise simulations
+│   └── conftest.py                   # Auto-redirects logs/uploads to tmp
+├── data/                             # Runtime-only (gitignored contents)
+│   ├── uploads/.gitkeep              # Session-uploaded CSVs (created at runtime)
+│   ├── audit/.gitkeep                # Per-session audit JSONL files
+│   ├── logs/.gitkeep                 # Per-session run logs
+│   └── outputs/.gitkeep             # Reconciliation report exports
+├── .env.example                      # Config template (copy to .env)
+├── .gitignore
+├── Dockerfile
+├── docker-compose.yml
+├── pytest.ini
+└── requirements.txt
+```
+
+---
+
+## 🔧 CLI Usage
 
 ```bash
-python src/main.py \
-  src/assets/sample_datasets/banana_multiway_3file/merchant_sales.csv \
-  src/assets/sample_datasets/banana_multiway_3file/gateway_settlements.csv \
-  src/assets/sample_datasets/banana_multiway_3file/bank_statement.csv
+# 2-file pairwise reconciliation
+python src/main.py src/assets/sample_datasets/payments.csv \
+                   src/assets/sample_datasets/bank.csv
+
+# Deterministic offline mode (no LLM calls, sub-second)
+python src/main.py payments.csv bank.csv --deterministic
+
+# Benchmark against ground truth (precision + recall)
+python src/main.py payments.csv bank.csv \
+                   --truth src/assets/sample_datasets/ground_truth.jsonl
+
+# Launch interactive AI assistant after reconciliation
+python src/main.py payments.csv bank.csv --chat
+
+# Structured JSON output for ERP ingestion
+python src/main.py payments.csv bank.csv --json
 ```
 
 ---
 
-## 🏗️ Architecture & Core Innovations
+## 🌐 Web Console Features
 
-```
-                               ┌───────────────────────────┐
-                               │   Single-Page Web UI      │
-                               │  (Vue/Tailwind-free SPA)  │
-                               └─────────────┬─────────────┘
-                                             │ REST API v2 + WebSocket
-                               ┌─────────────▼─────────────┐
-                               │     FastAPI Server        │
-                               │   (src/app/server/)       │
-                               └─────────────┬─────────────┘
-                                             │
-               ┌─────────────────────────────┼─────────────────────────────┐
-               │                             │                             │
-    ┌──────────▼──────────┐       ┌──────────▼──────────┐       ┌──────────▼──────────┐
-    │  Matching Engine    │       │ Multi-Way Chaining  │       │  Grounded AI Chat   │
-    │  - Deterministic    │       │  - Cash Conservation│       │  - Zero PII Leak    │
-    │  - Exact & Fuzzy    │       │  - Double-Entry     │       │  - 2-Step Gate      │
-    │  - Fee/Tax Split    │       │    Journal Ledger   │       │  - Real Data Only   │
-    └─────────────────────┘       └─────────────────────┘       └─────────────────────┘
-               │                             │                             │
-               └─────────────────────────────┼─────────────────────────────┘
-                                             │
-                               ┌─────────────▼─────────────┐
-                               │ Cryptographic Audit Trail │
-                               │  SHA-256 Hash Chaining    │
-                               │   (Append-Only Ledger)    │
-                               └───────────────────────────┘
-```
-
-1. **Deterministic 3-Stage Pipeline**: Exact match $\to$ Fee/tax-aware approximate match $\to$ Discrepancy isolation with temporal sliding window ($T \pm 3$ business days).
-2. **Mathematical Cash Conservation**: Every transaction must satisfy:
-   $$\text{Settled Amount} = \text{Gross Amount} - \text{MDR Fee} - \text{GST (18\%)} - \text{TDS (1\%)} \pm \Delta_{\text{tolerance}}$$
-3. **Double-Entry Journal Generation**: Generates GAAP-compliant debits and credits for all settlements, gateway fees, GST liability, and shortfalls.
-4. **Grounded AI with Confirmation Gate**: Conversational assistant strictly grounded on active session data. Any action affecting rules or data requires explicit two-step user confirmation before execution.
-5. **Cryptographic SHA-256 Audit Trail**: Every decision, state transition, and human override is signed into a tamper-evident hash-chained log.
-6. **PII Masking by Design**: PAN, Aadhaar, phone numbers, and emails are hashed/masked *before* any text leaves the boundary.
+| Feature | Description |
+|---------|-------------|
+| **Staging Area** | Drag-drop CSV/Excel or one-click load demo suites |
+| **7-Step Stepper** | Live progress via WebSocket — watch each pipeline stage |
+| **Exception Queue** | Classify & override: `temporal_drift`, `fee_variance`, `duplicate`, `missing`, `value_error` |
+| **Fee & Tax Rules** | Build segment rules with `row_range_pct`, `column_equals`, GST splits |
+| **Multi-Way Dashboard** | Cash position aging (T+1, T+7+), double-entry journal, CSV export |
+| **AI Assistant** | Grounded chatbot — ask about variances, distributions, anomalies |
+| **Resume / Restart** | Resume a halted pipeline or restart fresh from ARCHIVED state |
+| **Export** | JSON report, audit JSONL download |
 
 ---
 
-## 📁 Repository Structure
-
-```
-.
-├── README.md                           # This file (GitHub landing page)
-├── .gitignore                          # Git ignore rules (zero session bloat)
-├── how_to_run.txt                      # Comprehensive command reference
-└── razorpay-recon/                     # Core application package
-    ├── Dockerfile                      # Multi-stage container definition
-    ├── docker-compose.yml              # 1-click Docker launch
-    ├── requirements.txt                # Python dependencies
-    ├── pytest.ini                      # Pytest runner configuration
-    ├── .env.example                    # Environment template
-    ├── src/
-    │   ├── main.py                     # Unified CLI / Server entrypoint
-    │   ├── app/
-    │   │   ├── core/                   # State machine, SHA-256 audit, PII masking, LLM
-    │   │   ├── engine/                 # Matching engine, fee/tax rules, multiway chaining
-    │   │   ├── server/                 # FastAPI REST API v2 & WebSocket endpoints
-    │   │   └── data/                   # Ecosystem & benchmark generators
-    │   ├── assets/sample_datasets/     # Bundled demo CSVs & benchmark truth files
-    │   │   ├── payments.csv            # 2-file demo payments
-    │   │   ├── bank.csv                # 2-file demo bank statement
-    │   │   ├── ground_truth.jsonl      # Evaluation ground truth
-    │   │   ├── banana_multiway_3file/  # 3-file benchmark datasets
-    │   │   └── supply_chain_ecosystem/ # 5-file enterprise supply chain datasets
-    │   └── static/index.html           # Dark-mode Single-Page Application UI
-    ├── tests/                          # 42 Automated test suites
-    │   ├── unit/                       # Unit tests (constants, durability, matching)
-    │   ├── integration/                # Integration tests (audit, pipeline, fixes)
-    │   └── e2e/                        # End-to-end tests (REST API, 5-way ecosystem)
-    └── docs/                           # Technical documentation
-        ├── ARCHITECTURE.md             # System design & component contracts
-        ├── SECURITY_AND_AUDIT.md       # SHA-256 audit trail & PII policy
-        └── HARDENING_POST_MORTEM.md    # Production hardening post-mortem
-```
-
----
-
-## 🧪 Testing & Verification
-
-The test suite covers unit, integration, and full end-to-end multi-way pipelines with **zero external dependencies**:
+## 🧪 Test Suite
 
 ```bash
-cd razorpay-recon
 pytest tests/ -v
 ```
 
 ```
-collected 42 items
-41 passed, 1 skipped, 1 warning in ~40s
+41 passed, 1 skipped in ~37s
 ```
 
-*(1 skipped test requires optional httpx2 async client).*
+Tests cover: state machine halts · rule compiler anchoring · multiway invariants · journal GST splits · chat confirmation gates · 5-file enterprise ecosystem · audit chain durability · PII masking · duplicate exception detection.
 
 ---
 
-## 🛡️ License
+## 📖 Documentation
 
-Built for the **Razorpay AI Buildathon 2026**.
+- [System Architecture & Blueprint](docs/ARCHITECTURE.md)
+- [Security, Audit Trails & Compliance](docs/SECURITY_AND_AUDIT.md)
+- [Hardening Post-Mortem & Invariant Proofs](docs/HARDENING_POST_MORTEM.md)

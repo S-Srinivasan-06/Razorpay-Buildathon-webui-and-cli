@@ -1,35 +1,42 @@
-# Environments & Sensitive Keys
-.env
-.env.*
-!.env.example
-.venv/
-env/
-venv/
-ENV/
-
-# Byte-compiled / optimized / DLL files
+# ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyo
 *.pyd
 
-# Pytest / Coverage
+# ── Testing & Coverage ────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 
-# IDE / System
+# ── Virtual Environments ──────────────────────────────────────────────────────
+.venv/
+env/
+venv/
+ENV/
+
+# ── Sensitive Keys & Local Config ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 .agents/
 .DS_Store
 Thumbs.db
 
-# Runtime session data (ignore uploads, audits, outputs, logs, but keep directory scaffolding)
+# ── Runtime Session Data (generated at runtime, never committed) ──────────────
+# uploads: user-uploaded CSVs for each session
 data/uploads/*
 !data/uploads/.gitkeep
+src/data/uploads/*
+!src/data/uploads/.gitkeep
+
+# audit trails, logs, output reports — all per-session generated
 data/audit/*
 !data/audit/.gitkeep
 data/logs/*
@@ -37,25 +44,16 @@ data/logs/*
 data/outputs/*
 !data/outputs/.gitkeep
 
-razorpay-recon/data/uploads/*
-!razorpay-recon/data/uploads/.gitkeep
-razorpay-recon/data/audit/*
-!razorpay-recon/data/audit/.gitkeep
-razorpay-recon/data/logs/*
-!razorpay-recon/data/logs/.gitkeep
-razorpay-recon/data/outputs/*
-!razorpay-recon/data/outputs/.gitkeep
+src/data/audit/*
+!src/data/audit/.gitkeep
+src/data/logs/*
+!src/data/logs/.gitkeep
+src/data/outputs/*
+!src/data/outputs/.gitkeep
 
-razorpay-recon/src/data/uploads/*
-!razorpay-recon/src/data/uploads/.gitkeep
-razorpay-recon/src/data/audit/*
-!razorpay-recon/src/data/audit/.gitkeep
-razorpay-recon/src/data/logs/*
-!razorpay-recon/src/data/logs/.gitkeep
-razorpay-recon/src/data/outputs/*
-!razorpay-recon/src/data/outputs/.gitkeep
-
-recon_data/
-*.log
-*.audit.jsonl
+# ── LLM / Build Artifacts ─────────────────────────────────────────────────────
 codebase.md
+*.audit.jsonl
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.log
