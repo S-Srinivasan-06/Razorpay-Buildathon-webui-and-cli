@@ -1,33 +1,59 @@
-# Byte-compiled / optimized / DLL files
+# ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
 
-# Pytest / Coverage
+# ── Testing & Coverage ────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
 
-# Environments & Sensitive Keys
-.env
-.env.*
-!.env.example
-.venv
+# ── Virtual Environments ──────────────────────────────────────────────────────
+.venv/
 env/
 venv/
 ENV/
 
-# IDE / System
+# ── Sensitive Keys & Local Config ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 .agents/
 .DS_Store
+Thumbs.db
 
-# Runtime data, logs, and audit files
-data/
-recon_data/
-*.log
+# ── Runtime Session Data (generated at runtime, never committed) ──────────────
+# uploads: user-uploaded CSVs for each session
+data/uploads/*
+!data/uploads/.gitkeep
+src/data/uploads/*
+!src/data/uploads/.gitkeep
+
+# audit trails, logs, output reports — all per-session generated
+data/audit/*
+!data/audit/.gitkeep
+data/logs/*
+!data/logs/.gitkeep
+data/outputs/*
+!data/outputs/.gitkeep
+
+src/data/audit/*
+!src/data/audit/.gitkeep
+src/data/logs/*
+!src/data/logs/.gitkeep
+src/data/outputs/*
+!src/data/outputs/.gitkeep
+
+# ── LLM / Build Artifacts ─────────────────────────────────────────────────────
+codebase.md
 *.audit.jsonl
 
-# Meta / Context Dumps (non-repo LLM artifacts)
-codebase.md
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.log

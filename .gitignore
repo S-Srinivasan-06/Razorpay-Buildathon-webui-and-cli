@@ -2,27 +2,60 @@
 .env
 .env.*
 !.env.example
-.venv
+.venv/
 env/
 venv/
+ENV/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
 
 # Pytest / Coverage
 .pytest_cache/
 .coverage
+htmlcov/
+.tox/
 
 # IDE / System
 .vscode/
 .idea/
 .agents/
 .DS_Store
+Thumbs.db
 
-# Runtime data & logs
-data/
+# Runtime session data (ignore uploads, audits, outputs, logs, but keep directory scaffolding)
+data/uploads/*
+!data/uploads/.gitkeep
+data/audit/*
+!data/audit/.gitkeep
+data/logs/*
+!data/logs/.gitkeep
+data/outputs/*
+!data/outputs/.gitkeep
+
+razorpay-recon/data/uploads/*
+!razorpay-recon/data/uploads/.gitkeep
+razorpay-recon/data/audit/*
+!razorpay-recon/data/audit/.gitkeep
+razorpay-recon/data/logs/*
+!razorpay-recon/data/logs/.gitkeep
+razorpay-recon/data/outputs/*
+!razorpay-recon/data/outputs/.gitkeep
+
+razorpay-recon/src/data/uploads/*
+!razorpay-recon/src/data/uploads/.gitkeep
+razorpay-recon/src/data/audit/*
+!razorpay-recon/src/data/audit/.gitkeep
+razorpay-recon/src/data/logs/*
+!razorpay-recon/src/data/logs/.gitkeep
+razorpay-recon/src/data/outputs/*
+!razorpay-recon/src/data/outputs/.gitkeep
+
 recon_data/
 *.log
 *.audit.jsonl
+codebase.md

@@ -1020,9 +1020,16 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
     pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
     sess["pipe"] = pipe
     
-    # Dataset-specific file lists (single 2-file demo)
+    # Dataset-specific file lists
     DATASET_FILES: Dict[str, List[str]] = {
         "basic": ["payments.csv", "bank.csv"],
+        "supply_chain": [
+            "supply_chain_ecosystem/urban_nest_po.csv",
+            "supply_chain_ecosystem/megadist_invoice.csv",
+            "supply_chain_ecosystem/razorpay_x_ledger.csv",
+            "supply_chain_ecosystem/hdfc_corporate_statement.csv",
+            "supply_chain_ecosystem/icici_current_statement.csv",
+        ],
     }
     
     # Support on-demand test generation if legacy benchmark/enterprise is requested in automated tests
@@ -1093,7 +1100,11 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
     
     # Advisory: multi-file datasets benefit from multiway reconciliation
     advisory = None
-    if len(loaded_files) > 2:
+    if dataset == "supply_chain":
+        advisory = (f"Loaded {len(loaded_files)} tables: UrbanNest POs → MegaDist Invoices → "
+                    f"Razorpay X Ledger → HDFC/ICICI Bank Statements. "
+                    f"Use 'Run Multi-Way Chaining' to reconcile all 5 legs and detect the 10 injected discrepancies.")
+    elif len(loaded_files) > 2:
         advisory = (f"Loaded {len(loaded_files)} tables. Use 'Run Multi-Way Chaining' for full "
                     f"3-way reconciliation (Sales ↔ Gateway ↔ Banks) or 'Run' for standard pairwise.")
         

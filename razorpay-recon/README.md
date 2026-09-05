@@ -4,174 +4,218 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![Tests](https://img.shields.io/badge/tests-41%20passed-brightgreen.svg)](tests/)
 
-> **Enterprise-Grade Autonomous Financial Reconciliation Engine** featuring Multi-Way 3-Legged Settlement Chaining, Mathematical Cash Conservation Invariants, Cryptographic SHA-256 Audit Trails, and Grounded AI Intelligence powered by **Gemma 4 31B**.
+> **Enterprise-Grade Autonomous Financial Reconciliation Engine** featuring Multi-Way 5-Legged Supply Chain Chaining, Mathematical Cash Conservation Invariants, Cryptographic SHA-256 Audit Trails, and Grounded AI Intelligence powered by **Gemma 4 31B**.
 
 ---
 
-## ⚡ 1-Click Deployment (Zero Friction)
+## ⚡ Quick Start (Zero Friction)
 
 ### Option A: Docker Compose (Recommended)
-
-Spin up the entire application stack—including the FastAPI backend, priority WebSocket event bus, and Single-Page Web UI—with a single command:
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/S-Srinivasan-06/Razorpay-Buildathon-webui-and-cli.git
-cd Razorpay-Buildathon-webui-and-cli
+cd Razorpay-Buildathon-webui-and-cli/razorpay-recon
 
-# 2. Configure environment variables (optional for local/offline mode)
+# 2. Configure environment (optional — deterministic offline mode needs no keys)
 cp .env.example .env
 
-# 3. Launch via Docker Compose
+# 3. Launch
 docker-compose up --build
 ```
 
-Open your browser and navigate to:
-```
-http://localhost:8000
-```
-*(All audit logs and uploaded datasets persist across container restarts via the `recon_data` volume).*
+Open **http://localhost:8000** — the full Web Console is ready.
 
 ---
 
-### Option B: Local Python Environment
+### Option B: Local Python
 
 ```bash
-# 1. Create and activate a virtual environment
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# 2. Install pinned dependencies
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-# 3. Configure your environment
-cp .env.example .env
-# Edit .env to add your GEMINI_API_KEY (optional: pure offline deterministic mode requires no keys)
-
-# 4. Start the Web Console Server
+cp .env.example .env               # Add GEMINI_API_KEY for AI features (optional)
 python src/main.py --server --host 127.0.0.1 --port 8000
 ```
 
 ---
 
-## 🏛️ Core Architectural Highlights
+## 🖥️ Bundled Demo Datasets
 
-| Pillar | Technical Implementation | File Reference |
-| :--- | :--- | :--- |
-| **Autonomous 7-Step Pipeline** | Sequential finite state orchestration: Ingesting $\to$ Schema Profiling $\to$ Semantic Mapping $\to$ Policy Synthesis $\to$ Multi-Attribute Matching $\to$ Exception Classification $\to$ Financial Aggregation. | [`src/app/pipeline.py`](src/app/pipeline.py) |
-| **Cryptographic SHA-256 Audit Trail** | Tamper-evident, forward-chained ledger where every event links to `parent_hash`. Final reports are cryptographically sealed with a balanced Merkle Root proof. | [`src/app/core/audit.py`](src/app/core/audit.py) |
-| **Multi-Way 3-Legged Chaining** | Resolves three-dataset transitive settlements across **Merchant Orders $\leftrightarrow$ Payment Gateway Hub $\leftrightarrow$ Bank Statement Credits** with strict cash conservation invariants. | [`src/app/engine/multiway.py`](src/app/engine/multiway.py) |
-| **Grounded AI Assistant** | Multi-turn conversational chatbot strictly grounded in session tables. Computes exact ticket-size distributions, variances, and standard deviations without refusals. | [`src/app/engine/chatbot.py`](src/app/engine/chatbot.py) |
-| **Dynamic Fee & Segment Rules** | Priority-ordered segment rules matching by row ranges (`row_range_pct`), transaction categories (`column_equals`), or custom schedules with GST splits. | [`src/app/engine/rule_compiler.py`](src/app/engine/rule_compiler.py) |
-| **Deterministic Multi-Heuristic Engine** | Sub-second matching combining exact key linkage, fuzzy token similarity, temporal calendar drift windows ($T+0 \dots T+7$), and subset-sum split settlement solving. | [`src/app/engine/matching.py`](src/app/engine/matching.py) |
-| **Privacy & PII Masking** | Redaction engine scrubbing PAN cards, phone numbers, emails, and account numbers prior to LLM reasoning and WebSocket broadcast. | [`src/app/core/masking.py`](src/app/core/masking.py) |
+Two demo suites are included and can be loaded with **one click** from the Web Console ("Load Sample Data" button):
+
+### 1. Banana Supply & Inventory Demo *(2 Files)*
+> Quick 2-file pairwise reconciliation — perfect for onboarding.
+
+| File | Rows | Description |
+|------|------|-------------|
+| `payments.csv` | 100 | Dispatch orders — Flipkart & Zomato channels |
+| `bank.csv` | 80 | Bank credits — HDFC Bank & ICICI Bank |
+
+**30 injected discrepancies:** 10 duplicate orders · 10 value/price errors · 10 missing bank credits
+
+```bash
+# CLI equivalent
+python src/main.py src/assets/sample_datasets/payments.csv \
+                   src/assets/sample_datasets/bank.csv
+```
 
 ---
 
-## 📂 Production Repository Structure
+### 2. UrbanNest — MegaDist Supply Chain Ecosystem *(5 Files)*
+> Full B2B supply chain financing demo — UrbanNest (buyer) → MegaDist (supplier) via Razorpay X → HDFC + ICICI settlement.
+
+| File | Rows | Role |
+|------|------|------|
+| `supply_chain_ecosystem/urban_nest_po.csv` | 100 | Buyer's Purchase Orders |
+| `supply_chain_ecosystem/megadist_invoice.csv` | 100 | Supplier's Invoices |
+| `supply_chain_ecosystem/razorpay_x_ledger.csv` | 100 | Razorpay X Financing Hub |
+| `supply_chain_ecosystem/hdfc_corporate_statement.csv` | 51 | HDFC Bank (odd txns + 1 duplicate) |
+| `supply_chain_ecosystem/icici_current_statement.csv` | 50 | ICICI Bank (even txns) |
+
+**10 injected discrepancies** covering all major reconciliation failure modes:
+
+| # | Discrepancy | Location |
+|---|-------------|----------|
+| 1 | PO amount inflated by ₹500 | PO rows 4–6 |
+| 2 | Duplicate PO IDs (re-invoiced) | PO rows 97–100 |
+| 3 | PENDING approval status | PO rows 1–3 |
+| 4 | Invoice `ref_po_id` typos | Invoice rows 91–95 |
+| 5 | `linked_invoice` = null (dropped) | Razorpay rows 96–100 |
+| 6 | Fee rate 2.5% instead of 1.5% | Razorpay rows 16–20 |
+| 7 | Transaction status = FAILED | Razorpay rows 11–15 |
+| 8 | Same UTR credited twice | HDFC row 50 |
+| 9 | ₹50 bank processing fee shortfall | ICICI row 45 |
+| 10 | Settlement T+5 instead of T+1 | ICICI rows 26–30 |
+
+```bash
+# Run Multi-Way Chaining from the Web Console → "Run Multi-Way" tab
+# Or load via API:
+# POST /api/v2/sessions/{sid}/load_sample?dataset=supply_chain
+```
+
+---
+
+## 🏛️ Architecture Highlights
+
+| Pillar | Implementation | Reference |
+|--------|---------------|-----------|
+| **7-Step Autonomous Pipeline** | FSM: Ingesting → Profiling → Mapping → Policy → Matching → QA → Aggregating | [`src/app/pipeline.py`](src/app/pipeline.py) |
+| **SHA-256 Audit Trail** | Forward-chained tamper-evident ledger + Merkle Root seal | [`src/app/core/audit.py`](src/app/core/audit.py) |
+| **Multi-Way 5-Leg Chaining** | PO ↔ Invoice ↔ Razorpay Hub ↔ HDFC ↔ ICICI with cash conservation | [`src/app/engine/multiway.py`](src/app/engine/multiway.py) |
+| **Grounded AI Assistant** | Gemma 4 31B chatbot strictly grounded in session tables | [`src/app/engine/chatbot.py`](src/app/engine/chatbot.py) |
+| **Dynamic Fee & Tax Rules** | Priority segment rules with GST splits and `row_range_pct` | [`src/app/engine/rule_compiler.py`](src/app/engine/rule_compiler.py) |
+| **Deterministic Matching** | Exact key + fuzzy token + T+0..T+7 drift + subset-sum split | [`src/app/engine/matching.py`](src/app/engine/matching.py) |
+| **PII Masking** | PAN, phone, email, account number redaction before LLM | [`src/app/core/masking.py`](src/app/core/masking.py) |
+
+---
+
+## 📂 Repository Structure
 
 ```text
 razorpay-recon/
-├── .github/workflows/
-│   └── ci.yml                     # Multi-Python (3.10, 3.11, 3.12) automated CI pipeline
-├── docs/                          # Comprehensive technical documentation suite
-│   ├── ARCHITECTURE.md            # Domain-driven architecture, 14-state FSM, and Event Bus
-│   ├── SECURITY_AND_AUDIT.md      # SHA-256 Merkle proofs, PII redaction, and confirmation gates
-│   └── HARDENING_POST_MORTEM.md   # Post-mortem analysis of 17 audited bugs and invariant proofs
-├── src/                           # Core application package
+├── .github/workflows/ci.yml          # Multi-Python CI (3.10, 3.11, 3.12)
+├── docs/
+│   ├── ARCHITECTURE.md               # 14-state FSM, Event Bus, Domain Design
+│   ├── SECURITY_AND_AUDIT.md         # SHA-256 Merkle proofs, PII redaction
+│   └── HARDENING_POST_MORTEM.md      # 17-bug post-mortem & invariant proofs
+├── src/
 │   ├── app/
-│   │   ├── core/                  # Infrastructure (FSM, Audit, Contracts, Masking, LLM)
-│   │   ├── engine/                # Financial domain math (Matching, Fee, Multiway, Rules)
-│   │   ├── server/                # FastAPI application, REST API v2, WebSocket telemetry
-│   │   ├── data/                  # Synthetic ecosystem & benchmark data generators
-│   │   ├── config.py              # Resilient filesystem path and environment resolution
-│   │   └── pipeline.py            # The 7-step autonomous orchestrator
+│   │   ├── core/                     # FSM, Audit, Contracts, Masking, LLM client
+│   │   ├── engine/                   # Matching, Fee, Multiway, Rules, QA, Chatbot
+│   │   ├── server/                   # FastAPI REST API v2 + WebSocket telemetry
+│   │   ├── data/                     # Ecosystem & benchmark dataset generators
+│   │   ├── config.py                 # Filesystem path & environment resolution
+│   │   └── pipeline.py               # 7-step autonomous orchestrator
 │   ├── assets/
-│   │   └── sample_datasets/       # Bundled benchmark datasets (basic, clean, 3-file, enterprise)
-│   ├── static/                    # Single-Page Web Console UI (index.html)
-│   ├── constants_v0.yaml          # Governance thresholds and default fee schedules
-│   └── main.py                    # Unified CLI and Web Console server entry point
-├── tests/                         # Comprehensive isolated test suite (38 tests)
-│   ├── unit/                      # Contracts, state machine halts, and YAML registry tests
-│   ├── integration/               # Audit chains, multi-way invariants, and rule compilers
-│   ├── e2e/                       # FastAPI TestClient and 5-file enterprise simulations
-│   └── conftest.py                # Global test isolation fixture (auto-redirects logs to tmp)
-├── .dockerignore                  # Docker build exclusions (tests, docs, and git)
-├── .env.example                   # Single source of truth for configuration variables
-├── .gitignore                     # Production exclusions (data/, secrets, and bytecode)
-├── Dockerfile                     # Multi-stage lightweight build (builder -> runner)
-├── docker-compose.yml             # 1-click containerized deployment with volume persistence
-├── pytest.ini                     # Pytest configuration with pythonpath = src
-├── requirements.txt               # Pinned production dependencies
-└── README.md                      # Project overview, quickstart, and technical guide
+│   │   └── sample_datasets/
+│   │       ├── payments.csv          # Banana demo — dispatch orders
+│   │       ├── bank.csv              # Banana demo — bank credits
+│   │       ├── ground_truth.jsonl    # Banana demo — match ground truth
+│   │       └── supply_chain_ecosystem/
+│   │           ├── urban_nest_po.csv
+│   │           ├── megadist_invoice.csv
+│   │           ├── razorpay_x_ledger.csv
+│   │           ├── hdfc_corporate_statement.csv
+│   │           └── icici_current_statement.csv
+│   ├── static/index.html             # Single-Page Web Console UI
+│   ├── constants_v0.yaml             # Governance thresholds & fee schedules
+│   └── main.py                       # Unified CLI + Web Console entry point
+├── tests/
+│   ├── unit/                         # Contracts, FSM halts, YAML registry
+│   ├── integration/                  # Audit chains, multiway invariants, rules
+│   ├── e2e/                          # FastAPI TestClient + enterprise simulations
+│   └── conftest.py                   # Auto-redirects logs/uploads to tmp
+├── data/                             # Runtime-only (gitignored contents)
+│   ├── uploads/.gitkeep              # Session-uploaded CSVs (created at runtime)
+│   ├── audit/.gitkeep                # Per-session audit JSONL files
+│   ├── logs/.gitkeep                 # Per-session run logs
+│   └── outputs/.gitkeep             # Reconciliation report exports
+├── .env.example                      # Config template (copy to .env)
+├── .gitignore
+├── Dockerfile
+├── docker-compose.yml
+├── pytest.ini
+└── requirements.txt
 ```
 
 ---
 
-## 🖥️ Command-Line Interface (CLI) Usage
-
-The unified entry point `src/main.py` provides high-throughput reconciliation directly in your terminal:
+## 🔧 CLI Usage
 
 ```bash
-# 1. Standard two-file reconciliation (payments vs bank)
-python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv
+# 2-file pairwise reconciliation
+python src/main.py src/assets/sample_datasets/payments.csv \
+                   src/assets/sample_datasets/bank.csv
 
-# 2. Pure offline deterministic mode (Zero-LLM calls, sub-second execution)
-python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --deterministic
+# Deterministic offline mode (no LLM calls, sub-second)
+python src/main.py payments.csv bank.csv --deterministic
 
-# 3. Precision & Recall benchmark evaluation against ground truth
-python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --truth src/assets/sample_datasets/ground_truth.jsonl
+# Benchmark against ground truth (precision + recall)
+python src/main.py payments.csv bank.csv \
+                   --truth src/assets/sample_datasets/ground_truth.jsonl
 
-# 4. Launch interactive grounded AI assistant REPL after reconciliation
-python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --chat
+# Launch interactive AI assistant after reconciliation
+python src/main.py payments.csv bank.csv --chat
 
-# 5. Output structured JSON for downstream enterprise ERP ingestion
-python src/main.py src/assets/sample_datasets/payments.csv src/assets/sample_datasets/bank.csv --json
+# Structured JSON output for ERP ingestion
+python src/main.py payments.csv bank.csv --json
 ```
 
 ---
 
-## 🌐 Interactive Web Console Features
+## 🌐 Web Console Features
 
-Navigate to `http://localhost:8000` to interact with the full web console:
-
-1. **Staging Area & Bundled Suites**: Drag-and-drop CSV/Excel files or load bundled enterprise ecosystems with 1 click:
-   - *Standard Demo*: 57 payments vs 51 bank records.
-   - *Clean Demo*: 100% matched baseline.
-   - *3-File Benchmark*: Merchant Sales $\leftrightarrow$ Gateway Hub $\leftrightarrow$ Bank Statement.
-   - *5-File Enterprise Ecosystem*: Zomato + Flipkart $\leftrightarrow$ Razorpay Hub $\leftrightarrow$ ICICI + HDFC.
-2. **Real-Time 7-Step Stepper**: Live progress updates streamed via prioritized WebSockets.
-3. **Dynamic Segment Rules Manager**: Configure multi-tier fee rates (e.g. first 40% at 2%, next 60% at 1.5%) and tax rules.
-4. **Exception Resolution Queue**: Interactive classification badges (`temporal_drift`, `fee_variance`, `refund_offset`, `unmatched`) with human manager overrides (Approve / Reject).
-5. **Multi-Way Cash Position Dashboard**: View in-transit aging schedules (T+1, T+2, T+7+) and double-entry General Ledger journal entries with one-click CSV export.
-6. **Grounded AI Financial Assistant**: Ask complex statistical or accounting questions with zero refusal and automated confirmation gates for policy changes.
+| Feature | Description |
+|---------|-------------|
+| **Staging Area** | Drag-drop CSV/Excel or one-click load demo suites |
+| **7-Step Stepper** | Live progress via WebSocket — watch each pipeline stage |
+| **Exception Queue** | Classify & override: `temporal_drift`, `fee_variance`, `duplicate`, `missing`, `value_error` |
+| **Fee & Tax Rules** | Build segment rules with `row_range_pct`, `column_equals`, GST splits |
+| **Multi-Way Dashboard** | Cash position aging (T+1, T+7+), double-entry journal, CSV export |
+| **AI Assistant** | Grounded chatbot — ask about variances, distributions, anomalies |
+| **Resume / Restart** | Resume a halted pipeline or restart fresh from ARCHIVED state |
+| **Export** | JSON report, audit JSONL download |
 
 ---
 
-## 🧪 Comprehensive Test Suite
-
-Run the full automated test suite covering unit tests, integration invariants, and end-to-end API flows:
+## 🧪 Test Suite
 
 ```bash
 pytest tests/ -v
 ```
 
-```text
-============================= test session starts =============================
-tests/unit/test_constants.py::test_registry_loads_and_fee_schedule_parsed PASSED [ 84%]
-tests/unit/test_durability.py::test_restart_and_tamper PASSED            [ 86%]
-tests/unit/test_halt_reentry_safety.py::test_halt_safety PASSED          [ 92%]
-tests/integration/test_audit_remediation.py::test_multiway_chaining PASSED [ 28%]
-tests/integration/test_bug_audit_fixes.py::test_audit_fixes PASSED       [ 57%]
-tests/e2e/test_enterprise_and_rules_e2e.py::test_5file_enterprise PASSED [ 13%]
-tests/e2e/test_file_lifecycle_and_chat.py::test_chat_statistics PASSED  [ 23%]
-======================== 37 passed, 1 skipped in 35.18s ========================
 ```
+41 passed, 1 skipped in ~37s
+```
+
+Tests cover: state machine halts · rule compiler anchoring · multiway invariants · journal GST splits · chat confirmation gates · 5-file enterprise ecosystem · audit chain durability · PII masking · duplicate exception detection.
 
 ---
 
-## 📖 In-Depth Documentation Links
+## 📖 Documentation
 
 - [System Architecture & Blueprint](docs/ARCHITECTURE.md)
 - [Security, Audit Trails & Compliance](docs/SECURITY_AND_AUDIT.md)
