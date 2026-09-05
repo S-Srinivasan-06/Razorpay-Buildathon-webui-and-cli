@@ -336,14 +336,24 @@ class Pipeline:
             for rt in names:
                 if lt == rt:
                     continue
+                prof_l = {p.name: p for p in self.profiles.get(lt, [])}
+                prof_r = {p.name: p for p in self.profiles.get(rt, [])}
                 for lc in [p.name for p in self.profiles[lt]]:
                     for rc in [p.name for p in self.profiles[rt]]:
+                        pl, pr = prof_l.get(lc), prof_r.get(rc)
+                        if pl and pr and (pl.cardinality < 0.15 or pr.cardinality < 0.15):
+                            continue
                         ov = _overlap(
                             [r.get(lc) for r in self.tables[lt]],
                             [r.get(rc) for r in self.tables[rt]],
                         )
                         if ov >= 0.10:
-                            cands.append((ov, lt, lc, rt, rc))
+                            name_boost = 0.0
+                            if any(k in lc.lower() for k in ("id", "key", "ref", "utr", "order", "txn")):
+                                name_boost += 0.25
+                            if any(k in rc.lower() for k in ("id", "key", "ref", "utr", "order", "txn")):
+                                name_boost += 0.25
+                            cands.append((ov + name_boost, lt, lc, rt, rc))
         cands.sort(reverse=True)
         self._map_cands = cands
 
@@ -366,6 +376,18 @@ class Pipeline:
 
         if isinstance(llm_map, MapResult):
             self.cfg = llm_map.model_dump()
+            lt = self.cfg.get("left_table", names[0])
+            rt = self.cfg.get("right_table", names[1] if len(names) > 1 else names[0])
+            prof_l = {p.name: p for p in self.profiles.get(lt, [])}
+            prof_r = {p.name: p for p in self.profiles.get(rt, [])}
+            lk = self.cfg.get("left_key")
+            rk = self.cfg.get("right_key")
+            if cands and (
+                (lk in prof_l and prof_l[lk].cardinality < 0.15)
+                or (rk in prof_r and prof_r[rk].cardinality < 0.15)
+            ):
+                self.cfg["left_key"] = cands[0][2]
+                self.cfg["right_key"] = cands[0][4]
             self.cfg["left_amount"] = self.cfg.get("left_amount") or self._pick(self.cfg["left_table"], "numeric")
             self.cfg["right_amount"] = self.cfg.get("right_amount") or self._pick(self.cfg["right_table"], "numeric")
             self.cfg["left_date"] = self.cfg.get("left_date") or self._pick(self.cfg["left_table"], "date")

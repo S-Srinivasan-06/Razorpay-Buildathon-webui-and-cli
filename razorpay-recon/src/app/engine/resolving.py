@@ -57,7 +57,12 @@ def exception_confidence(
         return min(round(base, 3), 0.98)
 
     # Well-categorized anomalies requiring confirmation
-    if category in (HypothesisCategory.DUPLICATE, HypothesisCategory.REFUND_OFFSET):
+    if category in (
+        HypothesisCategory.DUPLICATE,
+        HypothesisCategory.REFUND_OFFSET,
+        HypothesisCategory.VALUE_ERROR,
+        HypothesisCategory.MISSING,
+    ):
         return round(0.85, 3)
 
     # Weighted scoring for unclassified or partially matched discrepancies
@@ -89,6 +94,8 @@ def decide_action(
     if category in (
         HypothesisCategory.DUPLICATE,
         HypothesisCategory.REFUND_OFFSET,
+        HypothesisCategory.VALUE_ERROR,
+        HypothesisCategory.MISSING,
         HypothesisCategory.UNCLASSIFIED,
     ):
         return "request_confirmation"
@@ -177,6 +184,16 @@ def generate_explanation(
         )
     elif cat == HypothesisCategory.COUNTERPARTY_MISMATCH:
         return f"Approved [No Error]: Normalized token/semantic match verified between order '{ref}' and counterpart UTR.{tol_tag}"
+    elif cat in (HypothesisCategory.VALUE_ERROR, HypothesisCategory.AMOUNT_DELTA):
+        return (
+            f"Value Discrepancy Error: Amount delta of ₹{abs(rec.delta or 0):.2f} detected "
+            f"between supply dispatch order '{ref}' and bank settlement credit.{tol_tag}"
+        )
+    elif cat == HypothesisCategory.MISSING:
+        if side == "L":
+            return f"Missing Bank Settlement: Banana supply order '{ref}' dispatched but missing corresponding credit in bank statement."
+        else:
+            return f"Missing Supply Order: Bank credit for UTR '{ref}' received but missing corresponding dispatch order in payments ledger."
     elif side == "L":
         return f"Error in Source B (Bank): Order '{ref}' exists in payments ledger but has no corresponding bank settlement credit."
     elif side == "R":

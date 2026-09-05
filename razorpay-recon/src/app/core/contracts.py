@@ -56,7 +56,9 @@ class HypothesisCategory(str, Enum):
     CURRENCY_CONVERSION = "currency_conversion"
     TEMPORAL_DRIFT = "temporal_drift"
     COUNTERPARTY_MISMATCH = "counterparty_mismatch"
+    VALUE_ERROR = "value_error"
     AMOUNT_DELTA = "amount_delta"
+    MISSING = "missing"
     UNCLASSIFIED = "unclassified"
 
 
@@ -64,15 +66,17 @@ class HypothesisCategory(str, Enum):
 HYPOTHESIS_PRIORITY: Dict[HypothesisCategory, int] = {
     HypothesisCategory.DUPLICATE: 1,
     HypothesisCategory.SPLIT: 2,
-    HypothesisCategory.PARTIAL_PAYMENT: 3,
-    HypothesisCategory.REFUND_OFFSET: 4,
-    HypothesisCategory.FEE_DEDUCTION: 5,
-    HypothesisCategory.TAX_WITHHOLDING: 6,
-    HypothesisCategory.CURRENCY_CONVERSION: 7,
-    HypothesisCategory.TEMPORAL_DRIFT: 8,
-    HypothesisCategory.COUNTERPARTY_MISMATCH: 9,
-    HypothesisCategory.AMOUNT_DELTA: 10,
-    HypothesisCategory.UNCLASSIFIED: 11,
+    HypothesisCategory.FEE_DEDUCTION: 3,
+    HypothesisCategory.TAX_WITHHOLDING: 4,
+    HypothesisCategory.CURRENCY_CONVERSION: 5,
+    HypothesisCategory.TEMPORAL_DRIFT: 6,
+    HypothesisCategory.COUNTERPARTY_MISMATCH: 7,
+    HypothesisCategory.VALUE_ERROR: 8,
+    HypothesisCategory.AMOUNT_DELTA: 9,
+    HypothesisCategory.PARTIAL_PAYMENT: 10,
+    HypothesisCategory.REFUND_OFFSET: 11,
+    HypothesisCategory.MISSING: 12,
+    HypothesisCategory.UNCLASSIFIED: 13,
 }
 
 

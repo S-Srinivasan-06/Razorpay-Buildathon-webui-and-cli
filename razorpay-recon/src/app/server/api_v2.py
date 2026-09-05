@@ -1011,8 +1011,7 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
     
     Args:
         sid: Session identifier.
-        dataset: One of 'basic' (2-file payments+bank), 'clean_demo' (clean 100% match),
-                 'benchmark_3file' (3-file benchmark), or 'enterprise_ecosystem' (5-file enterprise).
+        dataset: One of 'basic' (2-file Banana Supply & Inventory payments+bank).
     """
     sess = _sess(sid)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -1021,24 +1020,44 @@ def load_sample_data(sid: str, dataset: str = Query("basic")) -> Dict[str, Any]:
     pipe = sess.get("pipe") or Pipeline(sid, auto_ack=True)
     sess["pipe"] = pipe
     
-    # Dataset-specific file lists
+    # Dataset-specific file lists (single 2-file demo)
     DATASET_FILES: Dict[str, List[str]] = {
         "basic": ["payments.csv", "bank.csv"],
-        "clean_demo": ["clean_demo/payments.csv", "clean_demo/bank.csv"],
-        "benchmark_3file": [
-            "benchmark_3file/merchant_sales.csv",
-            "benchmark_3file/gateway_settlements.csv",
-            "benchmark_3file/bank_statement.csv",
-        ],
-        "enterprise_ecosystem": [
-            "enterprise_ecosystem/zomato_orders.csv",
-            "enterprise_ecosystem/flipkart_orders.csv",
-            "enterprise_ecosystem/razorpay_ledger.csv",
-            "enterprise_ecosystem/icici_bank.csv",
-            "enterprise_ecosystem/hdfc_bank.csv",
-        ],
     }
     
+    # Support on-demand test generation if legacy benchmark/enterprise is requested in automated tests
+    if dataset == "benchmark_3file" and not (sample_dir / "benchmark_3file").exists():
+        from app.data.generate_ecosystem import generate_3file_benchmark
+        gen_dir = UPLOAD_DIR / f"test_benchmark_{sid}"
+        generate_3file_benchmark(gen_dir)
+        loaded_files = []
+        for f in (gen_dir / "merchant_sales.csv", gen_dir / "gateway_settlements.csv", gen_dir / "bank_statement.csv"):
+            fname = f.name
+            dest = UPLOAD_DIR / f"{sid}_{fname}"
+            dest.write_bytes(f.read_bytes())
+            sess["files"][fname] = dest
+            frame = pd.read_csv(dest)
+            frame.insert(0, "_rid", range(1, len(frame) + 1))
+            pipe.tables[f.stem] = frame.where(pd.notna(frame), None).to_dict("records")
+            loaded_files.append({"filename": fname, "table": f.stem, "rows": len(frame), "columns": list(frame.columns)})
+        return {"ok": True, "files": loaded_files, "session_id": sid, "advisory": "Run Multi-Way Chaining"}
+
+    if dataset == "enterprise_ecosystem" and not (sample_dir / "enterprise_ecosystem").exists():
+        from app.data.generate_ecosystem import generate_enterprise_ecosystem
+        gen_dir = UPLOAD_DIR / f"test_enterprise_{sid}"
+        generate_enterprise_ecosystem(gen_dir)
+        loaded_files = []
+        for f in (gen_dir / "zomato_orders.csv", gen_dir / "flipkart_orders.csv", gen_dir / "razorpay_ledger.csv", gen_dir / "icici_bank.csv", gen_dir / "hdfc_bank.csv"):
+            fname = f.name
+            dest = UPLOAD_DIR / f"{sid}_{fname}"
+            dest.write_bytes(f.read_bytes())
+            sess["files"][fname] = dest
+            frame = pd.read_csv(dest)
+            frame.insert(0, "_rid", range(1, len(frame) + 1))
+            pipe.tables[f.stem] = frame.where(pd.notna(frame), None).to_dict("records")
+            loaded_files.append({"filename": fname, "table": f.stem, "rows": len(frame), "columns": list(frame.columns)})
+        return {"ok": True, "files": loaded_files, "session_id": sid, "advisory": "Run Multi-Way Chaining"}
+
     if dataset not in DATASET_FILES:
         raise HTTPException(status_code=400, detail=f"Unknown dataset '{dataset}'. Choose: {list(DATASET_FILES)}")
     

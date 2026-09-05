@@ -42,8 +42,14 @@ _PREDICATES: Dict[H, Callable[[UnmatchedRecord, Dict[str, Any]], bool]] = {
     H.CURRENCY_CONVERSION: lambda rec, ctx: bool(ctx.get("fx_match")),
     H.TEMPORAL_DRIFT: lambda rec, ctx: bool(ctx.get("date_only_mismatch")),
     H.COUNTERPARTY_MISMATCH: lambda rec, ctx: bool(ctx.get("fuzzy_key")),
+    H.VALUE_ERROR: lambda rec, ctx: (
+        rec.delta is not None and abs(rec.delta) > 0.01
+    ),
     H.AMOUNT_DELTA: lambda rec, ctx: (
         rec.delta is not None and abs(rec.delta) > 0.01
+    ),
+    H.MISSING: lambda rec, ctx: (
+        rec.delta is None and not bool(ctx.get("dup_rids")) and not bool(ctx.get("split_targets"))
     ),
     H.UNCLASSIFIED: lambda rec, ctx: True,
 }
